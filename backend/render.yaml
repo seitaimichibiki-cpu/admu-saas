@@ -7,6 +7,7 @@ services:
   - type: web
     name: admu-backend
     runtime: python
+    pythonVersion: "3.12.3"
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
