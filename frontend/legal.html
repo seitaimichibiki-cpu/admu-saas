@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>利用規約・プライバシーポリシー | AdMu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080e1a;
+      --bg-card: #111827;
+      --border: rgba(255,255,255,0.08);
+      --text-1: #f1f5f9;
+      --text-2: #94a3b8;
+      --text-3: #64748b;
+      --accent: #3b82f6;
+      --accent-2: #6366f1;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: 'Noto Sans JP', 'Inter', sans-serif;
+      line-height: 1.8;
+      min-height: 100vh;
+    }
+
+    /* ===== ヘッダー ===== */
+    header {
+      background: rgba(8,14,26,0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      padding: 16px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 14px; color: #fff;
+    }
+    .logo-text { font-weight: 800; font-size: 18px; color: var(--text-1); }
+    .logo-sub  { font-size: 10px; color: var(--text-3); letter-spacing: 2px; }
+    .header-back {
+      font-size: 13px; color: var(--text-3);
+      text-decoration: none; display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border: 1px solid var(--border);
+      border-radius: 99px; transition: all 0.2s;
+    }
+    .header-back:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ===== タブナビ ===== */
+    .tab-nav {
+      display: flex; justify-content: center;
+      gap: 8px;
+      padding: 32px 40px 0;
+    }
+    .tab-btn {
+      padding: 10px 28px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-2);
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+      font-family: 'Noto Sans JP', sans-serif;
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-color: transparent;
+      color: #fff;
+    }
+    .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
+    /* ===== メインコンテンツ ===== */
+    main {
+      max-width: 820px;
+      margin: 40px auto 80px;
+      padding: 0 24px;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ===== ページタイトル ===== */
+    .page-title {
+      font-size: 28px; font-weight: 800;
+      background: linear-gradient(135deg, #f1f5f9, #94a3b8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .page-subtitle { color: var(--text-3); font-size: 13px; margin-bottom: 40px; }
+
+    /* ===== セクション ===== */
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      font-size: 16px; font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section h2::before {
+      content: ''; width: 3px; height: 18px;
+      background: linear-gradient(to bottom, #3b82f6, #6366f1);
+      border-radius: 99px; display: inline-block;
+    }
+    .section p {
+      color: var(--text-2); font-size: 14px; margin-bottom: 12px;
+      line-height: 1.9;
+    }
+    .section ul, .section ol {
+      color: var(--text-2); font-size: 14px;
+      padding-left: 20px; margin-bottom: 12px;
+    }
+    .section ul li, .section ol li { margin-bottom: 8px; line-height: 1.8; }
+    .section strong { color: var(--text-1); }
+
+    .effective-date {
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 13px; color: var(--text-2);
+      margin-bottom: 32px; display: flex; align-items: center; gap: 8px;
+    }
+
+    .contact-box {
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+    }
+    .contact-box p { font-size: 14px; color: var(--text-2); margin-bottom: 12px; }
+    .contact-box a { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .contact-box a:hover { text-decoration: underline; }
+
+    /* ===== フッター ===== */
+    footer {
+      text-align: center; padding: 32px;
+      color: var(--text-3); font-size: 12px;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--text-3); text-decoration: none; margin: 0 8px; }
+    footer a:hover { color: var(--accent); }
+
+    @media (max-width: 640px) {
+      header { padding: 12px 16px; }
+      main { padding: 0 16px; margin: 24px auto 60px; }
+      .tab-nav { padding: 24px 16px 0; }
+      .section { padding: 20px 16px; }
+      .page-title { font-size: 22px; }
+      .tab-btn { padding: 8px 16px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">
+    <div class="logo-icon">Mu</div>
+    <div>
+      <div class="logo-text">AdMu</div>
+      <div class="logo-sub">無を、極める。</div>
+    </div>
+  </a>
+  <a href="/" class="header-back">← ダッシュボードへ戻る</a>
+</header>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="showTab('terms')">利用規約</button>
+  <button class="tab-btn" onclick="showTab('privacy')">プライバシーポリシー</button>
+  <button class="tab-btn" onclick="showTab('tokusho')">特定商取引法</button>
+</div>
+
+<!-- ===== 利用規約 ===== -->
+<main>
+<div id="tab-terms" class="tab-panel active">
+  <h1 class="page-title">利用規約</h1>
+  <p class="page-subtitle">AdMu サービス利用規約（Terms of Service）</p>
+  <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
+
+  <div class="section">
+    <h2>第1条（目的）</h2>
+    <p>本利用規約（以下「本規約」）は、AdMu（以下「本サービス」）の提供条件および利用者との権利義務関係を定めるものです。本サービスをご利用いただく前に、必ず本規約をお読みください。本サービスのご利用をもって、本規約に同意したものとみなします。</p>
+  </div>
+
+  <div class="section">
+    <h2>第2条（サービスの内容）</h2>
+    <p>本サービスは、整体院・治療院等の医療・健康系クライアントを主な対象として、以下の機能を提供するAI搭載型Google広告自動運用プラットフォームです。</p>
+    <ul>
+      <li>Google広告キャンペーンの自動生成・管理</li>
+      <li>AIによる入札調整・最適化（ルールベース）</li>
+      <li>AI広告文（RSA）の自動生成（Gemini AI利用）</li>
+      <li>週次・日次レポートのメール・LINE自動送信</li>
+      <li>Google Analytics連携によるアクセス解析</li>
+      <li>A/Bテスト自動発動・分析機能</li>
+      <li>その他付随するダッシュボード・管理機能</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第3条（利用資格）</h2>
+    <p>本サービスは、弊社が発行したライセンスキーを取得した法人または個人事業主のみご利用いただけます。以下に該当する場合、ご利用をお断りする場合があります。</p>
+    <ul>
+      <li>虚偽の情報を提供した場合</li>
+      <li>本規約に違反したことがある場合</li>
+      <li>反社会的勢力等と関係がある場合</li>
+      <li>その他、弊社が不適切と判断した場合</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第4条（広告費・Google Ads APIについて）</h2>
+    <p><strong>重要：</strong>本サービスはGoogle Ads APIを通じて広告を配信しますが、以下の点をご理解ください。</p>
+    <ul>
+      <li>広告費用はお客様のGoogleアカウントに直接課金されます。本サービスの管理費とは別途です。</li>
+      <li>AIによる入札調整はあくまで補助ツールであり、効果を保証するものではありません。</li>
+      <li>本番APIへの接続には、Googleの開発者トークン審査通過が別途必要です。</li>
+      <li>モックモード運用中は実際の広告配信は行われません。</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第5条（禁止事項）</h2>
+    <p>利用者は、以下の行為を行ってはなりません。</p>
+    <ol>
+      <li>本サービスを通じて、虚偽・誇大広告など法令に違反するコンテンツを配信すること</li>
+      <li>本サービスのソースコードのリバースエンジニアリング・複製・再販</li>
+      <li>他のユーザーのデータへの不正アクセス</li>
+      <li>サービスの安定運営を妨げる大量リクエスト・攻撃行為</li>
+      <li>ライセンスキーの第三者への譲渡・共有</li>
+      <li>その他、法令または公序良俗に違反する一切の行為</li>
+    </ol>
+  </div>
+
+  <div class="section">
+    <h2>第6条（免責事項）</h2>
+    <p>弊社は以下の事項について責任を負いません。</p>
+    <ul>
+      <li>AIによる自動最適化の効果・成果（広告費の回収・患者獲得等）</li>
+      <li>利用者のGoogle広告アカウントの設定ミスによる損害</li>
+      <li>Googleのポリシー変更・APIの仕様変更による機能変化</li>
+      <li>天災・通信障害・第三者の行為によるサービス停止</li>
+      <li>利用者が配信した広告コンテンツの内容に関する紛争</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第7条（契約解除・サービス停止）</h2>
+    <p>弊社は、利用者が本規約に違反した場合、または以下の理由に該当すると判断した場合、事前通知なくサービスを停止・ライセンスを失効させることができます。</p>
+    <ul>
+      <li>月額料金の支払い遅延（14日以上）</li>
+      <li>Google広告ポリシーへの重大な違反</li>
+      <li>不正利用・サービスへの攻撃行為</li>
+    </ul>
+    <p>お客様からの解約は、解約希望月の月末10日前までにご連絡ください。</p>
+  </div>
+
+  <div class="section">
+    <h2>第8条（準拠法・管轄）</h2>
+    <p>本規約は日本法に準拠し、本サービスに関する紛争については、弊社所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします。</p>
+  </div>
+
+  <div class="section">
+    <div class="contact-box">
+      <p>規約に関するお問い合わせ</p>
+      <a href="mailto:support@admu.jp">support@admu.jp</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== プライバシーポリシー ===== -->
+<div id="tab-privacy" class="tab-panel">
+  <h1 class="page-title">プライバシーポリシー</h1>
+  <p class="page-subtitle">AdMu プライバシーポリシー（Privacy Policy）</p>
+  <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
+
+  <div class="section">
+    <h2>第1条（基本方針）</h2>
+    <p>AdMu（以下「本サービス」）は、利用者の個人情報の保護を最重要課題と認識し、個人情報保護法その他関連法令を遵守するとともに、適切な管理・保護に努めます。</p>
+  </div>
+
+  <div class="section">
+    <h2>第2条（収集する情報）</h2>
+    <p>本サービスでは、以下の情報を収集・管理します。</p>
+    <ul>
+      <li><strong>アカウント情報：</strong>クリニック名、管理者名、メールアドレス</li>
+      <li><strong>広告設定情報：</strong>Google広告の顧客ID、APIキー類（暗号化保管）</li>
+      <li><strong>広告パフォーマンスデータ：</strong>クリック数・表示回数・費用・CV数等（Google Ads APIから取得）</li>
+      <li><strong>通知設定：</strong>LINE Channel Token、通知先メールアドレス</li>
+      <li><strong>利用ログ：</strong>IPアドレス、操作ログ（セキュリティ・不正利用防止目的）</li>
+    </ul>
+    <p>患者個人の氏名・住所・診療情報など医療個人情報は本サービスでは<strong>一切収集しません</strong>。</p>
+  </div>
+
+  <div class="section">
+    <h2>第3条（情報の利用目的）</h2>
+    <p>収集した情報は、以下の目的にのみ使用します。</p>
+    <ul>
+      <li>本サービスの提供・維持・改善</li>
+      <li>広告キャンペーンの自動管理・最適化</li>
+      <li>週次・日次レポートの送信</li>
+      <li>不正利用の検知・防止</li>
+      <li>お客様サポート対応</li>
+    </ul>
+    <p>お客様の事前同意なく、上記以外の目的に使用することはありません。</p>
+  </div>
+
+  <div class="section">
+    <h2>第4条（第三者提供）</h2>
+    <p>以下の場合を除き、お客様の情報を第三者に提供することはありません。</p>
+    <ul>
+      <li>法令に基づく開示が必要な場合</li>
+      <li>お客様の同意がある場合</li>
+    </ul>
+    <p>なお、本サービスは以下の外部サービスと連携しており、各社のプライバシーポリシーが適用されます。</p>
+    <ul>
+      <li><strong>Google LLC</strong>（Google Ads API、Gemini AI、Google Analytics）</li>
+      <li><strong>LINE株式会社</strong>（LINE Messaging API）</li>
+      <li><strong>Render Inc.</strong>（サーバーホスティング）</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第5条（セキュリティ）</h2>
+    <p>本サービスは、情報の安全管理のために以下の措置を講じています。</p>
+    <ul>
+      <li>APIキー・パスワードの暗号化保存</li>
+      <li>HTTPS通信による通信の暗号化</li>
+      <li>管理者パネルへのパスワード認証</li>
+      <li>システム間通信のHMAC署名検証</li>
+      <li>Google OAuth2による認証（本番モード時）</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第6条（データの保存期間）</h2>
+    <ul>
+      <li>広告パフォーマンスデータ：契約終了後90日間保持</li>
+      <li>アラート・ログデータ：最大6ヶ月</li>
+      <li>アカウント情報：解約手続き完了後30日で削除</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>第7条（Cookie・アクセス解析）</h2>
+    <p>本サービスのフロントエンドでは、LocalStorageを用いてクリニックIDや設定情報を保存しています。サーバー側のアクセスログは不正利用防止のため一時的に保存されますが、個人を特定する目的では使用しません。</p>
+  </div>
+
+  <div class="section">
+    <h2>第8条（開示・訂正・削除の請求）</h2>
+    <p>お客様は、弊社が保有するご自身の情報について、開示・訂正・削除・利用停止を請求する権利を有します。お問い合わせフォームまたは下記メールアドレスよりご連絡ください。本人確認を行った上で、合理的な期間内に対応いたします。</p>
+  </div>
+
+  <div class="section">
+    <h2>第9条（ポリシーの変更）</h2>
+    <p>本ポリシーは、法令の変更やサービス内容の変更に伴い、予告なく改訂する場合があります。重要な変更は本ページおよびメールにてお知らせします。</p>
+  </div>
+
+  <div class="section">
+    <div class="contact-box">
+      <p>プライバシーに関するお問い合わせ先</p>
+      <a href="mailto:privacy@admu.jp">privacy@admu.jp</a>
+      <p style="margin-top: 10px; font-size: 12px; color: var(--text-3);">
+        AdMu プライバシー担当窓口<br>
+        受付時間：平日 10:00〜18:00
+      </p>
+    </div>
+  </div>
+</div>
+</main>
+
+<!-- ===== 特定商取引法 ===== -->
+<div id="tokusho-panel" style="display:none">
+<main>
+<div id="tab-tokusho" class="tab-panel">
+  <h1 class="page-title">特定商取引法に基づく表記</h1>
+  <p class="page-subtitle">特定商取引法（通信販売）に基づく表記</p>
+  <div class="effective-date">📅 最終更新日：2026年4月1日</div>
+
+  <div class="section">
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tbody>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;width:40%;vertical-align:top"><strong style="color:#f1f5f9">販売業者名</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">（株）アイオイ ／ AdMu 取扱事業者</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">運営責任者</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">石川康一郎</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">所在地</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">请求に応じて郵便にて頑身にお知らせいたします</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">電話番号</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">请求に応じて適宜お知らせいたします</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">メールアドレス</strong></td>
+          <td style="padding:14px 0;color:#94a3b8"><a href="mailto:support@admu.jp" style="color:#3b82f6">support@admu.jp</a></td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス名</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">AdMu （AI搭載型自動広告運用プラットフォーム）</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">販売価格</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">別途料金表に定める月額プラン料金（別途にゴ提示）。Google広告費用は別途でお客様のアカウントに誷求されます。</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払方法</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">銀行振込（請求書発行後14日以内） / クレジットカード（Stripe礎用予定）</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払時期</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">月準後払い（翌月末払い）</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス開始時期</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">ライセンス発行後、翌営業日以内</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">返品・キャンセル</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">ソフトウェア・クラウドサービスの性質上、返品・返金はお断りしておりません。解約は解約希望月の月末10日前までにご連絡ください。翻月末有効で解約処理いたします。</td>
+        </tr>
+        <tr>
+          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">動作環境</strong></td>
+          <td style="padding:14px 0;color:#94a3b8">ブラウザー（Chrome 推奨）でインターネット接続が必要です</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="contact-box">
+      <p>特定商取引法に関するお問い合わせ</p>
+      <a href="mailto:support@admu.jp">support@admu.jp</a>
+    </div>
+  </div>
+</div>
+</main>
+</div>
+
+<footer>
+  <p>&copy; 2026 AdMu. All rights reserved.</p>
+  <nav style="margin-top: 12px;">
+    <a href="/legal">利用規約</a>
+    <a href="/legal">プライバシーポリシー</a>
+    <a href="/">ダッシュボード</a>
+  </nav>
+</footer>
+
+<script>
+  function showTab(name) {
+    // メインパネルを切り替え
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    // 特定商取引法は別パネル
+    const tokushoPanelDiv = document.getElementById('tokusho-panel');
+    if (name === 'tokusho') {
+      tokushoPanelDiv.style.display = 'block';
+      document.querySelector('.tab-panel')?.closest('main')?.parentElement?.querySelectorAll('main')[0]?.setAttribute('style', 'display:none');
+    } else {
+      tokushoPanelDiv.style.display = 'none';
+      document.getElementById('tab-' + name)?.classList.add('active');
+    }
+    event.target.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

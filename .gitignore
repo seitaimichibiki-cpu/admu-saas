@@ -1,0 +1,31 @@
+# 環境変数（秘密情報）
+.env
+*.env
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# データベース（本番DBをGitに上げない）
+*.db
+*.db-shm
+*.db-wal
+
+# バックアップ
+*.bak
+
+# ログ
+*.log
+
+# macOS
+.DS_Store
+
+# エディタ設定
+.vscode/
+.idea/
+
+# 仮想環境
+venv/
+.venv/
