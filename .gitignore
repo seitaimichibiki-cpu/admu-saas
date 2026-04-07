@@ -1,12 +1,16 @@
 # 環境変数（秘密情報）
 .env
-*.env
+.env.*
+!.env.example
 
 # Pythonキャッシュ
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+dist/
+build/
 
 # データベース（本番DBをGitに上げない）
 *.db
@@ -21,11 +25,38 @@ __pycache__/
 
 # macOS
 .DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Desktop.ini
 
 # エディタ設定
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # 仮想環境
 venv/
 .venv/
+env/
+
+# 秘密鍵・証明書
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Node（LP用）
+node_modules/
+
+# テスト・カバレッジ
+.coverage
+htmlcov/
+.pytest_cache/

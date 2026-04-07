@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Google広告自動運用システム", version="1.0.0", lifespan=lifespan)
 
 from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """未処理の例外をキャッチしてユーザーにスタックトレースを漏らさない"""
+    traceback.print_exc()  # サーバーログには出力
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "サーバー内部エラーが発生しました。しばらく経ってから再度お試しください。"}
+    )
 
 @app.middleware("http")
 async def verify_tenant_middleware(request: Request, call_next):
@@ -82,17 +92,21 @@ app.add_middleware(
 # ---- セキュリティヘッダミドルウェア ----
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    import uuid
+    request_id = str(uuid.uuid4())[:8]
     response = await call_next(request)
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["X-Request-ID"] = request_id
     return response
 
 # ---- 簡易レートリミッター ----
 _rate_store: dict = defaultdict(list)
 _RATE_LIMIT  = 120  # 全API: 120リクエスト/分
 _RATE_WINDOW = 60   # 秒
+_rate_cleanup_counter = 0
 
 # LP問い合わせ専用（Bot対策: 5分に3回まで）
 _lp_rate_store: dict = defaultdict(list)
@@ -101,6 +115,7 @@ _LP_RATE_WINDOW = 300  # 5分
 
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next):
+    global _rate_cleanup_counter
     if request.url.path.startswith("/api/"):
         ip = request.client.host if request.client else "unknown"
         now = time.time()
@@ -122,7 +137,17 @@ async def rate_limiter(request: Request, call_next):
         if len(_rate_store[ip]) >= _RATE_LIMIT:
             return Response(content='{"detail":"リクエストが多すぎます。しばらくお待ちください"}', status_code=429, media_type="application/json")
         _rate_store[ip].append(now)
+
+        # メモリリーク防止：100リクエスト毎にストアをクリーンアップ
+        _rate_cleanup_counter += 1
+        if _rate_cleanup_counter >= 100:
+            _rate_cleanup_counter = 0
+            for store, window in [(_rate_store, _RATE_WINDOW), (_lp_rate_store, _LP_RATE_WINDOW)]:
+                stale = [k for k, v in store.items() if not v or v[-1] < now - window]
+                for k in stale:
+                    del store[k]
     return await call_next(request)
+
 
 
 # ---- Pydantic Models ----
@@ -137,20 +162,6 @@ class BudgetUpdateReq(BaseModel):
     clinic_id: int = 1
     budget_yen: int
 
-class SettingsReq(BaseModel):
-    clinic_id: int = 1
-    customer_id: Optional[str] = None
-    developer_token: Optional[str] = None
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-    refresh_token: Optional[str] = None
-    line_channel_token: Optional[str] = None
-    line_user_id: Optional[str] = None
-    mock_mode: Optional[int] = 1
-    target_age_gender: Optional[str] = None
-    target_job_lifestyle: Optional[str] = None
-    target_pain_point: Optional[str] = None
-    target_desired_outcome: Optional[str] = None
 
 class BidRuleReq(BaseModel):
     clinic_id: int = 1
@@ -212,7 +223,9 @@ class AdCopyScoreReq(BaseModel):
     clicks: int
 
 # ---- Helpers ----
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admu-admin-2024")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+if not ADMIN_PASSWORD:
+    print("⚠️  [SECURITY] ADMIN_PASSWORD が未設定です。本番では必ず環境変数を設定してください。")
 
 def _require_account(clinic_id: int) -> dict:
     """広告設定を取得。未設定の場合もデモ設定（モックモード）で代替して500エラーを防ぐ。"""
@@ -814,8 +827,25 @@ def reset_password_confirm(req: PasswordResetConfirmReq):
 
 @app.get("/health", include_in_schema=False)
 def health_check():
-    """Renderのヘルスチェック用"""
-    return {"status": "ok", "service": "AdMu"}
+    """Renderのヘルスチェック用 — DB接続も確認"""
+    import datetime
+    result = {
+        "status": "ok",
+        "service": "AdMu",
+        "version": "1.0.0",
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "database": "postgresql" if db.USE_PG else "sqlite",
+    }
+    # DB接続テスト
+    try:
+        conn = db.get_conn()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+        result["db_status"] = "connected"
+    except Exception as e:
+        result["status"] = "degraded"
+        result["db_status"] = f"error: {str(e)}"
+    return result
 
 @app.post("/api/auth/login")
 def login(req: LoginReq):
@@ -1052,11 +1082,15 @@ def init_admin(request: Request):
         raise HTTPException(status_code=409, detail="管理者アカウントは既に存在します。")
     # シークレットキー検証
     secret = request.headers.get("X-Init-Secret", "")
-    expected = os.environ.get("ADMIN_INIT_SECRET", "admu-init-2024")
+    expected = os.environ.get("ADMIN_INIT_SECRET", "")
+    if not expected:
+        raise HTTPException(status_code=500, detail="ADMIN_INIT_SECRET 環境変数が未設定です。")
     if secret != expected:
         raise HTTPException(status_code=403, detail="初期化シークレットが違います。")
     # adminユーザー作成（clinic_id=1のデモクリニック紐付け）
-    admin_pw = os.environ.get("ADMIN_PASSWORD", "admu-admin-2024")
+    admin_pw = os.environ.get("ADMIN_PASSWORD", "")
+    if not admin_pw:
+        raise HTTPException(status_code=500, detail="ADMIN_PASSWORD 環境変数が未設定です。")
     pw_hash = auth.hash_password(admin_pw)
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@admu.jp")
     user_id = db.create_user(1, admin_email, pw_hash, "admin")

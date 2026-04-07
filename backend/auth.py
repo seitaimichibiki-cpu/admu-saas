@@ -10,7 +10,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 # ---- 設定 ----
-JWT_SECRET = os.environ.get("JWT_SECRET", os.environ.get("SECRET_KEY", "dev-secret-change-in-production"))
+JWT_SECRET = os.environ.get("JWT_SECRET", os.environ.get("SECRET_KEY", ""))
+if not JWT_SECRET:
+    import warnings
+    warnings.warn("⚠️ JWT_SECRET が未設定です。本番では必ず環境変数を設定してください。", stacklevel=2)
+    JWT_SECRET = "dev-only-insecure-" + os.urandom(16).hex()  # 開発時のみ自動生成
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24 * 7  # 7日間
 
