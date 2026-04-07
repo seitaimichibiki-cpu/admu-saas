@@ -67,5 +67,6 @@ services:
 
 databases:
   - name: admu-db
-    plan: starter
+    plan: free
+
 
