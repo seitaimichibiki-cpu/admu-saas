@@ -1,8 +1,3 @@
-# ============================================================
-# Render.com デプロイ設定ファイル (AdMu)
-# https://render.com でGitHubリポジトリに接続後、
-# このファイルが自動検出されデプロイに使用されます
-# ============================================================
 services:
   - type: web
     name: admu-backend
@@ -13,63 +8,25 @@ services:
     plan: starter
     healthCheckPath: /health
     envVars:
-      # --- データベース ---
       - key: DATABASE_URL
         fromDatabase:
           name: admu-db
           property: connectionString
-      # --- アプリ ---
       - key: MOCK_ADS_API
         value: "true"
       - key: PORT
-        value: "8001"
-      # --- 認証 ---
+        value: "10000"
+      - key: APP_BASE_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: SECRET_KEY
-        generateValue: true
       - key: ADMIN_EMAIL
-        sync: false               # Renderダッシュボードで入力
+        sync: false
       - key: ADMIN_PASSWORD
-        sync: false               # Renderダッシュボードで入力
-      - key: ADMIN_INIT_SECRET
-        sync: false               # 初回セットアップ用シークレット
-      # --- AI ---
-      - key: GEMINI_API_KEY
-        sync: false
-      # --- Google Ads API ---
-      - key: GOOGLE_ADS_DEVELOPER_TOKEN
-        sync: false
-      - key: GOOGLE_ADS_CLIENT_ID
-        sync: false
-      - key: GOOGLE_ADS_CLIENT_SECRET
-        sync: false
-      - key: GOOGLE_ADS_REFRESH_TOKEN
-        sync: false
-      - key: GOOGLE_ADS_DEFAULT_CUSTOMER_ID
-        sync: false
-      # --- LINE ---
-      - key: LINE_CHANNEL_ACCESS_TOKEN
-        sync: false
-      - key: LINE_DEFAULT_USER_ID
-        sync: false
-      # --- メール (Resend) ---
-      - key: RESEND_API_KEY
-        sync: false
-      - key: FROM_EMAIL
-        value: "onboarding@resend.dev"
-      # --- サービスURL ---
-      - key: APP_BASE_URL
-        sync: false               # 例: https://admu-backend.onrender.com
-      # --- LOGICTION連携 ---
-      - key: LOGICTION_BASE_URL
-        sync: false
-      - key: INTEGRATION_SECRET_KEY
         sync: false
 
-  # --- LP (ランディングページ) ---
-  - type: static_site
-    name: admu-lp
+staticSites:
+  - name: admu-lp
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
     pullRequestPreviewsEnabled: false
@@ -80,5 +37,4 @@ services:
 
 databases:
   - name: admu-db
-    plan: free   # ⚠️ 無料プランは90日で自動削除。本番はstarter($7/月)に変更推奨
-
+    plan: starter
