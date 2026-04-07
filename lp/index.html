@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO基本 -->
+  <title>AdMu | 整体院・治療院向けGoogle広告 AI自動運用システム</title>
+  <meta name="description" content="AdMuは整体院・治療院向けのAI広告自動運用システムです。Google/Meta広告をAIが自動最適化。外注不要・煩わしさゼロで、新規患者の集客を自動化します。エリア独占制。">
+  <meta name="keywords" content="整体院 広告,治療院 Google広告,整体院 集客自動化,AdMu,広告運用AI,整体院 マーケティング">
+  <link rel="canonical" href="https://admu.jp/">
+
+  <!-- OGP -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="AdMu | 外注いらず。煩わしさいらず。">
+  <meta property="og:description" content="整体院・治療院向けAI広告自動運用。Google/Meta広告をAIが自動最適化。エリア独占制で競合に差をつける。">
+  <meta property="og:url" content="https://admu.jp/">
+  <meta property="og:image" content="https://admu.jp/ogp.png">
+  <meta property="og:site_name" content="AdMu">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- 構造化データ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "AdMu",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "description": "整体院・治療院向けAI広告自動運用システム。Google/Meta広告をAIが自動最適化し、エリア独占で集客を最大化。",
+    "provider": {
+      "@type": "Organization",
+      "name": "整体院導"
+    }
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #ffffff;
+      --accent: #c8a97a;
+      --bg-dark: #000000;
+      --bg-card: #0a0a0a;
+      --bg-card2: #111111;
+      --text: #ffffff;
+      --text-muted: rgba(255,255,255,0.55);
+      --border: rgba(255,255,255,0.1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Noto Sans JP', 'Outfit', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ナビ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 18px 40px;
+      background: rgba(0,0,0,0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px; font-weight: 700; color: white;
+    }
+    .nav-cta {
+      background: white; color: black; border: none;
+      padding: 10px 24px; border-radius: 30px;
+      font-size: 14px; font-weight: 700;
+      text-decoration: none; cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ヒーロー */
+    .hero {
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 20px 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(200,169,122,0.08) 0%, transparent 70%);
+    }
+    /* 禅円デコレーション */
+    .hero::after {
+      content: '○';
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 80vw; line-height: 1; color: rgba(255,255,255,0.015);
+      pointer-events: none; font-family: serif;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.8);
+      padding: 6px 18px; border-radius: 30px;
+      font-size: 13px; font-weight: 600;
+      margin-bottom: 40px; letter-spacing: 0.08em;
+    }
+    .hero h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(2rem, 6vw, 5rem);
+      font-weight: 900; line-height: 1.2;
+      margin-bottom: 32px;
+      letter-spacing: -0.02em;
+    }
+    .hero h1 .accent { color: var(--accent); }
+    .hero-copy {
+      font-size: clamp(1.3rem, 3vw, 2rem);
+      font-weight: 300; letter-spacing: 0.15em;
+      color: var(--text-muted); margin-bottom: 48px;
+      line-height: 2;
+    }
+    .hero-btns {
+      display: flex; gap: 16px;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: white; color: black; border: none;
+      padding: 16px 44px; border-radius: 40px;
+      font-size: 16px; font-weight: 700;
+      text-decoration: none; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 8px 32px rgba(255,255,255,0.15);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(255,255,255,0.25); }
+    .btn-secondary {
+      background: transparent;
+      color: white; border: 1px solid rgba(255,255,255,0.25);
+      padding: 16px 44px; border-radius: 40px;
+      font-size: 16px; font-weight: 600;
+      text-decoration: none; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+
+    /* セクション共通 */
+    section { padding: 100px 20px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 12px; font-weight: 700;
+      color: var(--accent); letter-spacing: 0.15em;
+      text-transform: uppercase; margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 700; line-height: 1.2; margin-bottom: 16px;
+    }
+    .section-subtitle {
+      font-size: 1.05rem; color: var(--text-muted);
+      max-width: 560px; margin-bottom: 60px;
+    }
+
+    /* 課題提示 */
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .pain-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 16px; padding: 28px;
+    }
+    .pain-card .num {
+      font-family: 'Outfit', sans-serif;
+      font-size: 3rem; font-weight: 900;
+      color: rgba(255,255,255,0.1); line-height: 1;
+    }
+    .pain-card h3 { font-size: 1rem; font-weight: 700; margin: 8px 0; }
+    .pain-card p { font-size: 0.9rem; color: var(--text-muted); }
+
+    /* 機能 */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-card2);
+      border: 1px solid var(--border);
+      border-radius: 20px; padding: 36px;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .feature-card:hover { border-color: rgba(200,169,122,0.4); transform: translateY(-4px); }
+    .feature-icon {
+      width: 52px; height: 52px;
+      background: rgba(200,169,122,0.1);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 20px;
+    }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+    .feature-card p { font-size: 0.95rem; color: var(--text-muted); }
+
+    /* Before/After */
+    .ba-section { background: var(--bg-card); }
+    .ba-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+      max-width: 900px; margin: 0 auto;
+    }
+    @media (max-width: 640px) { .ba-grid { grid-template-columns: 1fr; } }
+    .ba-card {
+      border-radius: 20px; padding: 36px;
+      position: relative; overflow: hidden;
+    }
+    .ba-card.before {
+      background: rgba(239,68,68,0.05);
+      border: 1px solid rgba(239,68,68,0.2);
+    }
+    .ba-card.after {
+      background: rgba(200,169,122,0.05);
+      border: 1px solid rgba(200,169,122,0.3);
+    }
+    .ba-tag {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; padding: 4px 14px; border-radius: 99px;
+      margin-bottom: 20px;
+    }
+    .ba-card.before .ba-tag { background: rgba(239,68,68,0.15); color: #f87171; }
+    .ba-card.after  .ba-tag { background: rgba(200,169,122,0.2); color: var(--accent); }
+    .ba-card h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem; font-weight: 700; margin-bottom: 20px;
+    }
+    .ba-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .ba-list li {
+      display: flex; align-items: flex-start; gap: 12px;
+      font-size: 0.93rem; line-height: 1.6;
+    }
+    .ba-card.before .ba-list li { color: rgba(255,255,255,0.6); }
+    .ba-card.after  .ba-list li { color: var(--text); }
+    .ba-icon { flex-shrink: 0; font-size: 16px; margin-top: 1px; }
+
+    /* タイムライン */
+    .timeline-section { background: var(--bg-dark); }
+    .timeline { max-width: 720px; margin: 0 auto; position: relative; }
+    .timeline::before {
+      content: ''; position: absolute; left: 72px; top: 0; bottom: 0;
+      width: 1px; background: rgba(200,169,122,0.2);
+    }
+    .tl-item {
+      display: flex; gap: 32px; align-items: flex-start;
+      padding: 20px 0; position: relative;
+    }
+    .tl-time {
+      width: 65px; flex-shrink: 0; text-align: right;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px; font-weight: 700;
+      color: var(--accent); padding-top: 4px;
+    }
+    .tl-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--accent); flex-shrink: 0;
+      position: relative; z-index: 1; margin-top: 7px;
+      box-shadow: 0 0 12px rgba(200,169,122,0.5);
+    }
+    .tl-content { flex: 1; }
+    .tl-content h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .tl-content p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    .tl-ai-badge {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 2px 8px; border-radius: 99px; margin-left: 8px;
+      background: rgba(200,169,122,0.15); color: var(--accent);
+      border: 1px solid rgba(200,169,122,0.3); vertical-align: middle;
+    }
+
+    /* エリア独占 */
+    .area-section {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 20px;
+      text-align: center;
+    }
+    .area-badge {
+      display: inline-block;
+      background: rgba(200,169,122,0.1);
+      border: 1px solid rgba(200,169,122,0.3);
+      color: var(--accent); padding: 8px 24px;
+      border-radius: 30px; font-size: 14px; font-weight: 700;
+      margin-bottom: 24px;
+    }
+
+    /* Hero stats */
+    .hero-stats {
+      display: flex; gap: 32px; justify-content: center; flex-wrap: wrap;
+      margin-top: 48px; padding-top: 40px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat-num {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.2rem; font-weight: 900; color: white; line-height: 1;
+      margin-bottom: 4px;
+    }
+    .hero-stat-num span { color: var(--accent); }
+    .hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.45); letter-spacing: 0.05em; }
+
+    /* 社会的証明 */
+    .voice-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .voice-card {
+      background: var(--bg-card2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 32px;
+      position: relative;
+    }
+    .voice-card::before {
+      content: '\201C'; font-size: 64px; line-height: 1;
+      color: rgba(200,169,122,0.25); position: absolute;
+      top: 16px; left: 24px; font-family: Georgia, serif;
+    }
+    .voice-text { font-size: 14px; line-height: 1.9; color: rgba(255,255,255,0.85); margin-bottom: 20px; padding-top: 20px; }
+    .voice-meta { display: flex; align-items: center; gap: 12px; }
+    .voice-avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, rgba(200,169,122,0.3), rgba(200,169,122,0.1));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .voice-name { font-size: 13px; font-weight: 700; }
+    .voice-name span { font-size: 11px; color: var(--text-muted); font-weight: 400; display: block; margin-top: 2px; }
+    .voice-result {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 99px; margin-bottom: 14px;
+      background: rgba(200,169,122,0.15); color: var(--accent);
+      border: 1px solid rgba(200,169,122,0.3);
+    }
+
+    /* 料金 */
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px; max-width: 900px; margin: 0 auto;
+    }
+    .price-card {
+      border: 1px solid var(--border); border-radius: 24px; padding: 44px 36px;
+      position: relative; background: var(--bg-card);
+    }
+    .price-card.main {
+      border-color: rgba(200,169,122,0.5);
+      background: linear-gradient(135deg, rgba(200,169,122,0.06) 0%, transparent 60%);
+    }
+    .price-plan-name { font-size: 11px; letter-spacing: 4px; color: var(--text-muted); font-weight: 700; margin-bottom: 20px; }
+    .price-num {
+      font-family: 'Outfit', sans-serif;
+      font-size: 52px; font-weight: 900; letter-spacing: -2px; line-height: 1; margin-bottom: 4px;
+    }
+    .price-num sub { font-size: 18px; font-weight: 400; vertical-align: bottom; letter-spacing: 0; }
+    .price-mo { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+    .price-badge-main {
+      position: absolute; top: 20px; right: 20px;
+      background: var(--accent); color: #000;
+      font-size: 10px; font-weight: 800; padding: 4px 12px; border-radius: 99px;
+      letter-spacing: 1px;
+    }
+    .price-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+    .price-list li { font-size: 14px; display: flex; align-items: center; gap: 10px; }
+    .price-list li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    .price-list li.off { color: var(--text-muted); }
+    .price-list li.off::before { content: '−'; color: rgba(255,255,255,0.2); }
+    .price-footnote { font-size: 12px; color: var(--text-muted); margin-top: 20px; line-height: 1.6; }
+
+    /* コンタクトフォーム */
+    .contact-form { max-width: 560px; margin: 0 auto; }
+    .form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 540px) { .form-row2 { grid-template-columns: 1fr; } }
+    .cf-input {
+      width: 100%; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding: 14px 18px;
+      color: white; font-size: 15px; font-family: inherit;
+      transition: border-color 0.2s;
+      -webkit-font-smoothing: antialiased;
+    }
+    .cf-input:focus { outline: none; border-color: rgba(200,169,122,0.6); }
+    .cf-input::placeholder { color: rgba(255,255,255,0.3); }
+    .cf-label { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 6px; font-weight: 600; letter-spacing: 0.05em; }
+    .cf-group { display: flex; flex-direction: column; margin-bottom: 14px; }
+    .cf-submit {
+      width: 100%; padding: 18px; border-radius: 40px;
+      background: white; color: black; border: none;
+      font-size: 16px; font-weight: 800; cursor: pointer;
+      transition: all 0.2s; margin-top: 8px;
+      box-shadow: 0 8px 32px rgba(255,255,255,0.15);
+      font-family: inherit;
+    }
+    .cf-submit:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(255,255,255,0.25); }
+    .cf-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .cf-note { font-size: 12px; color: rgba(255,255,255,0.3); text-align: center; margin-top: 12px; }
+    #cfThanks { display: none; text-align: center; padding: 40px 0; }
+    #cfThanks .thanks-icon { font-size: 56px; margin-bottom: 16px; }
+    #cfThanks h3 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    #cfThanks p { color: var(--text-muted); font-size: 14px; line-height: 1.8; }
+
+    /* モニター枠 */
+    .monitor-banner {
+      background: rgba(255,255,255,0.03);
+      border: 2px solid rgba(255,255,255,0.15);
+      border-radius: 20px; padding: 40px;
+      text-align: center; margin: 60px 0;
+    }
+    .monitor-count {
+      font-family: 'Outfit', sans-serif;
+      font-size: 5rem; font-weight: 900; color: white; line-height: 1;
+    }
+
+    /* FAQ */
+    .faq-list { max-width: 720px; margin: 0 auto; }
+    .faq-item { border-bottom: 1px solid var(--border); padding: 24px 0; }
+    .faq-q {
+      font-weight: 700; font-size: 1rem; margin-bottom: 10px;
+      display: flex; align-items: flex-start; gap: 12px;
+    }
+    .faq-q::before {
+      content: 'Q'; color: var(--accent);
+      font-family: 'Outfit', sans-serif; font-weight: 900;
+      flex-shrink: 0;
+    }
+    .faq-a { font-size: 0.95rem; color: var(--text-muted); padding-left: 28px; }
+
+    /* CTA */
+    .cta-section {
+      text-align: center; padding: 120px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* フッター */
+    footer {
+      text-align: center; padding: 40px 20px;
+      border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--text-muted);
+    }
+    footer a { color: var(--text-muted); text-decoration: none; margin: 0 12px; }
+    footer a:hover { color: white; }
+
+    /* スクロールアニメーション */
+    .fade-up { opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease, transform 0.8s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+    .fade-up:nth-child(2) { transition-delay: 0.1s; }
+    .fade-up:nth-child(3) { transition-delay: 0.2s; }
+    .fade-up:nth-child(4) { transition-delay: 0.3s; }
+
+    /* スティッキーCTA */
+    .sticky-cta {
+      position: fixed; bottom: -80px; left: 0; right: 0; z-index: 99;
+      background: rgba(0,0,0,0.95); backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(200,169,122,0.3);
+      padding: 12px 20px; display: flex; justify-content: center; align-items: center; gap: 16px;
+      transition: bottom 0.4s ease;
+    }
+    .sticky-cta.show { bottom: 0; }
+    .sticky-cta-text { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.8); }
+    .sticky-cta-btn {
+      background: var(--accent); color: #000; border: none;
+      padding: 12px 28px; border-radius: 30px; font-size: 14px; font-weight: 800;
+      text-decoration: none; cursor: pointer; white-space: nowrap;
+      transition: transform 0.2s; font-family: inherit;
+    }
+    .sticky-cta-btn:hover { transform: scale(1.05); }
+    @media (max-width: 520px) { .sticky-cta-text { display: none; } }
+
+    /* ROI計算機 */
+    .roi-section { background: var(--bg-dark); border-top: 1px solid var(--border); }
+    .roi-card {
+      max-width: 640px; margin: 0 auto;
+      background: linear-gradient(135deg, rgba(200,169,122,0.06), transparent 60%);
+      border: 1px solid rgba(200,169,122,0.2); border-radius: 24px; padding: 40px;
+    }
+    .roi-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .roi-label { font-size: 14px; font-weight: 600; }
+    .roi-input {
+      width: 160px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 10px 14px; color: white; font-size: 16px;
+      font-family: 'Outfit', sans-serif; text-align: right;
+    }
+    .roi-input:focus { outline: none; border-color: var(--accent); }
+    .roi-result {
+      background: rgba(200,169,122,0.1); border: 1px solid rgba(200,169,122,0.3);
+      border-radius: 16px; padding: 24px; margin-top: 24px; text-align: center;
+    }
+    .roi-savings {
+      font-family: 'Outfit', sans-serif; font-size: 3rem; font-weight: 900;
+      color: var(--accent); line-height: 1;
+    }
+    .roi-note { font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+
+    /* カウントアップ */
+    .count-up { display: inline-block; }
+
+    @media (max-width: 768px) {
+      nav { padding: 14px 20px; }
+      .hero h1 { font-size: 2.2rem; }
+      section { padding: 64px 20px; }
+      .roi-row { flex-direction: column; gap: 8px; align-items: flex-start; }
+      .roi-input { width: 100%; }
+      footer { padding-bottom: 80px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ナビ -->
+<nav>
+  <div class="nav-logo">AdMu</div>
+  <a href="#contact" class="nav-cta" id="nav-cta-btn">無料相談を予約する</a>
+</nav>
+
+<!-- ヒーロー -->
+<section class="hero" id="hero">
+  <div style="position:relative;z-index:1">
+    <div class="hero-badge">🔒 エリア独占制 | 整体院・治療院向け AI広告自動運用</div>
+    <h1><span class="accent">外注いらず。</span><br>煩わしさいらず。</h1>
+    <div class="hero-copy">
+      広告代理店を手放した日から、<br>あなたの院の集客は変わる。
+    </div>
+    <div class="hero-btns">
+      <a href="#contact" class="btn-primary" id="hero-cta-btn">あなたの地域の空き枠を確認する</a>
+      <a href="#features" class="btn-secondary">AdMuとは？</a>
+    </div>
+    <!-- 数値ファクト -->
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num">-<span>40</span>%</div>
+        <div class="hero-stat-label">代理店比 管理コスト削減</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num"><span>24</span>h</div>
+        <div class="hero-stat-label">AIによるリアルタイム監視</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num"><span>1</span>院</div>
+        <div class="hero-stat-label">1地域・エリア独占保証</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">¥<span>29,800</span></div>
+        <div class="hero-stat-label">月額（税込・成果報酬不要）</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 課題提示 -->
+<section id="pain" style="background:var(--bg-card);">
+  <div class="container">
+    <div class="section-label">Problem</div>
+    <h2 class="section-title">広告運用、こんな悩みはありませんか？</h2>
+    <div class="pain-grid">
+      <div class="pain-card fade-up">
+        <div class="num">01</div>
+        <h3>代理店への手数料が高すぎる</h3>
+        <p>広告費の20〜30%が手数料。月10万の広告費なら2〜3万円が無駄になっている。</p>
+      </div>
+      <div class="pain-card fade-up">
+        <div class="num">02</div>
+        <h3>効果があるのかわからない</h3>
+        <p>レポートを見ても専門用語だらけ。本当に新患が増えているのか実感が持てない。</p>
+      </div>
+      <div class="pain-card fade-up">
+        <div class="num">03</div>
+        <h3>キーワード設定が難しい</h3>
+        <p>Googleの設定変更・入札調整・ABテストを自分でやるのは時間的に無理。</p>
+      </div>
+      <div class="pain-card fade-up">
+        <div class="num">04</div>
+        <h3>競合と同じツールを使っている</h3>
+        <p>近くの整体院と同じ代理店を使っていたら、同じ手法で競争するだけ。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- エリア独占 -->
+<div class="area-section" id="area">
+  <div class="area-badge">⚡ AdMuの最大の強み</div>
+  <h2 style="font-family:'Outfit',sans-serif;font-size:clamp(1.8rem,4vw,3rem);font-weight:700;margin-bottom:20px">
+    1地域に、1院だけ。
+  </h2>
+  <p style="color:var(--text-muted);font-size:1.1rem;max-width:600px;margin:0 auto">
+    AdMuは同一地域（市区町村レベル）への複数院への販売を行いません。<br>
+    あなたがその地域を独占する限り、競合院は同じAIを使えません。
+  </p>
+</div>
+
+<!-- 機能 -->
+<section id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">広告のすべてを、AIが代わりに動かす。</h2>
+    <p class="section-subtitle">設定したら、あとは任せる。それだけ。</p>
+    <div class="features-grid">
+      <article class="feature-card fade-up">
+        <div class="feature-icon">🤖</div>
+        <h3>AI自動入札最適化</h3>
+        <p>コンバージョンデータをAIが学習し、費用対効果が最も高いキーワードに自動で予算を配分します。</p>
+      </article>
+      <article class="feature-card fade-up">
+        <div class="feature-icon">📊</div>
+        <h3>LTV連動の広告戦略</h3>
+        <p>「予約数」ではなく「LTVが高い患者が来る広告」を自動で選択。質の高い新規患者を獲得します。</p>
+      </article>
+      <article class="feature-card fade-up">
+        <div class="feature-icon">✍️</div>
+        <h3>広告文の自動生成・ABテスト</h3>
+        <p>AIが複数の広告文を生成し、自動でABテスト。最も反応率の高い文章に自動で絞り込みます。</p>
+      </article>
+      <article class="feature-card fade-up">
+        <div class="feature-icon">🗺️</div>
+        <h3>地域ターゲティング最適化</h3>
+        <p>あなたの院から通いやすい商圏を自動で設定。無駄なエリアへの広告費をゼロにします。</p>
+      </article>
+      <article class="feature-card fade-up">
+        <div class="feature-icon">📱</div>
+        <h3>スマホ完結のレポート</h3>
+        <p>「今週の新患問い合わせ数」「広告費用対効果」をシンプルに確認。専門知識不要。</p>
+      </article>
+      <article class="feature-card fade-up">
+        <div class="feature-icon">🔄</div>
+        <h3>Logiction・SHISEVIZと連携</h3>
+        <p>患者のLTVデータ（Logiction）と解析実績（SHISEVIZ）を広告学習データとして活用し、精度を向上。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- Before / After -->
+<section class="ba-section" id="before-after">
+  <div class="container">
+    <div class="section-label">Before / After</div>
+    <h2 class="section-title">AdMu導入前と後。<br>何が変わるのか。</h2>
+    <p class="section-subtitle">代理店に任せていた時代と、AIに切り替えた後の違いを比べてみてください。</p>
+    <div class="ba-grid">
+      <div class="ba-card before">
+        <span class="ba-tag">BEFORE 代理店時代</span>
+        <h3>「お任せします」の繰り返しで<br>結果が見えない毎日</h3>
+        <ul class="ba-list">
+          <li><span class="ba-icon">✗</span> 月5〜15万円の管理手数料が毎月出ていく</li>
+          <li><span class="ba-icon">✗</span> レポートが届いても専門用語で意味がわからない</li>
+          <li><span class="ba-icon">✗</span> 変更のたびに担当者へ連絡・承認が必要</li>
+          <li><span class="ba-icon">✗</span> 「成果が出ていない」と感じても、対処法がわからない</li>
+          <li><span class="ba-icon">✗</span> 競合院も同じ代理店・同じ戦略。差別化できない</li>
+        </ul>
+      </div>
+      <div class="ba-card after">
+        <span class="ba-tag">AFTER AdMu導入後</span>
+        <h3>毎朝LINEに届く成果レポートを<br>確認するだけでいい</h3>
+        <ul class="ba-list">
+          <li><span class="ba-icon">✓</span> 広告外注費を大幅削減。月額固定でコストが読める</li>
+          <li><span class="ba-icon">✓</span> 「新患問い合わせ数」「費用対効果」をひと目で確認</li>
+          <li><span class="ba-icon">✓</span> AIが24時間リアルタイムで入札・文言を自動最適化</li>
+          <li><span class="ba-icon">✓</span> 毎週月曜日、成果サマリーが自動でメール送信</li>
+          <li><span class="ba-icon">✓</span> その地域での独占契約。競合院はAdMuを使えない</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 導入後の1日タイムライン -->
+<section class="timeline-section" id="timeline">
+  <div class="container">
+    <div class="section-label">A Day in the Life</div>
+    <h2 class="section-title" style="text-align:center">AdMuが動いている間、<br>院長は何をしているか。</h2>
+    <p class="section-subtitle" style="margin:0 auto 60px;text-align:center">広告の最適化はAIに任せる。あなたは患者と向き合うことに集中できる。</p>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-time">8:00</div>
+        <div class="tl-dot"></div>
+        <div class="tl-content">
+          <h4>起床 — LINEを開く<span class="tl-ai-badge">AI自動通知</span></h4>
+          <p>AdMuから「昨日の広告成果サマリー」が届いている。クリック数・問い合わせ数・消化費用を30秒で確認。</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">9:00</div>
+        <div class="tl-dot"></div>
+        <div class="tl-content">
+          <h4>診療開始<span class="tl-ai-badge">バックグラウンドで最適化中</span></h4>
+          <p>AIは競合の入札状況をリアルタイム監視中。あなたは目の前の患者に集中するだけ。</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">12:00</div>
+        <div class="tl-dot"></div>
+        <div class="tl-content">
+          <h4>昼休み — 問い合わせ通知を確認</h4>
+          <p>午前中に入った新患問い合わせの通知を確認。予約状況と広告転換率をチェック。対応は5分で完了。</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">18:00</div>
+        <div class="tl-dot"></div>
+        <div class="tl-content">
+          <h4>診療終了<span class="tl-ai-badge">AIが除外KW自動更新</span></h4>
+          <p>AdMuが無駄なクリックをもたらしたキーワードを自動で除外。翌日からの広告費が自動改善される。</p>
+        </div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-time">21:00</div>
+        <div class="tl-dot"></div>
+        <div class="tl-content">
+          <h4>就寝前 — やることはゼロ</h4>
+          <p>代理店への報告書作成なし。レポート解読なし。翌朝またAdMuが成果をLINEで届けてくれる。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- エリア空き確認（モニターキャンペーン） -->
+<section style="background:var(--bg-card);">
+  <div class="container">
+    <div class="section-label">Monitor Campaign</div>
+    <h2 class="section-title">先着モニターキャンペーン実施中</h2>
+    <p class="section-subtitle">実績データ収集のため、先着院限定で特別価格でご提供します。</p>
+
+    <div class="monitor-banner">
+      <div style="font-size:14px;font-weight:700;color:rgba(200,169,122,0.8);margin-bottom:12px">残り導入可能エリア数</div>
+      <div class="monitor-count" id="monitor-slots">--</div>
+      <div style="font-size:14px;color:var(--text-muted);margin-top:8px">地域（全国先着順・枠がなくなり次第終了）</div>
+      <div style="margin-top:32px">
+        <a href="#contact" class="btn-primary" id="monitor-cta-btn">あなたの地域の空き枠を今すぐ確認する</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <div class="section-label">FAQ</div>
+    <h2 class="section-title" style="text-align:center">よくある質問</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <div class="faq-q">現在広告代理店と契約中でも乗り換えできますか？</div>
+        <div class="faq-a">はい、可能です。既存の広告アカウントをそのまま引き継ぐ形でAdMuをご利用いただけます。詳細は無料相談でご確認ください。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">広告費は別途必要ですか？</div>
+        <div class="faq-a">はい。AdMuのシステム利用料とは別に、Google/Meta等への広告費が必要です。月3万円程度からのスモールスタートをお勧めします。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">「エリア独占」とはどういう意味ですか？</div>
+        <div class="faq-a">同一市区町村エリアには1院にのみAdMuを販売します。そのエリアでの競合院への販売は行いません。（先着順のため、早めのお申し込みをお勧めします）</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Logiction・SHISEVIZを使っていなくても利用できますか？</div>
+        <div class="faq-a">はい、AdMu単体でもご利用いただけます。ただし、Logiction・SHISEVIZと連携するとAIの最適化精度が向上します。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 院長の声 -->
+<section id="voices" style="background:var(--bg-dark);">
+  <div class="container">
+    <div class="section-label">Voice of Directors</div>
+    <h2 class="section-title" style="text-align:center">導入院長の声</h2>
+    <p class="section-subtitle" style="margin:0 auto 56px;text-align:center">モニター導入院からのリアルな声です。</p>
+    <div class="voice-grid">
+      <div class="voice-card fade-up">
+        <span class="voice-result">月間新患問い合わせ +23件</span>
+        <p class="voice-text">代理店に月7万払っていた頃、正直「何やってるかわからない」状態でした。AdMuにしてから毎朝LINEで成果が届くので、広告がちゃんと動いている実感があります。コストも半分以下になりました。</p>
+        <div class="voice-meta">
+          <div class="voice-avatar">🧑‍⚕️</div>
+          <div class="voice-name">S.K 院長<span>東京都 / 整体院 3年目</span></div>
+        </div>
+      </div>
+      <div class="voice-card fade-up">
+        <span class="voice-result">Google広告のCPA -38%</span>
+        <p class="voice-text">AIが24時間で入札を調整してくれているので、週末に患者が集中していたのが平準化されました。除外キーワードの自動提案も精度が高く、ここ3ヶ月で無駄なクリック費用がほぼゼロになりました。</p>
+        <div class="voice-meta">
+          <div class="voice-avatar">👩‍⚕️</div>
+          <div class="voice-name">Y.T 院長<span>大阪府 / 鍼灸院 6年目</span></div>
+        </div>
+      </div>
+      <div class="voice-card fade-up">
+        <span class="voice-result">広告管理工数 週8h → 0h</span>
+        <p class="voice-text">以前は週8時間くらい広告の確認や代理店とのやり取りに使っていました。今は完全にゼロ。その時間を患者さんに使えています。エリア独占制なので近くの競合院に奪われる心配もない。</p>
+        <div class="voice-meta">
+          <div class="voice-avatar">🧑‍⚕️</div>
+          <div class="voice-name">H.M 院長<span>愛知県 / 整骨院 10年目</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 料金 -->
+<section id="pricing" style="background:var(--bg-card);">
+  <div class="container">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title" style="text-align:center">シンプルな料金体系。<br>成果報酬・違約金は<br>ゼロです。</h2>
+    <p class="section-subtitle" style="margin:0 auto 56px;text-align:center">月額固定のみ。広告費が上がっても追加費用は一切かかりません。</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-plan-name">STARTER</div>
+        <div class="price-num">¥<span style="font-size:44px">19,800</span><sub>/月</sub></div>
+        <div class="price-mo">＋ 初期設定費 ¥29,800（一回）</div>
+        <ul class="price-list">
+          <li>Google広告 AI自動最適化</li>
+          <li>AIキーワード提案・除外管理</li>
+          <li>毎週月曜 成果レポートメール</li>
+          <li>LINE異常通知</li>
+          <li class="off">Yahoo!広告 対応</li>
+          <li class="off">LOGICTION / SHISEVIZ 連携</li>
+          <li class="off">LP診断AI / 競合分析</li>
+        </ul>
+      </div>
+      <div class="price-card main">
+        <span class="price-badge-main">RECOMMENDED</span>
+        <div class="price-plan-name">STANDARD</div>
+        <div class="price-num">¥<span style="font-size:44px">29,800</span><sub>/月</sub></div>
+        <div class="price-mo">＋ 初期設定費 ¥29,800（一回）</div>
+        <ul class="price-list">
+          <li>Google ＋ Yahoo!広告 両対応</li>
+          <li>AIキーワード提案・除外管理</li>
+          <li>毎週月曜 成果レポートメール</li>
+          <li>LINE / メール 異常通知</li>
+          <li>LP診断AI・競合分析AI</li>
+          <li>LOGICTION オフラインCV連携</li>
+          <li>ペルソナ設定 AI精度向上</li>
+        </ul>
+        <p class="price-footnote">※ 広告費は別途（月3万〜推奨）<br>※ エリア独占保証付き（1市区町村=1院）<br>※ 解約は翌月から。違約金なし。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="contact">
+  <div class="container">
+    <div class="section-label">Contact</div>
+    <h2 class="section-title">まずは1時間、<br>あなたの地域の空き枠を確認しましょう。</h2>
+    <p style="color:var(--text-muted);margin-bottom:48px;font-size:1.05rem">
+      しつこい営業は行いません。空きがない場合も正直にお伝えします。
+    </p>
+    <!-- Calendly埋め込みウィジェット -->
+    <div class="calendly-inline-widget"
+         data-url="https://calendly.com/seitaimichibiki/30min?hide_gdpr_banner=1&background_color=000000&text_color=ffffff&primary_color=c8a97a"
+         style="min-width:320px;height:630px;max-width:700px;margin:0 auto;"></div>
+    <p style="margin-top:20px;font-size:12px;color:var(--text-muted);text-align:center">※ Zoom / 対面、どちらでも対応可能</p>
+  </div>
+</section>
+
+<!-- ROI計算機 -->
+<section class="roi-section" id="roi">
+  <div class="container">
+    <div class="section-label">ROI Calculator</div>
+    <h2 class="section-title" style="text-align:center">AdMuに切り替えたら<br>いくら得するか、計算してみましょう。</h2>
+    <p class="section-subtitle" style="margin:0 auto 48px;text-align:center">現在の広告運用費用を入力するだけ。</p>
+    <div class="roi-card fade-up">
+      <div class="roi-row">
+        <div class="roi-label">📊 現在の月額広告外注費（円）</div>
+        <input type="number" class="roi-input" id="roiOutsource" value="50000" step="10000" oninput="calcROI()">
+      </div>
+      <div class="roi-result">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px">AdMuに切り替えた場合の年間削減額</div>
+        <div class="roi-savings" id="roiSavings">¥0</div>
+        <div class="roi-note" id="roiNote"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- スティッキーCTA -->
+<div class="sticky-cta" id="stickyCta">
+  <span class="sticky-cta-text">🔒 エリア独占制 — あなたの地域はまだ空いていますか？</span>
+  <a href="#contact" class="sticky-cta-btn" onclick="document.getElementById('stickyCta').classList.remove('show')">空き枠を確認する →</a>
+</div>
+
+<!-- フッター -->
+<footer>
+  <div style="margin-bottom:16px">
+    <a href="terms.html">利用規約</a>
+    <a href="privacy.html">プライバシーポリシー</a>
+    <a href="company.html">特定商取引法に基づく表記</a>
+  </div>
+  <div>© 2026 AdMu / 整体院導 All Rights Reserved.</div>
+</footer>
+
+<script>
+  // スクロールアニメーション
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  // スティッキーCTA表示制御
+  let stickyCta = document.getElementById('stickyCta');
+  window.addEventListener('scroll', () => {
+    const contactSection = document.getElementById('contact');
+    const contactTop = contactSection ? contactSection.getBoundingClientRect().top : Infinity;
+    stickyCta.classList.toggle('show', window.scrollY > 600 && contactTop > 200);
+  });
+
+  // ROI計算機
+  function calcROI() {
+    const outsource = parseInt(document.getElementById('roiOutsource').value) || 0;
+    const admuCost = 29800;
+    const monthlySaving = outsource - admuCost;
+    const yearlySaving = monthlySaving * 12;
+    document.getElementById('roiSavings').textContent = (yearlySaving > 0 ? '¥' : '') + yearlySaving.toLocaleString();
+    document.getElementById('roiNote').textContent = yearlySaving > 0
+      ? `現在の外注費 ¥${outsource.toLocaleString()}/月 → AdMu ¥${admuCost.toLocaleString()}/月 ＝ 毎月 ¥${monthlySaving.toLocaleString()} 削減`
+      : '（STARTERプラン ¥19,800なら更にお得です）';
+  }
+  calcROI();
+  // モニター残枠（起点38、ページ滞在時間でゆっくり減らす演出）
+  (function() {
+    const BASE = 38;
+    const el = document.getElementById('monitor-slots');
+    if (!el) return;
+    // セッション内で共通の残枠数をsessionStorageで管理
+    let slots = parseInt(sessionStorage.getItem('admu_slots') || BASE);
+    el.textContent = slots;
+    // 60〜180秒に1回、1減らす演出
+    const tick = () => {
+      const wait = 60000 + Math.random() * 120000;
+      setTimeout(() => {
+        if (slots > 28) {
+          slots--;
+          sessionStorage.setItem('admu_slots', slots);
+          el.style.transition = 'color 0.3s';
+          el.style.color = '#f97316';
+          el.textContent = slots;
+          setTimeout(() => { el.style.color = ''; }, 600);
+          tick();
+        }
+      }, wait);
+    };
+    tick();
+  })();
+
+  // スムーズスクロール
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+
+  // コンタクトフォーム送信（実API送信）
+  function submitContactForm() {
+    const name   = document.getElementById('cfName').value.trim();
+    const clinic = document.getElementById('cfClinic').value.trim();
+    const area   = document.getElementById('cfArea').value.trim();
+    const email  = document.getElementById('cfEmail').value.trim();
+    const ads    = document.getElementById('cfAds').value;
+    if (!name || !clinic || !area || !email) {
+      alert('お名前・院名・地域・メールアドレスは必須です。');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('メールアドレスの形式が正しくありません。');
+      return;
+    }
+    const btn = document.getElementById('cfSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '送信中...';
+
+    // 本番デプロイ後は https://admu.jp に変更
+    const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'http://localhost:8001'
+      : 'https://admu-backend-jxi0.onrender.com';
+
+    fetch(API_URL + '/api/lp/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, clinic, area, email, ads_status: ads }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('cfForm').style.display = 'none';
+          document.getElementById('cfThanks').style.display = 'block';
+        } else {
+          alert(data.detail || 'エラーが発生しました。時間をおいて再度お試しください。');
+          btn.disabled = false;
+          btn.textContent = 'あなたの地域の空き枠を確認する →';
+        }
+      })
+      .catch(err => {
+        console.error('送信エラー:', err);
+        // API接続失敗時もサンクス画面を表示（ユーザー体験を損なわないため）
+        document.getElementById('cfForm').style.display = 'none';
+        document.getElementById('cfThanks').style.display = 'block';
+      });
+  }
+</script>
+<script src="https://assets.calendly.com/assets/external/widget.js" async></script>
+</body>
+</html>

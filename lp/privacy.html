@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>プライバシーポリシー | AdMu</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#000; --card:#0a0a0a; --text:#fff; --muted:rgba(255,255,255,0.55); --border:rgba(255,255,255,0.1); --accent:#c8a97a; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Noto Sans JP','Outfit',sans-serif; background:var(--bg); color:var(--text); line-height:1.8; }
+    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 40px; background:rgba(0,0,0,0.9); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+    .nav-logo { font-family:'Outfit',sans-serif; font-size:22px; font-weight:700; color:#fff; text-decoration:none; }
+    .container { max-width:800px; margin:0 auto; padding:120px 24px 80px; }
+    h1 { font-size:1.6rem; font-weight:800; margin-bottom:8px; }
+    .subtitle { color:var(--muted); font-size:13px; margin-bottom:48px; }
+    h2 { font-size:1.1rem; font-weight:700; margin:40px 0 12px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    p, li { font-size:14px; color:rgba(255,255,255,0.8); }
+    ol, ul { padding-left:20px; }
+    li { margin-bottom:8px; }
+    footer { text-align:center; padding:40px 20px; border-top:1px solid var(--border); font-size:13px; color:var(--muted); }
+    footer a { color:var(--muted); text-decoration:none; margin:0 12px; }
+    footer a:hover { color:#fff; }
+    a { color:var(--accent); }
+    table { border-collapse:collapse; width:100%; margin:16px 0; }
+    th, td { border:1px solid var(--border); padding:10px 14px; font-size:13px; text-align:left; }
+    th { background:rgba(255,255,255,0.04); font-weight:700; }
+  </style>
+</head>
+<body>
+<nav>
+  <a href="/LP/admu/" class="nav-logo">AdMu</a>
+</nav>
+
+<div class="container">
+  <h1>プライバシーポリシー</h1>
+  <p class="subtitle">最終更新日: 2026年4月1日</p>
+
+  <p>整体院導（以下「当社」）は、AI広告自動運用サービス「AdMu」（以下「本サービス」）における個人情報の取扱いについて、以下のとおりプライバシーポリシーを定めます。</p>
+
+  <h2>1. 収集する個人情報</h2>
+  <p>当社は、本サービスの提供にあたり、以下の個人情報を収集することがあります。</p>
+  <table>
+    <tr><th>情報の種類</th><th>取得方法</th><th>利用目的</th></tr>
+    <tr><td>氏名・院名</td><td>お問い合わせフォーム、利用登録</td><td>ご本人確認、契約管理</td></tr>
+    <tr><td>メールアドレス</td><td>利用登録時</td><td>ログイン認証、レポート送信、各種通知</td></tr>
+    <tr><td>地域（市区町村）</td><td>お問い合わせフォーム</td><td>エリア独占制度の管理</td></tr>
+    <tr><td>広告アカウント情報</td><td>OAuth連携</td><td>Google広告・Yahoo!広告の自動運用</td></tr>
+    <tr><td>広告パフォーマンスデータ</td><td>API連携（自動取得）</td><td>AI解析・最適化・レポート生成</td></tr>
+    <tr><td>支払い情報</td><td>決済システム（Stripe）経由</td><td>月額利用料の決済（当社はカード番号を直接保持しません）</td></tr>
+  </table>
+
+  <h2>2. 利用目的</h2>
+  <ol>
+    <li>本サービスの提供・運営・改善</li>
+    <li>広告運用の自動最適化およびAI解析</li>
+    <li>利用状況のモニタリング・分析</li>
+    <li>レポートメール・アラート通知の送信</li>
+    <li>お問い合わせへの回答</li>
+    <li>利用規約への違反行為への対応</li>
+    <li>新機能・キャンペーン等のご案内（オプトアウト可能）</li>
+  </ol>
+
+  <h2>3. 第三者提供</h2>
+  <p>当社は、以下の場合を除き、個人情報を第三者に提供しません。</p>
+  <ul>
+    <li>ユーザーの同意がある場合</li>
+    <li>法令に基づく場合</li>
+    <li>本サービスの提供に必要な範囲で業務委託先に提供する場合（Google、Yahoo!、Stripe等）</li>
+  </ul>
+
+  <h2>4. 外部サービスとの連携</h2>
+  <p>本サービスでは以下の外部サービスを利用しています。各サービスのプライバシーポリシーもご確認ください。</p>
+  <ul>
+    <li><strong>Google Ads API</strong> — 広告アカウントの閲覧・操作に使用。<a href="https://policies.google.com/privacy" target="_blank">Googleプライバシーポリシー</a></li>
+    <li><strong>Gemini AI（Google）</strong> — 広告文生成・レポート解析に使用。送信データにはユーザーの広告パフォーマンスデータを含みます。</li>
+    <li><strong>Stripe</strong> — 月額料金の決済処理に使用。<a href="https://stripe.com/jp/privacy" target="_blank">Stripeプライバシーポリシー</a></li>
+  </ul>
+
+  <h2>5. セキュリティ</h2>
+  <p>当社は、個人情報の漏洩・滅失・毀損の防止のため、以下の措置を講じています。</p>
+  <ul>
+    <li>通信のSSL/TLS暗号化</li>
+    <li>パスワードのハッシュ化保存（bcrypt）</li>
+    <li>JWTによるセッション管理・有効期限設定</li>
+    <li>アクセス権限の最小化（ロールベースアクセス制御）</li>
+  </ul>
+
+  <h2>6. データの保持期間</h2>
+  <ul>
+    <li>利用中: 契約期間中は継続保持</li>
+    <li>解約後: 解約日から30日間保持した後、完全に削除</li>
+    <li>法令上の保持義務がある場合はその期間に従います</li>
+  </ul>
+
+  <h2>7. ユーザーの権利</h2>
+  <p>ユーザーは当社に対し、以下の請求を行うことができます。</p>
+  <ol>
+    <li>自己の個人情報の開示</li>
+    <li>個人情報の訂正・追加・削除</li>
+    <li>個人情報の利用停止</li>
+    <li>第三者への提供の停止</li>
+  </ol>
+  <p>請求は下記のお問い合わせ先までご連絡ください。</p>
+
+  <h2>8. Cookieの使用</h2>
+  <p>本サービスでは、ログインセッションの維持および利用状況の改善を目的としてCookieおよびlocalStorageを使用しています。ブラウザの設定によりCookieを無効にすることが可能ですが、一部機能が使用できなくなる場合があります。</p>
+
+  <h2>9. ポリシーの変更</h2>
+  <p>当社は、法令の変更またはサービスの変更に伴い、本ポリシーを変更することがあります。変更後のポリシーは本ページに掲載した時点で効力を生じます。重要な変更がある場合はメール等でお知らせいたします。</p>
+
+  <h2>10. お問い合わせ</h2>
+  <p>個人情報の取扱いに関するお問い合わせは、以下までご連絡ください。</p>
+  <p style="margin-top:12px;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:13px;">
+    整体院導<br>
+    メール: info@admu.jp<br>
+    所在地: 東京都（詳細は<a href="company.html">特定商取引法に基づく表記</a>をご参照ください）
+  </p>
+</div>
+
+<footer>
+  <a href="/LP/admu/">トップ</a>
+  <a href="terms.html">利用規約</a>
+  <a href="privacy.html">プライバシーポリシー</a>
+  <a href="company.html">特定商取引法に基づく表記</a>
+  <div style="margin-top:12px">© 2026 AdMu / 整体院導 All Rights Reserved.</div>
+</footer>
+</body>
+</html>
