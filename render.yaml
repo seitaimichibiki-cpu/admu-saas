@@ -10,9 +10,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: admu-db
-          property: connectionString
+        sync: false               # 既存 admu-db の Internal URL を貼る
       - key: MOCK_ADS_API
         value: "true"
       - key: PORT
@@ -65,8 +63,5 @@ services:
         source: /*
         destination: /index.html
 
-databases:
-  - name: admu-db
-    plan: free
 
 
