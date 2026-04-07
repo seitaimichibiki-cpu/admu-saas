@@ -25,7 +25,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
 
-staticSites:
+static_sites:
   - name: admu-lp
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
