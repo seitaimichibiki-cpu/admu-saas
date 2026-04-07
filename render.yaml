@@ -24,9 +24,32 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ADS_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_ADS_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_DEFAULT_CUSTOMER_ID
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LINE_DEFAULT_USER_ID
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        value: "onboarding@resend.dev"
+      - key: LOGICTION_BASE_URL
+        sync: false
+      - key: INTEGRATION_SECRET_KEY
+        sync: false
 
-static_sites:
-  - name: admu-lp
+  - type: web
+    name: admu-lp
+    runtime: static
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
     pullRequestPreviewsEnabled: false
