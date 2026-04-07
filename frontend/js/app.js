@@ -2,7 +2,9 @@
    app.js - Google広告自動運用システム メインJS
    ============================================================== */
 
-const API = 'http://localhost:8001/api';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8001/api'
+  : window.location.origin + '/api';
 
 // ============================================================
 // 認証管理 (JWT)
