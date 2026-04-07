@@ -68,7 +68,7 @@ services:
         sync: false
 
   # --- LP (ランディングページ) ---
-  - type: static
+  - type: static_site
     name: admu-lp
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
