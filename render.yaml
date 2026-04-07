@@ -10,7 +10,6 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    # 外販するなら plan: starter ($7/月) 推奨 (free はスリープあり)
     plan: starter
     healthCheckPath: /health
     envVars:
@@ -25,10 +24,16 @@ services:
       - key: PORT
         value: "8001"
       # --- 認証 ---
+      - key: JWT_SECRET
+        generateValue: true
       - key: SECRET_KEY
         generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false               # Renderダッシュボードで入力
+      - key: ADMIN_PASSWORD
+        sync: false               # Renderダッシュボードで入力
       - key: ADMIN_INIT_SECRET
-        sync: false
+        sync: false               # 初回セットアップ用シークレット
       # --- AI ---
       - key: GEMINI_API_KEY
         sync: false
@@ -51,6 +56,11 @@ services:
       # --- メール (Resend) ---
       - key: RESEND_API_KEY
         sync: false
+      - key: FROM_EMAIL
+        value: "onboarding@resend.dev"
+      # --- サービスURL ---
+      - key: APP_BASE_URL
+        sync: false               # 例: https://admu-backend.onrender.com
       # --- LOGICTION連携 ---
       - key: LOGICTION_BASE_URL
         sync: false
@@ -70,4 +80,5 @@ services:
 
 databases:
   - name: admu-db
-    plan: free
+    plan: free   # ⚠️ 無料プランは90日で自動削除。本番はstarter($7/月)に変更推奨
+
