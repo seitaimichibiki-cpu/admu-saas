@@ -1,3 +1,4 @@
+# AdMu — Render Blueprint
 services:
   - type: web
     name: admu-backend
@@ -16,13 +17,19 @@ services:
         value: "true"
       - key: PORT
         value: "10000"
-      - key: APP_BASE_URL
-        sync: false
       - key: JWT_SECRET
+        generateValue: true
+      - key: SECRET_KEY
         generateValue: true
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_INIT_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
         sync: false
       - key: GOOGLE_ADS_DEVELOPER_TOKEN
         sync: false
@@ -61,3 +68,4 @@ services:
 databases:
   - name: admu-db
     plan: starter
+
