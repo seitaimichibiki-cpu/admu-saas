@@ -120,8 +120,8 @@ async def rate_limiter(request: Request, call_next):
         ip = request.client.host if request.client else "unknown"
         now = time.time()
 
-        # LP問い合わせは特に厳しく制限
-        if request.url.path == "/api/lp/contact" and request.method == "POST":
+        # LP問い合わせ・資料請求は特に厳しく制限
+        if request.url.path in ("/api/lp/contact", "/api/lp/download") and request.method == "POST":
             ws = now - _LP_RATE_WINDOW
             _lp_rate_store[ip] = [t for t in _lp_rate_store[ip] if t > ws]
             if len(_lp_rate_store[ip]) >= _LP_RATE_LIMIT:
@@ -3095,6 +3095,68 @@ def lp_contact(req: LPContactReq):
     return {"success": True, "message": "お問い合わせを受け付けました。"}
 
 
+# ---- LP 無料資料請求 ----
+class LPDownloadReq(BaseModel):
+    name: str
+    clinic: str
+    email: str
+    phone: str = ""
+
+@app.post("/api/lp/download")
+def lp_download(req: LPDownloadReq):
+    """無料資料請求フォームからのデータを受け取り、DBに保存"""
+    import re
+    from datetime import datetime as dt
+
+    if not req.name or not req.clinic or not req.email:
+        raise HTTPException(400, "お名前・院名・メールアドレスは必須です。")
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', req.email):
+        raise HTTPException(400, "メールアドレスの形式が正しくありません。")
+
+    conn = db.get_conn()
+    if db.USE_PG:
+        pk_type = "SERIAL PRIMARY KEY"
+    else:
+        pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS lp_downloads (
+            id {pk_type},
+            name TEXT, clinic TEXT, email TEXT, phone TEXT,
+            created_at TEXT, status TEXT DEFAULT 'new'
+        )
+    """)
+    conn.execute(
+        "INSERT INTO lp_downloads (name, clinic, email, phone, created_at) VALUES (?,?,?,?,?)",
+        (req.name, req.clinic, req.email, req.phone, dt.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    conn.commit()
+    conn.close()
+
+    # 管理者通知メール
+    try:
+        import email_notifier
+        from datetime import datetime as dt2
+        admin_html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+          <h2 style="color:#c8a97a;margin-bottom:16px">📄 AdMu 無料資料請求</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;width:100px">お名前</td><td style="padding:8px;border-bottom:1px solid #eee">{req.name}</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">院名</td><td style="padding:8px;border-bottom:1px solid #eee">{req.clinic}</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">メール</td><td style="padding:8px;border-bottom:1px solid #eee">{req.email}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">電話</td><td style="padding:8px">{req.phone or '未入力'}</td></tr>
+          </table>
+          <p style="font-size:12px;color:#888;margin-top:16px">受信時刻: {dt2.now().strftime("%Y/%m/%d %H:%M")}</p>
+        </div>
+        """
+        admin_email = os.environ.get("ADMIN_EMAIL", "")
+        if admin_email:
+            email_notifier.send_email(admin_email, "【AdMu】無料資料請求", admin_html)
+    except Exception as e:
+        print(f"通知メール送信エラー: {e}")
+
+    return {"success": True, "message": "資料請求を受け付けました。"}
+
+
 # ---- 管理者向け: 問い合わせ一覧・ステータス更新 ----
 @app.get("/api/admin/inquiries")
 def list_inquiries(request: Request):
@@ -3116,6 +3178,58 @@ def update_inquiry_status(inquiry_id: int, request: Request, status: str = "done
         raise HTTPException(403, "管理者権限が必要です")
     conn = db.get_conn()
     conn.execute("UPDATE lp_contacts SET status=? WHERE id=?", (status, inquiry_id))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+# ---- 管理者向け: リード一覧（問い合わせ＋資料請求を統合表示） ----
+@app.get("/api/admin/leads")
+def list_leads(request: Request):
+    """全リード（問い合わせ＋資料請求）を統合して返す"""
+    user = _get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(403, "管理者権限が必要です")
+    conn = db.get_conn()
+
+    leads = []
+
+    # 問い合わせリード
+    try:
+        rows = conn.execute("SELECT * FROM lp_contacts ORDER BY id DESC LIMIT 200").fetchall()
+        for r in rows:
+            d = dict(r)
+            d["source"] = "contact"
+            leads.append(d)
+    except:
+        pass
+
+    # 資料請求リード
+    try:
+        rows = conn.execute("SELECT * FROM lp_downloads ORDER BY id DESC LIMIT 200").fetchall()
+        for r in rows:
+            d = dict(r)
+            d["source"] = "download"
+            leads.append(d)
+    except:
+        pass
+
+    conn.close()
+
+    # created_at で降順ソート
+    leads.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return {"leads": leads, "total": len(leads)}
+
+
+@app.patch("/api/admin/leads/{lead_id}")
+def update_lead_status(lead_id: int, request: Request, source: str = "contact", status: str = "done"):
+    """リードステータスを更新"""
+    user = _get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(403, "管理者権限が必要です")
+    conn = db.get_conn()
+    table = "lp_downloads" if source == "download" else "lp_contacts"
+    conn.execute(f"UPDATE {table} SET status=? WHERE id=?", (status, lead_id))
     conn.commit()
     conn.close()
     return {"success": True}

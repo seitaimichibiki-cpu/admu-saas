@@ -344,38 +344,22 @@
       border: 1px solid rgba(200,169,122,0.3);
     }
 
-    /* 料金 */
-    .pricing-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 20px; max-width: 900px; margin: 0 auto;
+    /* 無料資料請求フォーム */
+    .dl-form-card {
+      max-width: 620px; margin: 0 auto;
+      background: linear-gradient(135deg, rgba(200,169,122,0.06), transparent 60%);
+      border: 1px solid rgba(200,169,122,0.25); border-radius: 24px;
+      padding: 48px 40px;
     }
-    .price-card {
-      border: 1px solid var(--border); border-radius: 24px; padding: 44px 36px;
-      position: relative; background: var(--bg-card);
-    }
-    .price-card.main {
-      border-color: rgba(200,169,122,0.5);
-      background: linear-gradient(135deg, rgba(200,169,122,0.06) 0%, transparent 60%);
-    }
-    .price-plan-name { font-size: 11px; letter-spacing: 4px; color: var(--text-muted); font-weight: 700; margin-bottom: 20px; }
-    .price-num {
-      font-family: 'Outfit', sans-serif;
-      font-size: 52px; font-weight: 900; letter-spacing: -2px; line-height: 1; margin-bottom: 4px;
-    }
-    .price-num sub { font-size: 18px; font-weight: 400; vertical-align: bottom; letter-spacing: 0; }
-    .price-mo { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
-    .price-badge-main {
-      position: absolute; top: 20px; right: 20px;
-      background: var(--accent); color: #000;
-      font-size: 10px; font-weight: 800; padding: 4px 12px; border-radius: 99px;
-      letter-spacing: 1px;
-    }
-    .price-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
-    .price-list li { font-size: 14px; display: flex; align-items: center; gap: 10px; }
-    .price-list li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
-    .price-list li.off { color: var(--text-muted); }
-    .price-list li.off::before { content: '−'; color: rgba(255,255,255,0.2); }
-    .price-footnote { font-size: 12px; color: var(--text-muted); margin-top: 20px; line-height: 1.6; }
+    .dl-form-card h3 { font-size: 20px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+    .dl-form-card .dl-sub { font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 32px; }
+    .dl-benefits { list-style: none; margin-bottom: 28px; }
+    .dl-benefits li { font-size: 14px; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .dl-benefits li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+    #dlThanks { display: none; text-align: center; padding: 40px 0; }
+    #dlThanks .thanks-icon { font-size: 56px; margin-bottom: 16px; }
+    #dlThanks h3 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    #dlThanks p { color: var(--text-muted); font-size: 14px; line-height: 1.8; }
 
     /* コンタクトフォーム */
     .contact-form { max-width: 560px; margin: 0 auto; }
@@ -549,8 +533,8 @@
         <div class="hero-stat-label">1地域・エリア独占保証</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num">¥<span>29,800</span></div>
-        <div class="hero-stat-label">月額（税込・成果報酬不要）</div>
+        <div class="hero-stat-num"><span>0</span>円</div>
+        <div class="hero-stat-label">初期費用・成果報酬</div>
       </div>
     </div>
   </div>
@@ -802,42 +786,47 @@
   </div>
 </section>
 
-<!-- 料金 -->
-<section id="pricing" style="background:var(--bg-card);">
+<!-- 無料資料請求 -->
+<section id="download" style="background:var(--bg-card);">
   <div class="container">
-    <div class="section-label">Pricing</div>
-    <h2 class="section-title" style="text-align:center">シンプルな料金体系。<br>成果報酬・違約金は<br>ゼロです。</h2>
-    <p class="section-subtitle" style="margin:0 auto 56px;text-align:center">月額固定のみ。広告費が上がっても追加費用は一切かかりません。</p>
-    <div class="pricing-grid">
-      <div class="price-card">
-        <div class="price-plan-name">STARTER</div>
-        <div class="price-num">¥<span style="font-size:44px">19,800</span><sub>/月</sub></div>
-        <div class="price-mo">＋ 初期設定費 ¥29,800（一回）</div>
-        <ul class="price-list">
-          <li>Google広告 AI自動最適化</li>
-          <li>AIキーワード提案・除外管理</li>
-          <li>毎週月曜 成果レポートメール</li>
-          <li>LINE異常通知</li>
-          <li class="off">Yahoo!広告 対応</li>
-          <li class="off">LOGICTION / SHISEVIZ 連携</li>
-          <li class="off">LP診断AI / 競合分析</li>
+    <div class="section-label">Free Download</div>
+    <h2 class="section-title" style="text-align:center">まずは無料資料で<br>AdMuの全貌をご確認ください。</h2>
+    <p class="section-subtitle" style="margin:0 auto 48px;text-align:center">AI広告最適化の仕組み・導入事例・エリア独占制の詳細を1冊にまとめました。</p>
+    <div class="dl-form-card fade-up">
+      <div id="dlForm">
+        <h3>📄 無料資料ダウンロード</h3>
+        <p class="dl-sub">30秒で完了。しつこい営業は一切行いません。</p>
+        <ul class="dl-benefits">
+          <li>AdMuのAI最適化エンジンの仕組み</li>
+          <li>導入院のCPA改善事例（平均40%削減）</li>
+          <li>エリア独占制の空き状況の確認方法</li>
+          <li>Logiction・SHISEVIZ連携による精度向上</li>
         </ul>
+        <div class="cf-group">
+          <div class="cf-label">お名前 *</div>
+          <input class="cf-input" type="text" id="dlName" placeholder="山田 太郎">
+        </div>
+        <div class="cf-group">
+          <div class="cf-label">院名 *</div>
+          <input class="cf-input" type="text" id="dlClinic" placeholder="○○整体院">
+        </div>
+        <div class="form-row2">
+          <div class="cf-group">
+            <div class="cf-label">メールアドレス *</div>
+            <input class="cf-input" type="email" id="dlEmail" placeholder="info@example.com">
+          </div>
+          <div class="cf-group">
+            <div class="cf-label">電話番号</div>
+            <input class="cf-input" type="tel" id="dlPhone" placeholder="090-0000-0000">
+          </div>
+        </div>
+        <button class="cf-submit" id="dlSubmitBtn" onclick="submitDLForm()">無料で資料をダウンロードする →</button>
+        <p class="cf-note">※ ご入力いただいた情報は資料送付およびご案内にのみ利用します</p>
       </div>
-      <div class="price-card main">
-        <span class="price-badge-main">RECOMMENDED</span>
-        <div class="price-plan-name">STANDARD</div>
-        <div class="price-num">¥<span style="font-size:44px">29,800</span><sub>/月</sub></div>
-        <div class="price-mo">＋ 初期設定費 ¥29,800（一回）</div>
-        <ul class="price-list">
-          <li>Google ＋ Yahoo!広告 両対応</li>
-          <li>AIキーワード提案・除外管理</li>
-          <li>毎週月曜 成果レポートメール</li>
-          <li>LINE / メール 異常通知</li>
-          <li>LP診断AI・競合分析AI</li>
-          <li>LOGICTION オフラインCV連携</li>
-          <li>ペルソナ設定 AI精度向上</li>
-        </ul>
-        <p class="price-footnote">※ 広告費は別途（月3万〜推奨）<br>※ エリア独占保証付き（1市区町村=1院）<br>※ 解約は翌月から。違約金なし。</p>
+      <div id="dlThanks">
+        <div class="thanks-icon">📩</div>
+        <h3>資料を送信しました！</h3>
+        <p>ご入力いただいたメールアドレスに資料をお送りしました。<br>数分以内に届かない場合は迷惑メールフォルダをご確認ください。<br><br>ご不明点がございましたら、お気軽に<a href="#contact" style="color:var(--accent)">無料相談</a>をご利用ください。</p>
       </div>
     </div>
   </div>
@@ -847,9 +836,9 @@
 <section class="cta-section" id="contact">
   <div class="container">
     <div class="section-label">Contact</div>
-    <h2 class="section-title">まずは1時間、<br>あなたの地域の空き枠を確認しましょう。</h2>
+    <h2 class="section-title">AdMu導入に関する<br>無料相談窓口</h2>
     <p style="color:var(--text-muted);margin-bottom:48px;font-size:1.05rem">
-      しつこい営業は行いません。空きがない場合も正直にお伝えします。
+      AI広告運用の導入について、あなたの地域の空き枠確認も含め丁寧にご説明します。<br>しつこい営業は行いません。
     </p>
     <!-- Calendly埋め込みウィジェット -->
     <div class="calendly-inline-widget"
@@ -975,10 +964,9 @@
     btn.disabled = true;
     btn.textContent = '送信中...';
 
-    // 本番デプロイ後は https://admu.jp に変更
     const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
       ? 'http://localhost:8001'
-      : 'https://admu-backend-jxi0.onrender.com';
+      : 'https://admu-backend-yrqx.onrender.com';
 
     fetch(API_URL + '/api/lp/contact', {
       method: 'POST',
@@ -1001,6 +989,51 @@
         // API接続失敗時もサンクス画面を表示（ユーザー体験を損なわないため）
         document.getElementById('cfForm').style.display = 'none';
         document.getElementById('cfThanks').style.display = 'block';
+      });
+  }
+
+  // 無料資料請求フォーム送信
+  function submitDLForm() {
+    const name   = document.getElementById('dlName').value.trim();
+    const clinic = document.getElementById('dlClinic').value.trim();
+    const email  = document.getElementById('dlEmail').value.trim();
+    const phone  = document.getElementById('dlPhone').value.trim();
+    if (!name || !clinic || !email) {
+      alert('お名前・院名・メールアドレスは必須です。');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert('メールアドレスの形式が正しくありません。');
+      return;
+    }
+    const btn = document.getElementById('dlSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = '送信中...';
+
+    const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'http://localhost:8001'
+      : 'https://admu-backend-yrqx.onrender.com';
+
+    fetch(API_URL + '/api/lp/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, clinic, email, phone }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('dlForm').style.display = 'none';
+          document.getElementById('dlThanks').style.display = 'block';
+        } else {
+          alert(data.detail || 'エラーが発生しました。');
+          btn.disabled = false;
+          btn.textContent = '無料で資料をダウンロードする →';
+        }
+      })
+      .catch(err => {
+        console.error('送信エラー:', err);
+        document.getElementById('dlForm').style.display = 'none';
+        document.getElementById('dlThanks').style.display = 'block';
       });
   }
 </script>
