@@ -53,8 +53,15 @@ def auto_create_campaign(clinic_id: int, account_config: dict, params: dict) -> 
     budget_yen = params.get("budget_yen", template["budget_yen_default"])
     budget_micros = budget_yen * 1_000_000  # 1日予算
 
-    # Google Ads API でキャンペーン作成
-    client = AdsClient(account_config)
+    platform = params.get("platform", "google")
+    
+    if platform == "yahoo":
+        from yahoo_ads_client import YahooAdsClient
+        client = YahooAdsClient(account_config)
+    else:
+        from ads_client import AdsClient
+        client = AdsClient(account_config)
+
     google_campaign_id = client.create_campaign(
         name=campaign_name,
         budget_micros=budget_micros,

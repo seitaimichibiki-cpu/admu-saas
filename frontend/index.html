@@ -174,6 +174,7 @@
       <h2>アカウントが停止されています</h2>
       <p>このアカウントは現在ご利用いただけません。<br>お心当たりがある場合はサポートまでご連絡ください。</p>
       <div style="margin-top:28px;display:flex;flex-direction:column;gap:12px;align-items:center">
+        <button onclick="subscribeStripe()" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:14px;box-shadow:0 4px 12px rgba(16,185,129,0.3)">💳 プランの契約 / 再開</button>
         <a href="mailto:support@admu.jp" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;text-decoration:none;border-radius:10px;font-weight:700;font-size:14px">📧 サポートに連絡する</a>
         <a href="#" onclick="doLogout();return false;" style="color:#64748b;font-size:12px;text-decoration:underline">別のアカウントでログイン</a>
       </div>
@@ -364,10 +365,16 @@
               <button class="btn btn-primary" style="font-size:11px;padding:2px 10px;height:26px;min-height:26px" onclick="applyDashCustomDate()">適用</button>
             </div>
           </div>
-          <button class="btn btn-ghost" id="exportPdfBtn" style="font-size:12px;gap:6px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            PDFレポート出力
-          </button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost" id="exportCsvBtn" style="font-size:12px;gap:6px" onclick="exportCsv()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSVダウンロード
+            </button>
+            <button class="btn btn-ghost" id="exportPdfBtn" style="font-size:12px;gap:6px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              PDFレポート出力
+            </button>
+          </div>
         </div>
 
         <!-- お知らせブロック（取得後動的表示） -->
@@ -395,7 +402,7 @@
             <canvas id="costChart"></canvas>
           </div>
         </div>
-        <div class="campaigns-table-wrap" style="max-height:220px;overflow-y:auto">
+        <div class="campaigns-table-wrap" style="max-height:220px;overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <div class="section-header">
             <h3 style="display:flex;align-items:center;justify-content:space-between">キャンペーン別パフォーマンス<button onclick="exportCampaignsCSV()" style="font-size:10px;font-weight:700;padding:4px 12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);border-radius:99px;cursor:pointer;letter-spacing:1px">⬇ CSV</button></h3>
           </div>
@@ -1000,6 +1007,36 @@
                 <option value="0">OFF（本番API使用）</option>
               </select>
             </div>
+          </div>
+          
+          <div class="card settings-card">
+            <h3 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              Yahoo!広告 API設定
+            </h3>
+            <div class="form-group">
+              <label>アカウントID (Account ID)</label>
+              <input type="text" id="settYahooAccountId" placeholder="12345678" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>クライアントID</label>
+              <input type="text" id="settYahooClientId" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>クライアントシークレット</label>
+              <input type="password" id="settYahooClientSecret" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>リフレッシュトークン</label>
+              <input type="password" id="settYahooRefreshToken" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>モックモード</label>
+              <select id="settYahooMockMode" class="form-input">
+                <option value="1">ON（テスト・デモ用）</option>
+                <option value="0">OFF（本番API使用）</option>
+              </select>
+            </div>
             <div class="form-group">
               <label>GA4 プロパティID <span style="font-size:11px;color:var(--text-3);font-weight:400">（コンバージョン連携用）</span></label>
               <input type="text" id="settGa4PropertyId" placeholder="例: 123456789" class="form-input">
@@ -1084,6 +1121,19 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             設定を保存
           </button>
+        </div>
+
+        <!-- 契約・サブスクリプション管理 -->
+        <div class="card" style="margin-top:20px">
+          <h3 class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            サブスクリプション管理
+          </h3>
+          <p style="font-size:13px; color:var(--text-3); margin-bottom:16px;">
+            現在のプランの確認、クレジットカード情報の変更、領収書のダウンロード、解約手続きはこちらから行えます。<br>
+            ※ プラン「<span id="currentPlanLabel" style="color:var(--text-1);font-weight:600">読み込み中...</span>」を現在ご利用中です。
+          </p>
+          <button class="btn btn-secondary" onclick="openStripePortal()">クレジットカード情報・プラン変更・解約はこちら (Stripe)</button>
         </div>
 
         <!-- パスワード変更カード -->

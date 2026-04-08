@@ -131,6 +131,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // Stripeチェックアウトの戻り処理
+  const session_id = params.get('session_id');
+  const checkout_status = params.get('checkout');
+  if (session_id || checkout_status === 'mock_success') {
+    setTimeout(() => {
+      toast('✅ プランの契約が完了しました。システムが有効化されました。', 'success', 6000);
+    }, 500);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   // JWTが保存済みなら自動的にダッシュボードを表示
   const token = getToken();
   const user  = getUser();
@@ -567,6 +577,80 @@ async function loadDashboard() {
   }
 }
 
+// CSVエクスポート機能
+window.exportCsv = function() {
+  if (!lastData || !lastData.performance_series || lastData.performance_series.length === 0) {
+    toast('エクスポートするデータがありません', 'error');
+    return;
+  }
+  
+  const series = lastData.performance_series;
+  // ヘッダー行
+  let csvContent = "日付,インプレッション,クリック,CTR(%),平均CPC(円),費用(円),コンバージョン,CVR(%)\n";
+  
+  // データ行
+  series.forEach(col => {
+    csvContent += `${col.date},${col.impressions},${col.clicks},${col.ctr},${col.avg_cpc_micros},${col.cost_micros},${col.conversions},${col.cvr}\n`;
+  });
+  
+  // BOM付きでエンコード (Excelでの文字化け防止)
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+  const blob = new Blob([bom, csvContent], { type: "text/csv;charset=utf-8;" });
+  
+  // ダウンロード処理
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  
+  const platform = document.getElementById('btnYahoo')?.classList.contains('active-yahoo') ? 'yahoo' : 'google';
+  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  link.setAttribute("download", `admu_performance_${platform}_${timestamp}.csv`);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  toast('CSVをダウンロードしました', 'success');
+};
+
+// キャンペーンCSVエクスポート機能
+window.exportCampaignsCSV = function() {
+  if (!lastData || !lastData.campaigns || lastData.campaigns.length === 0) {
+    toast('エクスポートするデータがありません', 'error');
+    return;
+  }
+  
+  const campaigns = lastData.campaigns;
+  // ヘッダー行
+  let csvContent = "キャンペーン名,ステータス,インプレッション,クリック,CTR(%),平均CPC(円),費用(円),コンバージョン,CVR(%)\n";
+  
+  // データ行
+  campaigns.forEach(c => {
+    csvContent += `"${c.name}",${c.status},${c.impressions},${c.clicks},${c.ctr},${c.avg_cpc_micros},${c.cost_micros},${c.conversions},${c.cvr}\n`;
+  });
+  
+  // BOM付きでエンコード
+  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+  const blob = new Blob([bom, csvContent], { type: "text/csv;charset=utf-8;" });
+  
+  // ダウンロード処理
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  
+  const platform = document.getElementById('btnYahoo')?.classList.contains('active-yahoo') ? 'yahoo' : 'google';
+  const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  link.setAttribute("download", `admu_campaigns_${platform}_${timestamp}.csv`);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  toast('キャンペーンCSVをダウンロードしました', 'success');
+};
+
 function renderKPIs(summary) {
   let periodLabel = `${currentDaysRange}日`;
   if(currentDaysRange === 'this_year') periodLabel = '今年';
@@ -706,7 +790,7 @@ function updateMockBadge(mockMode) {
 // ============================================================
 async function loadCampaigns() {
   try {
-    const data = await api(`/campaigns?clinic_id=${currentClinicId}`);
+    const data = await api(`/campaigns?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
     const campaigns = data.campaigns || [];
     const wrap = document.getElementById('campaignsList');
     if(!campaigns.length) {
@@ -738,7 +822,7 @@ async function loadCampaigns() {
 
 async function toggleCampaign(id, status) {
   try {
-    await api(`/campaigns/${id}/status?status=${status}&clinic_id=${currentClinicId}`, { method:'PATCH', body:'{}' });
+    await api(`/campaigns/${id}/status?status=${status}&clinic_id=${currentClinicId}&platform=${currentPlatform}`, { method:'PATCH', body:'{}' });
     toast(`キャンペーンを${status==='ENABLED'?'再開':'一時停止'}しました`, 'success');
     loadCampaigns();
   } catch(e) {
@@ -779,6 +863,7 @@ document.getElementById('newCampaignBtn').addEventListener('click', () => {
       region: document.getElementById('newRegion').value || '',
       category: document.getElementById('newCategory').value,
       budget_yen: parseInt(document.getElementById('newBudget').value)||3000,
+      platform: currentPlatform,
     };
     try {
       const res = await api('/campaigns', { method:'POST', body: JSON.stringify(body) });
@@ -1212,6 +1297,17 @@ async function loadSettings() {
     document.getElementById('settDevToken').placeholder = s.developer_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '（取得後に入力）';
     document.getElementById('settClientId').value     = s.client_id || '';
     document.getElementById('settMockMode').value     = s.mock_mode != null ? String(s.mock_mode) : '1';
+    
+    // Yahoo設定
+    if (document.getElementById('settYahooAccountId')) {
+      document.getElementById('settYahooAccountId').value = s.yahoo_account_id || '';
+      document.getElementById('settYahooClientId').value  = s.yahoo_client_id || '';
+      document.getElementById('settYahooClientSecret').value = s.yahoo_client_secret === '***設定済み***' ? '' : (s.yahoo_client_secret||'');
+      document.getElementById('settYahooClientSecret').placeholder = s.yahoo_client_secret === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
+      document.getElementById('settYahooRefreshToken').value = s.yahoo_refresh_token === '***設定済み***' ? '' : (s.yahoo_refresh_token||'');
+      document.getElementById('settYahooRefreshToken').placeholder = s.yahoo_refresh_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
+      document.getElementById('settYahooMockMode').value = s.yahoo_mock_mode != null ? String(s.yahoo_mock_mode) : '1';
+    }
     document.getElementById('settLineToken').value    = '';
     document.getElementById('settLineUserId').value   = s.line_user_id || '';
     document.getElementById('settPersonaAgeGender').value = s.target_age_gender || '';
@@ -1227,6 +1323,26 @@ async function loadSettings() {
     // GA4設定
     const ga4El = document.getElementById('settGa4PropertyId');
     if (ga4El) ga4El.value = s.ga4_property_id || '';
+    
+    // 動的GA4スクリプト挿入
+    if (s.ga4_property_id && s.ga4_property_id.startsWith('G-')) {
+      if (!window.gtagScriptLoaded) {
+        const script1 = document.createElement('script');
+        script1.async = true;
+        script1.src = 'https://www.googletagmanager.com/gtag/js?id=' + s.ga4_property_id;
+        document.head.appendChild(script1);
+        
+        const script2 = document.createElement('script');
+        script2.text = `
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${s.ga4_property_id}');
+        `;
+        document.head.appendChild(script2);
+        window.gtagScriptLoaded = true;
+      }
+    }
     // 月予算
     const budgetEl = document.getElementById('settMonthlyBudget');
     if (budgetEl) budgetEl.value = s.monthly_budget_yen || 300000;
@@ -1250,11 +1366,23 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     smtp_user: document.getElementById('settSmtpUser').value || null,
     ga4_property_id: document.getElementById('settGa4PropertyId')?.value || null,
     monthly_budget_yen: parseInt(document.getElementById('settMonthlyBudget')?.value || '300000') || 300000,
+    yahoo_account_id: document.getElementById('settYahooAccountId')?.value || null,
+    yahoo_client_id: document.getElementById('settYahooClientId')?.value || null,
+    yahoo_mock_mode: parseInt(document.getElementById('settYahooMockMode')?.value || '1'),
   };
   const devToken  = document.getElementById('settDevToken').value;
+  const clientSecret = document.getElementById('settClientSecret')?.value;
+  const refreshToken = document.getElementById('settRefreshToken')?.value;
   const lineToken = document.getElementById('settLineToken').value;
   const smtpPass  = document.getElementById('settSmtpPass').value;
+  const yClientSecret = document.getElementById('settYahooClientSecret')?.value;
+  const yRefreshToken = document.getElementById('settYahooRefreshToken')?.value;
+  
   if(devToken)  body.developer_token  = devToken;
+  if(clientSecret) body.client_secret = clientSecret;
+  if(refreshToken) body.refresh_token = refreshToken;
+  if(yClientSecret) body.yahoo_client_secret = yClientSecret;
+  if(yRefreshToken) body.yahoo_refresh_token = yRefreshToken;
   if(lineToken) body.line_channel_token = lineToken;
   if(smtpPass)  body.smtp_pass = smtpPass;
 
@@ -1289,6 +1417,38 @@ window.doChangePassword = async function() {
     toast('変更失敗: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
+  }
+};
+
+// ---- Stripe サブスクリプション管理 ----
+window.openStripePortal = async function() {
+  try {
+    const res = await api('/stripe/create-portal', { method: 'POST' });
+    if (res && res.url) {
+      window.location.href = res.url;
+    } else {
+      toast('ポータルの起動に失敗しました。', 'error');
+    }
+  } catch(e) {
+    toast('現在カスタマーポータルは利用できません。(' + e.message + ')', 'error');
+  }
+};
+
+window.subscribeStripe = async function() {
+  try {
+    // STANDARDを選択したと仮定したリクエスト。
+    // ※今後、UI上でSTARTER/STANDARDを選択させるフローへの拡張も可能。
+    const res = await api('/stripe/create-checkout', { 
+      method: 'POST',
+      body: JSON.stringify({ price_id: 'price_standard_mock' })
+    });
+    if (res && res.url) {
+      window.location.href = res.url;
+    } else {
+      toast('チェックアウトの作成に失敗しました。', 'error');
+    }
+  } catch(e) {
+    toast('チェックアウトエラー: ' + e.message, 'error');
   }
 };
 

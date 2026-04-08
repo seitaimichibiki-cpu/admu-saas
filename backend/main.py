@@ -22,6 +22,16 @@ from typing import Optional
 import db, monitor, line_notifier, ad_copy_generator as adcopy, campaign_manager, email_notifier
 import auth
 import urllib.request
+import stripe
+
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+stripe.api_key = STRIPE_API_KEY
+
+STRIPE_PRICE_STARTER = os.environ.get("STRIPE_PRICE_STARTER", "price_starter_mock")
+STRIPE_PRICE_STANDARD = os.environ.get("STRIPE_PRICE_STANDARD", "price_standard_mock")
+APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8001")
+
 
 # ---- Lifespan ----
 @asynccontextmanager
@@ -157,6 +167,7 @@ class CampaignCreateReq(BaseModel):
     region: str
     category: str
     budget_yen: Optional[int] = None
+    platform: str = "google"
 
 class BudgetUpdateReq(BaseModel):
     clinic_id: int = 1
@@ -205,6 +216,11 @@ class SettingsReq(BaseModel):
     smtp_pass: Optional[str] = None
     ga4_property_id: Optional[str] = None
     monthly_budget_yen: Optional[int] = None
+    yahoo_account_id: Optional[str] = None
+    yahoo_client_id: Optional[str] = None
+    yahoo_client_secret: Optional[str] = None
+    yahoo_refresh_token: Optional[str] = None
+    yahoo_mock_mode: Optional[int] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -231,10 +247,20 @@ def _require_account(clinic_id: int) -> dict:
     """広告設定を取得。未設定の場合もデモ設定（モックモード）で代替して500エラーを防ぐ。"""
     acc = db.get_ads_account(clinic_id)
     if not acc:
-        return {"clinic_id": clinic_id, "mock_mode": 1, "customer_id": "DEMO"}
+        return {"clinic_id": clinic_id, "mock_mode": 1, "customer_id": "DEMO", "yahoo_mock_mode": 1}
     if acc.get("mock_mode") is None:
         acc["mock_mode"] = 1
+    if acc.get("yahoo_mock_mode") is None:
+        acc["yahoo_mock_mode"] = 1
     return acc
+
+def _get_ads_client(acc: dict, platform: str = "google"):
+    if platform == "yahoo":
+        from yahoo_ads_client import YahooAdsClient
+        return YahooAdsClient(acc)
+    else:
+        from ads_client import AdsClient
+        return AdsClient(acc)
 
 def _check_plan_active(clinic_id: int):
     """プランが停止・解約済みの場合は403を返す"""
@@ -286,27 +312,9 @@ def delete_announcement_api(aid: int, request: Request):
 @app.get("/api/dashboard")
 def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7", start_date: Optional[str] = None, end_date: Optional[str] = None):
     acc = _require_account(clinic_id)
-    from ads_client import AdsClient
-    client = AdsClient(acc)
-    # Yahoo!広告はモックデータで差別化
-    if platform == "yahoo":
-        import random, datetime
-        today = datetime.date.today()
-        perf_series = [{"date": str(today - datetime.timedelta(days=days-1-i)),
-            "cost_micros": random.randint(2000,8000),
-            "clicks": random.randint(40,150),
-            "impressions": random.randint(800,3000),
-            "conversions": round(random.uniform(1,8),1),
-            "ctr": round(random.uniform(2.5,7.5),2),
-            "cvr": round(random.uniform(3,12),2)} for i in range(days)]
-        campaigns = [
-            {"id":"Y001","name":"Yahoo!検索キャンペーン（肩こり・腰痛）","status":"ENABLED","impressions":4521,"ctr":4.82,"cvr":6.1,"avg_cpc_micros":287000,"cost_micros":9823000,"conversions":8.2},
-            {"id":"Y002","name":"Yahoo!検索キャンペーン（産後骨盤矯正）","status":"PAUSED","impressions":2103,"ctr":3.21,"cvr":4.5,"avg_cpc_micros":312000,"cost_micros":5641000,"conversions":4.1},
-            {"id":"Y003","name":"Yahoo!スポンサードサーチ（整体院）","status":"ENABLED","impressions":3255,"ctr":5.68,"cvr":7.2,"avg_cpc_micros":198000,"cost_micros":7230000,"conversions":6.5},
-        ]
-    else:
-        campaigns = client.list_campaigns()
-        perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
+    client = _get_ads_client(acc, platform)
+    campaigns = client.list_campaigns()
+    perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
     alerts = db.list_alerts(clinic_id, limit=10)
     total_cost = sum(p.get("cost_micros", 0) for p in perf_series)
     total_clicks = sum(p.get("clicks", 0) for p in perf_series)
@@ -335,10 +343,9 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
 
 # ---- API: キャンペーン ----
 @app.get("/api/campaigns")
-def list_campaigns(clinic_id: int = 1):
+def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     acc = _require_account(clinic_id)
-    from ads_client import AdsClient
-    client = AdsClient(acc)
+    client = _get_ads_client(acc, platform)
     api_campaigns = client.list_campaigns()
     db_campaigns = db.list_campaigns(clinic_id)
     return {"campaigns": api_campaigns, "local_campaigns": db_campaigns}
@@ -350,13 +357,12 @@ def create_campaign(req: CampaignCreateReq):
     return {"success": True, "campaign": result}
 
 @app.patch("/api/campaigns/{campaign_id}/status")
-def update_campaign_status(campaign_id: int, status: str, clinic_id: int = 1):
+def update_campaign_status(campaign_id: int, status: str, clinic_id: int = 1, platform: str = "google"):
     acc = _require_account(clinic_id)
     campaign = db.get_campaign(campaign_id)
     if not campaign:
         raise HTTPException(404, "キャンペーンが見つかりません")
-    from ads_client import AdsClient
-    client = AdsClient(acc)
+    client = _get_ads_client(acc, platform)
     client.update_campaign_status(campaign.get("google_campaign_id", ""), status)
     db.upsert_campaign(clinic_id, {**campaign, "status": status})
     return {"success": True}
@@ -747,7 +753,7 @@ def test_line(req: LineTestReq):
 def get_settings(clinic_id: int = 1):
     acc = db.get_ads_account(clinic_id) or {}
     # シークレット系はマスク
-    for secret_key in ["developer_token", "client_secret", "refresh_token"]:
+    for secret_key in ["developer_token", "client_secret", "refresh_token", "yahoo_client_secret", "yahoo_refresh_token", "smtp_pass"]:
         if acc.get(secret_key):
             acc[secret_key] = "***設定済み***"
     return {"settings": acc}
@@ -1095,6 +1101,75 @@ def init_admin(request: Request):
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@admu.jp")
     user_id = db.create_user(1, admin_email, pw_hash, "admin")
     return {"message": f"管理者アカウントを作成しました: {admin_email}", "user_id": user_id}
+
+# ---- Stripe 決済連携 ----
+class CreateCheckoutReq(BaseModel):
+    price_id: str
+
+@app.post("/api/stripe/create-checkout")
+def create_checkout_session(req: CreateCheckoutReq, request: Request):
+    user = _get_current_user(request)
+    clinic_id = user["clinic_id"]
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price': req.price_id,
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=f"{APP_BASE_URL}/?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{APP_BASE_URL}/",
+            client_reference_id=str(clinic_id),
+            metadata={'clinic_id': clinic_id}
+        )
+        return {"url": session.url}
+    except Exception as e:
+        print(f"[Stripe] Checkout Error: {e}")
+        # MOCK用フォールバック
+        if "mock" in req.price_id or not STRIPE_API_KEY:
+            plan_name = "STARTER" if "starter" in req.price_id else "STANDARD"
+            db.upsert_contract(clinic_id, {
+                "plan_name": plan_name,
+                "status": "active"
+            })
+            return {"url": "/?checkout=mock_success"}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/stripe/create-portal")
+def create_portal_session(request: Request):
+    user = _get_current_user(request)
+    clinic_id = user["clinic_id"]
+    # 実際の運用ではStripeのCustomer IDをDBから引く必要があります
+    # 今回はモック用の動作とするか簡易的にエラーを返します
+    raise HTTPException(status_code=501, detail="ポータル機能は本番環境で有効化されます。")
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except Exception as e:
+        if not STRIPE_WEBHOOK_SECRET:
+            # モック環境用（ローカルテストなどで強制発火させる場合）
+            import json
+            try:
+                event = {"type": "mock.event", "data": {"object": json.loads(payload)}}
+            except:
+                raise HTTPException(status_code=400, detail="Invalid payload")
+        else:
+            raise HTTPException(status_code=400, detail=f"Webhook Error: {e}")
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        clinic_id = int(session.get("client_reference_id") or session.get("metadata", {}).get("clinic_id", 0))
+        if clinic_id:
+            # プラン判定（実際の運用ではprice_id等を元にする）
+            db.upsert_contract(clinic_id, {"status": "active"})
+            db.update_clinic_plan_status(clinic_id, "active")
+
+    return {"status": "success"}
 
 # ---- フロントエンド配信 ----
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")

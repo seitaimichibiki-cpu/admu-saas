@@ -150,6 +150,9 @@ def init_db():
             notification_email TEXT, smtp_user TEXT, smtp_pass TEXT,
             ga4_property_id TEXT, ga4_api_secret TEXT,
             monthly_budget_yen INTEGER DEFAULT 300000,
+            yahoo_account_id TEXT, yahoo_client_id TEXT,
+            yahoo_client_secret TEXT, yahoo_refresh_token TEXT,
+            yahoo_mock_mode INTEGER DEFAULT 1,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -255,6 +258,11 @@ def init_db():
             "ALTER TABLE clinics ADD COLUMN plan_status TEXT DEFAULT 'active'",
             "ALTER TABLE clinics ADD COLUMN max_sub_accounts INTEGER DEFAULT 1",
             "ALTER TABLE clinics ADD COLUMN parent_clinic_id INTEGER DEFAULT NULL",
+            "ALTER TABLE ads_accounts ADD COLUMN yahoo_account_id TEXT",
+            "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_id TEXT",
+            "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_secret TEXT",
+            "ALTER TABLE ads_accounts ADD COLUMN yahoo_refresh_token TEXT",
+            "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
         ]
         for sql in migrations:
             try:
