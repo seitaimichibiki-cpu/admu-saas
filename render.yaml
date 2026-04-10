@@ -3,6 +3,7 @@ services:
   - type: web
     name: admu-backend
     runtime: python
+    pythonVersion: "3.12.3"
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -47,6 +48,12 @@ services:
         sync: false
       - key: FROM_EMAIL
         value: "onboarding@resend.dev"
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
       - key: LOGICTION_BASE_URL
         sync: false
       - key: INTEGRATION_SECRET_KEY
