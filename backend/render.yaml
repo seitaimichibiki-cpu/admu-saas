@@ -58,6 +58,15 @@ services:
       # --- メール (Resend) ---
       - key: RESEND_API_KEY
         sync: false
+      - key: FROM_EMAIL
+        value: "onboarding@resend.dev"
+      # --- Stripe決済 ---
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
       # --- LOGICTION連携 ---
       - key: LOGICTION_BASE_URL
         sync: false
