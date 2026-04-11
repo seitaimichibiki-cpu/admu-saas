@@ -44,15 +44,23 @@ services:
         sync: false
       - key: LINE_DEFAULT_USER_ID
         sync: false
-      - key: RESEND_API_KEY
+      - key: SMTP_SERVER
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
         sync: false
-      - key: FROM_EMAIL
-        value: "onboarding@resend.dev"
+      - key: SMTP_PASS
+        sync: false
       - key: STRIPE_API_KEY
         sync: false
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_STANDALONE
+        sync: false
+      - key: STRIPE_PRICE_LOGICTION_SET
         sync: false
       - key: LOGICTION_BASE_URL
         sync: false
