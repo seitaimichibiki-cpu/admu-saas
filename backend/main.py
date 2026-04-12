@@ -807,6 +807,11 @@ class LoginReq(BaseModel):
     email: str
     password: str
 
+class RegisterReq(BaseModel):
+    clinic_name: str
+    email: str
+    password: str
+
 class CreateUserReq(BaseModel):
     clinic_id: int
     email: str
@@ -876,6 +881,25 @@ def health_check():
         result["db_status"] = f"error: {str(e)}"
     return result
 
+@app.post("/api/auth/register")
+def register(req: RegisterReq):
+    """新規サインアップ (承認待ち状態で登録)"""
+    existing_user = db.get_user_by_email(req.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="このメールアドレスは既に登録されています。")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="パスワードは6文字以上で入力してください。")
+    
+    password_hash = auth.hash_password(req.password)
+    result = db.register_clinic_and_user(req.clinic_name, req.email, password_hash)
+    
+    # 承認待ちで作成されたことを返す
+    return {
+        "success": True,
+        "message": "登録申請を受け付けました。管理者の承認をお待ちください。",
+        "data": result
+    }
+
 @app.post("/api/auth/login")
 def login(req: LoginReq):
     """メール+パスワードでログインしJWTを返す"""
@@ -885,6 +909,8 @@ def login(req: LoginReq):
     # プランチェック
     plan_status = db.get_clinic_plan_status(user["clinic_id"])
     if plan_status != "active":
+        if plan_status == "pending":
+            raise HTTPException(status_code=403, detail="アカウントは現在承認待ちです。管理者の承認をお待ちください。")
         label = "利用停止" if plan_status == "suspended" else "解約済み"
         raise HTTPException(status_code=403, detail=f"このアカウントは{label}です。サポートまでお問い合わせください。")
     db.update_user_last_login(user["id"])

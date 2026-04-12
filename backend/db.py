@@ -906,6 +906,25 @@ def create_user(clinic_id: int, email: str, password_hash: str, role: str = "use
         conn.commit()
         return cur.lastrowid
 
+def register_clinic_and_user(clinic_name: str, email: str, password_hash: str) -> dict:
+    """サインアップ時: pending状態でクリニックとユーザーを作成"""
+    import uuid
+    with get_conn() as conn:
+        # トランザクション
+        license_key = "TMP-" + str(uuid.uuid4()).upper()[:16]
+        cur = conn.execute(
+            "INSERT INTO clinics (name, license_key, plan_status) VALUES (?,?,?)",
+            (clinic_name, license_key, "pending")
+        )
+        clinic_id = cur.lastrowid
+        
+        conn.execute(
+            "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?,?,?,?)",
+            (clinic_id, email.lower().strip(), password_hash, "user")
+        )
+        conn.commit()
+        return {"clinic_id": clinic_id, "email": email, "plan_status": "pending"}
+
 
 def get_user_by_email(email: str) -> Optional[dict]:
     """メールアドレスでユーザーを取得"""

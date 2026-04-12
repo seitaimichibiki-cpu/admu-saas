@@ -100,6 +100,66 @@ window.doLogin = async function doLogin() {
   }
 };
 
+window.toggleAuthForm = function() {
+  const loginArea = document.getElementById('loginFormArea');
+  const regArea = document.getElementById('registerFormArea');
+  const toggleBtn = document.getElementById('toggleAuthBtn');
+  if (loginArea.style.display === 'none') {
+    loginArea.style.display = 'block';
+    regArea.style.display = 'none';
+    toggleBtn.textContent = '新規ユーザー登録はこちら';
+  } else {
+    loginArea.style.display = 'none';
+    regArea.style.display = 'block';
+    toggleBtn.textContent = '既にアカウントをお持ちの方はこちら (ログイン)';
+    document.getElementById('registerError').classList.remove('show');
+  }
+};
+
+window.doSignup = async function doSignup() {
+  const clinic_name = document.getElementById('registerClinicName').value.trim();
+  const email = document.getElementById('registerEmail').value.trim();
+  const password = document.getElementById('registerPassword').value;
+  const errEl = document.getElementById('registerError');
+  const btn = document.getElementById('registerBtn');
+
+  if (!clinic_name || !email || !password) {
+    errEl.textContent = '全項目を入力してください。';
+    errEl.classList.add('show');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+  errEl.classList.remove('show');
+
+  try {
+    const res = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clinic_name, email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.detail || '登録に失敗しました。';
+      errEl.classList.add('show');
+      btn.disabled = false; btn.textContent = '利用申請を送信する';
+      return;
+    }
+    // 成功
+    toast(data.message, 'success', 8000);
+    // フォームをリセットしてログインへ戻る
+    document.getElementById('registerClinicName').value = '';
+    document.getElementById('registerEmail').value = '';
+    document.getElementById('registerPassword').value = '';
+    toggleAuthForm();
+    btn.disabled = false; btn.textContent = '利用申請を送信する';
+  } catch(e) {
+    errEl.textContent = 'ネットワークエラーが発生しました。サーバーに接続できません。';
+    errEl.classList.add('show');
+    btn.disabled = false; btn.textContent = '利用申請を送信する';
+  }
+};
+
 // ログアウト
 window.doLogout = function doLogout() {
   if (!confirm('ログアウトしますか？')) return;
@@ -2260,8 +2320,12 @@ async function loadAdminPage() {
     const rows = clinics.map(c => {
       const kpi = c[`kpi_${adminKpiPeriod}`] || {};
       const costYen = Math.round((kpi.cost_micros || 0) / 1e6);
-      const statusClass = c.status === 'active' ? 'enabled' : 'warning';
-      const statusLabel = c.status === 'active' ? '🟢 有効中' : '🔴 停止中';
+      let statusClass = c.status === 'active' ? 'enabled' : 'warning';
+      let statusLabel = c.status === 'active' ? '🟢 有効中' : '🔴 停止中';
+      if (c.status === 'pending') {
+        statusClass = 'danger'; // 目立つように
+        statusLabel = '🟡 承認待ち (未審査)';
+      }
       return `
         <tr>
           <td style="color:var(--text-3);font-size:12px">#${c.clinic_id}</td>
@@ -2289,7 +2353,11 @@ async function loadAdminPage() {
                 onclick="adminShowDetail(${c.clinic_id},'${c.clinic_name}')">🔍 詳細</button>
               <button class="btn btn-ghost" style="font-size:10px;padding:2px 7px"
                 onclick="adminSetLimit(${c.clinic_id},'${c.clinic_name}')">⚖ 上限</button>
-              <button class="btn btn-ghost" style="font-size:10px;padding:2px 7px;color:${c.status==='active'?'var(--red)':'var(--green)'}"
+              <button class="btn btn-primary" style="font-size:10px;padding:2px 7px;display:${c.status==='pending'?'inline-block':'none'}"
+                onclick="adminToggleStatus(${c.clinic_id},'${c.status}')">
+                🟢 承認する
+              </button>
+              <button class="btn btn-ghost" style="font-size:10px;padding:2px 7px;color:${c.status==='active'?'var(--red)':'var(--green)'};display:${c.status==='pending'?'none':'inline-block'}"
                 onclick="adminToggleStatus(${c.clinic_id},'${c.status}')">
                 ${c.status==='active'?'⏸ 停止する':'▶ 有効にする'}
               </button>

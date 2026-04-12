@@ -105,7 +105,7 @@
         <h1>AdMu</h1>
         <p>無を、極める。</p>
       </div>
-      <div class="login-form">
+      <div class="login-form" id="loginFormArea">
         <div id="loginError" class="login-error"></div>
         <label for="loginEmail">メールアドレス</label>
         <input type="email" id="loginEmail" placeholder="admin@admu.jp" autocomplete="email">
@@ -113,7 +113,22 @@
         <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
         <button class="login-btn" id="loginBtn" onclick="doLogin()">ログイン</button>
       </div>
+      
+      <!-- 新規登録フォーム (初期非表示) -->
+      <div class="login-form" id="registerFormArea" style="display:none;">
+        <div id="registerError" class="login-error"></div>
+        <label for="registerClinicName">クリニック名（院名）</label>
+        <input type="text" id="registerClinicName" placeholder="〇〇整体院">
+        <label for="registerEmail">メールアドレス</label>
+        <input type="email" id="registerEmail" placeholder="admin@admu.jp">
+        <label for="registerPassword">パスワード（6文字以上）</label>
+        <input type="password" id="registerPassword" placeholder="••••••••">
+        <button class="login-btn" id="registerBtn" onclick="doSignup()">利用申請を送信する</button>
+      </div>
+
       <div class="login-footer">
+        <a href="#" id="toggleAuthBtn" onclick="toggleAuthForm();return false;" style="font-size:14px;color:#3b82f6;font-weight:700">新規ユーザー登録はこちら</a>
+        <br><br>
         <a href="#" onclick="showLoginResetPassword();return false;">パスワードをお忘れですか？</a>
         &nbsp;·&nbsp;
         <a href="#" onclick="showLoginLegal();return false;">利用規約 / プライバシーポリシー</a>
