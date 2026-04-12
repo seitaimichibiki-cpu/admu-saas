@@ -377,26 +377,42 @@ def list_clinics():
 
 # ---- Ads アカウント設定 ----
 def get_ads_account(clinic_id: int):
+    import crypto_utils
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM ads_accounts WHERE clinic_id=?", (clinic_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        data = dict(row)
+        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token"]
+        for field in SECRET_FIELDS:
+            if data.get(field):
+                data[field] = crypto_utils.decrypt(data[field])
+        return data
 
 def save_ads_account(clinic_id: int, data: dict):
+    import crypto_utils
+    secure_data = dict(data)
+    SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token"]
+    for field in SECRET_FIELDS:
+        if field in secure_data and secure_data[field]:
+            secure_data[field] = crypto_utils.encrypt(secure_data[field])
+
     with get_conn() as conn:
         existing = conn.execute("SELECT id FROM ads_accounts WHERE clinic_id=?", (clinic_id,)).fetchone()
-        fields = ["customer_id","developer_token","client_id","client_secret","refresh_token",
-                  "login_customer_id","mock_mode","line_channel_token","line_user_id",
+        fields = ["customer_id", "developer_token", "client_id", "client_secret", "refresh_token",
+                  "login_customer_id", "mock_mode", "line_channel_token", "line_user_id",
                   "target_age_gender", "target_job_lifestyle", "target_pain_point", "target_desired_outcome",
-                  "notification_email", "smtp_user", "smtp_pass", "ga4_property_id",
-                  "monthly_budget_yen"]
+                  "notification_email", "smtp_user", "smtp_pass", "ga4_property_id", "ga4_api_secret",
+                  "monthly_budget_yen", "yahoo_account_id", "yahoo_client_id", "yahoo_client_secret",
+                  "yahoo_refresh_token", "yahoo_mock_mode"]
         if existing:
-            sets = ", ".join(f"{f}=?" for f in fields if f in data)
-            vals = [data[f] for f in fields if f in data] + [clinic_id]
+            sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
+            vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]
             conn.execute(f"UPDATE ads_accounts SET {sets} WHERE clinic_id=?", vals)
         else:
             conn.execute(
                 "INSERT INTO ads_accounts (clinic_id,customer_id,mock_mode) VALUES (?,?,?)",
-                (clinic_id, data.get("customer_id",""), data.get("mock_mode",1))
+                (clinic_id, secure_data.get("customer_id", ""), secure_data.get("mock_mode", 1))
             )
         conn.commit()
 
