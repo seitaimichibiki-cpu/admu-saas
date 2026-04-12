@@ -223,6 +223,10 @@ def init_db():
         f"""CREATE TABLE IF NOT EXISTS announcements (
             id {PK}, title TEXT NOT NULL, content TEXT NOT NULL,
             published_at {TS}, created_at {TS})""",
+        f"""CREATE TABLE IF NOT EXISTS audit_logs (
+            id {PK}, clinic_id INTEGER NOT NULL, user_email TEXT,
+            action TEXT NOT NULL, entity TEXT, details TEXT,
+            created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -545,6 +549,43 @@ def list_alerts(clinic_id: int, limit: int = 50):
         return [dict(r) for r in conn.execute(
             "SELECT * FROM alerts WHERE clinic_id=? ORDER BY id DESC LIMIT ?",
             (clinic_id, limit)).fetchall()]
+
+# ---- 監査ログ (Audit Logs) ----
+def add_audit_log(clinic_id: int, user_email: str, action: str, entity: str = None, details: str = None):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO audit_logs (clinic_id, user_email, action, entity, details) VALUES (?,?,?,?,?)",
+            (clinic_id, user_email, action, entity, details)
+        )
+        conn.commit()
+
+def list_audit_logs(clinic_id: int, limit: int = 100):
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM audit_logs WHERE clinic_id=? ORDER BY id DESC LIMIT ?",
+            (clinic_id, limit)
+        ).fetchall()]
+
+# ---- クリーンアップ (データ消去) ----
+def cleanup_old_logs(days_retention: int = 365):
+    with get_conn() as conn:
+        if USE_PG:
+            where_clause = f"created_at < NOW() - INTERVAL '{days_retention} days'"
+            where_p_clause = f"date::date < CURRENT_DATE - INTERVAL '{days_retention} days'"
+        else:
+            where_clause = f"created_at < datetime('now', '-{days_retention} days', 'localtime')"
+            where_p_clause = f"date < date('now', '-{days_retention} days', 'localtime')"
+
+        cur_audit = conn.execute(f"DELETE FROM audit_logs WHERE {where_clause}")
+        cur_perf = conn.execute(f"DELETE FROM performance_logs WHERE {where_p_clause}")
+        cur_alerts = conn.execute(f"DELETE FROM alerts WHERE {where_clause}")
+
+        conn.commit()
+        return {
+            "deleted_audit_logs": cur_audit.rowcount if hasattr(cur_audit, "rowcount") else 0,
+            "deleted_performance_logs": cur_perf.rowcount if hasattr(cur_perf, "rowcount") else 0,
+            "deleted_alerts": cur_alerts.rowcount if hasattr(cur_alerts, "rowcount") else 0
+        }
 
 # ---- 広告文 ----
 def save_ad_copy(clinic_id: int, data: dict) -> Optional[int]:

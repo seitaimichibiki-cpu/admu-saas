@@ -992,6 +992,7 @@ def change_password(req: ChangePasswordReq, request: Request):
         raise HTTPException(status_code=400, detail="新しいパスワードは8文字以上で設定してください。")
     new_hash = auth.hash_password(req.new_password)
     db.update_user_password(user_id, new_hash)
+    db.add_audit_log(user["clinic_id"], user["email"], "CHANGE_PASSWORD", "user", "User changed their own password")
     return {"success": True, "message": "パスワードを変更しました。"}
 
 
@@ -1039,6 +1040,7 @@ def admin_update_plan_status(req: PlanStatusReq, request: Request):
     if req.status not in ("active", "suspended", "cancelled"):
         raise HTTPException(status_code=400, detail="statusは active / suspended / cancelled のいずれかを指定してください。")
     db.update_clinic_plan_status(req.clinic_id, req.status)
+    db.add_audit_log(req.clinic_id, "admin", "UPDATE_PLAN_STATUS", "clinic", f"Admin changed plan status to {req.status}")
     return {"clinic_id": req.clinic_id, "plan_status": req.status, "message": "プランステータスを更新しました。"}
 
 @app.get("/api/admin/plan-status/{clinic_id}")
@@ -1168,6 +1170,15 @@ async def stripe_webhook(request: Request):
             # プラン判定（実際の運用ではprice_id等を元にする）
             db.upsert_contract(clinic_id, {"status": "active"})
             db.update_clinic_plan_status(clinic_id, "active")
+            db.add_audit_log(clinic_id, "stripe", "PAYMENT_SUCCESS", "contract", "Checkout session completed successfully")
+    elif event["type"] in ["invoice.payment_failed", "customer.subscription.deleted"]:
+        # 決済失敗あるいはサブスクリプション終了
+        obj = event["data"]["object"]
+        clinic_id_str = obj.get("metadata", {}).get("clinic_id")
+        clinic_id = int(clinic_id_str) if clinic_id_str else 0
+        if clinic_id:
+            db.update_clinic_plan_status(clinic_id, "suspended")
+            db.add_audit_log(clinic_id, "stripe", "PAYMENT_FAILED", "contract", f"Subscription suspended due to {event['type']}")
 
     return {"status": "success"}
 

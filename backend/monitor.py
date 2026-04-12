@@ -30,6 +30,10 @@ _monitor_status = {
 
 
 def _get_account_and_notify_config(clinic_id: int):
+    clinic = db.get_clinic(clinic_id)
+    if clinic and clinic.get("plan_status") == "suspended":
+        print(f"[Monitor] clinic_id={clinic_id} は利用停止(suspended)のため処理をスキップします。")
+        return {}
     acc = db.get_ads_account(clinic_id)
     return acc or {}
 
@@ -200,6 +204,14 @@ def _send_weekly_report(clinic_id: int):
         print(f"[Monitor] 週次LINE送信完了 clinic_id={clinic_id}")
 
 
+def _run_cleanup():
+    """週1回曜深夜: 古いログやアラートを削除"""
+    try:
+        res = db.cleanup_old_logs(365)
+        print(f"[Monitor] 自動クリーンアップ完了: {res}")
+    except Exception as e:
+        print(f"[Monitor] 自動クリーンアップ失敗: {e}")
+
 def start_scheduler():
     """スケジューラを起動"""
     global _scheduler, _monitor_status
@@ -231,6 +243,12 @@ def start_scheduler():
             _send_weekly_report, CronTrigger(day_of_week='mon', hour=8, minute=0),
             id=f"weekly_{cid}", args=[cid], replace_existing=True
         )
+
+    # システム全体のクリーンアップジョブ（日曜日 3:00）
+    _scheduler.add_job(
+        _run_cleanup, CronTrigger(day_of_week='sun', hour=3, minute=0),
+        id="system_cleanup", replace_existing=True
+    )
 
     _scheduler.start()
     _monitor_status["running"] = True
