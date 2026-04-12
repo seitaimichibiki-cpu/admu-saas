@@ -206,7 +206,7 @@ def init_db():
             clinic_id INTEGER NOT NULL, PRIMARY KEY (campaign_id, persona_id))""",
         f"""CREATE TABLE IF NOT EXISTS contracts (
             id {PK}, clinic_id INTEGER NOT NULL UNIQUE,
-            plan_name TEXT DEFAULT 'スタンダード', monthly_fee INTEGER DEFAULT 0,
+            stripe_customer_id TEXT, plan_name TEXT DEFAULT 'スタンダード', monthly_fee INTEGER DEFAULT 0,
             started_at TEXT, renewal_at TEXT, status TEXT DEFAULT 'active',
             notes TEXT, created_at {TS},
             FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
@@ -227,6 +227,11 @@ def init_db():
             id {PK}, clinic_id INTEGER NOT NULL, user_email TEXT,
             action TEXT NOT NULL, entity TEXT, details TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
+        f"""CREATE TABLE IF NOT EXISTS ai_usage_logs (
+            id {PK}, clinic_id INTEGER NOT NULL, year_month TEXT NOT NULL,
+            feature_name TEXT NOT NULL, usage_count INTEGER DEFAULT 0,
+            last_used_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+            UNIQUE(clinic_id, year_month, feature_name))""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -587,6 +592,40 @@ def cleanup_old_logs(days_retention: int = 365):
             "deleted_alerts": cur_alerts.rowcount if hasattr(cur_alerts, "rowcount") else 0
         }
 
+# ---- AIクオータ管理 ----
+def check_ai_quota_available(clinic_id: int, feature_name: str, limit: int = 30) -> bool:
+    import datetime
+    ym = datetime.datetime.now().strftime("%Y-%m")
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT usage_count FROM ai_usage_logs WHERE clinic_id=? AND year_month=? AND feature_name=?",
+            (clinic_id, ym, feature_name)
+        ).fetchone()
+        count = row["usage_count"] if row else 0
+        return count < limit
+
+def increment_ai_quota(clinic_id: int, feature_name: str):
+    import datetime
+    ym = datetime.datetime.now().strftime("%Y-%m")
+    with get_conn() as conn:
+        if USE_PG:
+            conn.execute(
+                """INSERT INTO ai_usage_logs (clinic_id, year_month, feature_name, usage_count) 
+                   VALUES (?, ?, ?, 1) 
+                   ON CONFLICT(clinic_id, year_month, feature_name) DO UPDATE 
+                   SET usage_count = ai_usage_logs.usage_count + 1, last_used_at = NOW()""",
+                (clinic_id, ym, feature_name)
+            )
+        else:
+            conn.execute(
+                """INSERT INTO ai_usage_logs (clinic_id, year_month, feature_name, usage_count) 
+                   VALUES (?, ?, ?, 1) 
+                   ON CONFLICT(clinic_id, year_month, feature_name) DO UPDATE 
+                   SET usage_count = ai_usage_logs.usage_count + 1, last_used_at = datetime('now','localtime')""",
+                (clinic_id, ym, feature_name)
+            )
+        conn.commit()
+
 # ---- 広告文 ----
 def save_ad_copy(clinic_id: int, data: dict) -> Optional[int]:
     with get_conn() as conn:
@@ -695,20 +734,25 @@ def get_contract(clinic_id: int):
 
 def upsert_contract(clinic_id: int, data: dict):
     with get_conn() as conn:
-        existing = conn.execute("SELECT id FROM contracts WHERE clinic_id=?", (clinic_id,)).fetchone()
+        existing = conn.execute("SELECT id, stripe_customer_id FROM contracts WHERE clinic_id=?", (clinic_id,)).fetchone()
+        stripe_cust = data.get("stripe_customer_id")
+        if existing and existing["stripe_customer_id"] and not stripe_cust:
+            stripe_cust = existing["stripe_customer_id"]
+
         if existing:
             conn.execute("""
-                UPDATE contracts SET plan_name=?, monthly_fee=?, started_at=?, renewal_at=?,
-                                     status=?, notes=?
+                UPDATE contracts 
+                SET stripe_customer_id=?, plan_name=?, monthly_fee=?, started_at=?, renewal_at=?,
+                    status=?, notes=?
                 WHERE clinic_id=?
-            """, (data.get("plan_name"), data.get("monthly_fee", 0),
+            """, (stripe_cust, data.get("plan_name"), data.get("monthly_fee", 0),
                   data.get("started_at"), data.get("renewal_at"),
                   data.get("status", "active"), data.get("notes"), clinic_id))
         else:
             conn.execute("""
-                INSERT INTO contracts (clinic_id, plan_name, monthly_fee, started_at, renewal_at, status, notes)
-                VALUES (?,?,?,?,?,?,?)
-            """, (clinic_id, data.get("plan_name", "スタンダード"), data.get("monthly_fee", 0),
+                INSERT INTO contracts (clinic_id, stripe_customer_id, plan_name, monthly_fee, started_at, renewal_at, status, notes)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (clinic_id, stripe_cust, data.get("plan_name", "スタンダード"), data.get("monthly_fee", 0),
                   data.get("started_at"), data.get("renewal_at"),
                   data.get("status", "active"), data.get("notes")))
         conn.commit()

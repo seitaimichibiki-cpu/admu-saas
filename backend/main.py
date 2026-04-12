@@ -71,20 +71,28 @@ async def verify_tenant_middleware(request: Request, call_next):
         
         # クエリパラメータのチェック
         query_cid = request.query_params.get("clinic_id")
-        if query_cid and query_cid != user_cid:
-            return JSONResponse({"detail": "アクセス権限がありません"}, status_code=403)
+        if query_cid:
+            if str(query_cid) != user_cid:
+                return JSONResponse({"detail": "アクセス権限がありません"}, status_code=403)
+        elif request.method == "GET" and path != "/api/users/me" and not path.startswith("/api/stripe/"):
+            return JSONResponse({"detail": "リクエストに clinic_id が含まれていません"}, status_code=400)
             
         # JSONボディのチェック
-        if request.method in ["POST", "PUT", "PATCH"]:
+        if request.method in ["POST", "PUT", "PATCH"] and not path.startswith("/api/stripe/"):
             import json
             try:
                 body_bytes = await request.body()
                 if body_bytes:
-                    body_json = json.loads(body_bytes)
-                    body_cid = str(body_json.get("clinic_id", ""))
-                    if body_cid and body_cid != user_cid:
-                        return JSONResponse({"detail": "アクセス権限がありません"}, status_code=403)
-                
+                    if len(body_bytes) > 0 and body_bytes.strip().startswith(b"{"):
+                        body_json = json.loads(body_bytes)
+                        if "clinic_id" not in body_json:
+                            # LPなどは例外でスキップされるが、念のため
+                            return JSONResponse({"detail": "リクエストボディに clinic_id が含まれていません"}, status_code=400)
+                        body_cid = str(body_json.get("clinic_id", ""))
+                        if body_cid:
+                            if body_cid != user_cid:
+                                return JSONResponse({"detail": "アクセス権限がありません"}, status_code=403)
+                        
                 # FastAPIが後でbodyを読めるように復元
                 async def receive(): return {"type": "http.request", "body": body_bytes}
                 request._receive = receive
@@ -393,12 +401,15 @@ def set_monthly_budget(req: MonthlyBudgetReq):
 @app.post("/api/budget/ai-allocate")
 def ai_budget_allocate_endpoint(clinic_id: int = 1):
     """AIがキャンペーン別パフォーマンスを解析し月間予算を最適配分。"""
+    if not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
     acc = db.get_ads_account(clinic_id) or {}
     monthly_budget = acc.get("monthly_budget_yen", 0)
     if not monthly_budget:
         raise HTTPException(400, "月間予算が設定されていません。")
     from ads_client import AdsClient
     alloc = _run_ai_budget_allocation(clinic_id, monthly_budget, AdsClient(acc))
+    db.increment_ai_quota(clinic_id, feature_name="ai_budget")
     return {"success": True, "allocation": alloc}
 
 # ---- API: 予算（手動・キャンペーン別） ----
@@ -580,6 +591,9 @@ def run_bid_now(clinic_id: int = 1):
 # ---- API: 広告文生成 ----
 @app.post("/api/ad-copy/generate")
 def generate_ad_copy(req: AdCopyReq):
+    if not db.check_ai_quota_available(req.clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     acc = db.get_ads_account(req.clinic_id) or {}
     context = req.model_dump()
@@ -598,13 +612,17 @@ def generate_ad_copy(req: AdCopyReq):
         "descriptions": "\n".join(result.get("descriptions", [])),
         "prompt_context": str(req.model_dump()),
     })
+    db.increment_ai_quota(req.clinic_id, feature_name="generate_ad_copy")
     return {"success": True, "id": copy_id, **result}
 
 @app.post("/api/analyze-report")
 async def analyze_report(file: UploadFile = File(...), clinic_id: int = 1):
+    if not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if not gemini_key:
         # モックレスポンスを返す（デモ・テスト用）
+        db.increment_ai_quota(clinic_id, feature_name="lp_analysis")
         return {"success": True, "analysis": {
             "good_keywords": ["産後 骨盤矯正 渋谷", "腰痛 整体 治らない"],
             "wasted_spend": ["肩こり セルフケア", "無料 マッサージ 腰痛"],
@@ -630,6 +648,7 @@ async def analyze_report(file: UploadFile = File(...), clinic_id: int = 1):
             mime_type = "application/pdf"
             
         result = analyzer.analyze_file(content, file.filename, mime_type, persona=persona)
+        db.increment_ai_quota(clinic_id, feature_name="lp_analysis")
         return {"success": True, "analysis": result}
     except Exception as e:
         import traceback
@@ -1142,9 +1161,18 @@ def create_checkout_session(req: CreateCheckoutReq, request: Request):
 def create_portal_session(request: Request):
     user = _get_current_user(request)
     clinic_id = user["clinic_id"]
-    # 実際の運用ではStripeのCustomer IDをDBから引く必要があります
-    # 今回はモック用の動作とするか簡易的にエラーを返します
-    raise HTTPException(status_code=501, detail="ポータル機能は本番環境で有効化されます。")
+    contract = db.get_contract(clinic_id)
+    if not contract or not contract.get("stripe_customer_id"):
+        raise HTTPException(status_code=400, detail="有料プランの契約履歴がありません（Customer IDが見つかりません）。")
+    
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=contract["stripe_customer_id"],
+            return_url=f"{APP_BASE_URL}/"
+        )
+        return {"url": session.url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ポータルセッション発行エラー: {e}")
 
 @app.post("/api/stripe/webhook")
 async def stripe_webhook(request: Request):
@@ -1166,9 +1194,13 @@ async def stripe_webhook(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         clinic_id = int(session.get("client_reference_id") or session.get("metadata", {}).get("clinic_id", 0))
+        customer_id = session.get("customer")
         if clinic_id:
             # プラン判定（実際の運用ではprice_id等を元にする）
-            db.upsert_contract(clinic_id, {"status": "active"})
+            upsert_data = {"status": "active"}
+            if customer_id:
+                upsert_data["stripe_customer_id"] = customer_id
+            db.upsert_contract(clinic_id, upsert_data)
             db.update_clinic_plan_status(clinic_id, "active")
             db.add_audit_log(clinic_id, "stripe", "PAYMENT_SUCCESS", "contract", "Checkout session completed successfully")
     elif event["type"] in ["invoice.payment_failed", "customer.subscription.deleted"]:
@@ -1569,6 +1601,8 @@ async def competitor_analysis(req: CompetitorReq):
 @app.post("/api/ab-test/auto-score")
 def auto_score_ab(clinic_id: int = 1):
     """バリアントグループごとにCTRスコアを比較して廃案候補を自動フラグ"""
+    if not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
     copies = db.list_ad_copies(clinic_id)
     grouped: dict = {}
     for c in copies:
@@ -1600,6 +1634,7 @@ def auto_score_ab(clinic_id: int = 1):
                 f"[A/Bテスト] グループ '{vg}' の下位バリアント(ID:{loser['id']})は廃案推奨です")
             retired_count += 1
 
+    db.increment_ai_quota(clinic_id, feature_name="ab_score")
     return {
         "success": True,
         "groups_analyzed": len(grouped),
@@ -2474,6 +2509,9 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
     ビジネスメモ形式のナラティブに変換する。
     「数字の羅列」から「だから何？次は何？」まで含む。
     """
+    if not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+        
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
@@ -2553,6 +2591,7 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
         text = resp.text.strip()
         m = _re.search(r"\{.*\}", text, _re.DOTALL)
         narrative = json.loads(m.group(0)) if m else {}
+        db.increment_ai_quota(clinic_id, feature_name="narrative_report")
         return {
             "success": True,
             "clinic_name": clinic_name,
@@ -2653,6 +2692,9 @@ async def seasonal_calendar(clinic_id: int = 1, generate_copy: bool = False):
     12ヶ月の整体院特化季節性カレンダーを返す。
     generate_copy=Trueで当月のAI広告文も生成。
     """
+    if generate_copy and not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+    
     import datetime
     current_month = datetime.datetime.now().month
     current_data  = _SEASONAL_DATA.get(current_month, {})
@@ -2697,6 +2739,8 @@ JSON形式のみで返答:
                     result["ai_copy"] = json.loads(m.group(0))
             except:
                 pass
+    if generate_copy:
+        db.increment_ai_quota(clinic_id, feature_name="seasonal_calendar")
     return {"success": True, **result}
 
 
@@ -2711,6 +2755,9 @@ async def performance_heatmap(clinic_id: int = 1):
     整体院業界の実際の検索行動パターンを反映した
     リアルなモックデータ（実API接続後は実データに置換）。
     """
+    if not db.check_ai_quota_available(clinic_id):
+        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+        
     import random, math
     random.seed(clinic_id * 42)
 
@@ -2771,6 +2818,7 @@ async def performance_heatmap(clinic_id: int = 1):
         except:
             ai_insight = f"最高パフォーマンス時間帯は{_DOW_NAMES[top_slots[0][0]]}曜日{top_slots[0][1]:02d}時です。入札倍率を+30%に設定することで効率が向上します。"
 
+    db.increment_ai_quota(clinic_id, feature_name="heatmap")
     return {
         "success": True,
         "grid": grid,
