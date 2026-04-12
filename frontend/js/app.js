@@ -572,6 +572,25 @@ async function loadDashboard() {
 
     // 成果予測カードを読み込み
     loadForecast();
+
+    // AIクオータ更新
+    if (data.ai_quota) {
+      const qb = document.getElementById('aiQuotaBadge');
+      if (qb) {
+        qb.style.display = 'flex';
+        document.getElementById('aiQuotaText').textContent = `${data.ai_quota.used} / ${data.ai_quota.limit}`;
+        if (data.ai_quota.used >= data.ai_quota.limit) {
+          qb.style.color = '#ef4444';
+          qb.style.borderColor = 'rgba(239,68,68,0.5)';
+        } else if (data.ai_quota.used >= data.ai_quota.limit * 0.8) {
+          qb.style.color = '#f59e0b';
+          qb.style.borderColor = 'rgba(245,158,11,0.5)';
+        } else {
+          qb.style.color = '#818cf8';
+          qb.style.borderColor = 'rgba(99,102,241,0.3)';
+        }
+      }
+    }
   } catch(e) {
     toast('ダッシュボードの読み込みに失敗しました: ' + e.message, 'error');
   }

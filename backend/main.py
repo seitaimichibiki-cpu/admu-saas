@@ -347,6 +347,10 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
         "settings": {
             "monthly_budget_yen": acc.get("monthly_budget_yen", 300000) or 300000,
         },
+        "ai_quota": {
+            "used": db.get_monthly_ai_usage(clinic_id),
+            "limit": 30
+        }
     }
 
 # ---- API: キャンペーン ----

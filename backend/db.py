@@ -593,16 +593,19 @@ def cleanup_old_logs(days_retention: int = 365):
         }
 
 # ---- AIクオータ管理 ----
-def check_ai_quota_available(clinic_id: int, feature_name: str, limit: int = 30) -> bool:
+def get_monthly_ai_usage(clinic_id: int) -> int:
     import datetime
     ym = datetime.datetime.now().strftime("%Y-%m")
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT usage_count FROM ai_usage_logs WHERE clinic_id=? AND year_month=? AND feature_name=?",
-            (clinic_id, ym, feature_name)
+            "SELECT SUM(usage_count) as total FROM ai_usage_logs WHERE clinic_id=? AND year_month=?",
+            (clinic_id, ym)
         ).fetchone()
-        count = row["usage_count"] if row else 0
-        return count < limit
+        return row["total"] if row and row["total"] else 0
+
+def check_ai_quota_available(clinic_id: int, limit: int = 30) -> bool:
+    count = get_monthly_ai_usage(clinic_id)
+    return count < limit
 
 def increment_ai_quota(clinic_id: int, feature_name: str):
     import datetime
