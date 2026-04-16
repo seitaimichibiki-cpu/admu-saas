@@ -237,12 +237,12 @@ def init_db():
         conn.execute(ddl)
     conn.commit()
 
-    # デモ用クリニックが存在しなければ作成
-    demo = conn.execute("SELECT id FROM clinics WHERE name='デモクリニック'").fetchone()
-    if not demo:
-        conn.execute("INSERT INTO clinics (name, license_key) VALUES ('デモクリニック', 'DEMO-0000-0000-0000')")
+    # 初期データが存在しなければ作成（ID:1となる）
+    has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
+    if not has_clinics:
+        conn.execute("INSERT INTO clinics (name, license_key) VALUES ('システム管理者', 'DEMO-0000-0000-0000')")
         conn.commit()
-        demo = conn.execute("SELECT id FROM clinics WHERE name='デモクリニック'").fetchone()
+        demo = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
         clinic_id = demo["id"]
         conn.execute("INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, 'DEMO-CUSTOMER-ID', 1)", (clinic_id,))
         conn.commit()
