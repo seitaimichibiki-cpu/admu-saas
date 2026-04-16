@@ -1472,6 +1472,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   const body = {
     clinic_id: currentClinicId,
     customer_id: document.getElementById('settCustomerId').value || null,
+    client_id: document.getElementById('settClientId').value || null,
     mock_mode: parseInt(document.getElementById('settMockMode').value),
     line_user_id: document.getElementById('settLineUserId').value || null,
     target_age_gender: document.getElementById('settPersonaAgeGender').value || null,
