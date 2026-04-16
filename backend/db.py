@@ -247,38 +247,42 @@ def init_db():
         conn.execute("INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, 'DEMO-CUSTOMER-ID', 1)", (clinic_id,))
         conn.commit()
 
-    # マイグレーション（既存DBへのカラム追加 — PGでは初回CREATE時に全カラムが入っているのでスキップ可）
-    if not USE_PG:
-        migrations = [
-            "ALTER TABLE ads_accounts ADD COLUMN target_age_gender TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN target_job_lifestyle TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN target_pain_point TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN target_desired_outcome TEXT",
-            "ALTER TABLE ad_copies ADD COLUMN variant_group TEXT",
-            "ALTER TABLE ad_copies ADD COLUMN ctr_score REAL DEFAULT 0",
-            "ALTER TABLE ad_copies ADD COLUMN impressions INTEGER DEFAULT 0",
-            "ALTER TABLE ad_copies ADD COLUMN clicks INTEGER DEFAULT 0",
-            "ALTER TABLE ads_accounts ADD COLUMN notification_email TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN smtp_user TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN smtp_pass TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN ga4_property_id TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN ga4_api_secret TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN monthly_budget_yen INTEGER DEFAULT 300000",
-            "ALTER TABLE clinics ADD COLUMN plan_status TEXT DEFAULT 'active'",
-            "ALTER TABLE clinics ADD COLUMN max_sub_accounts INTEGER DEFAULT 1",
-            "ALTER TABLE clinics ADD COLUMN parent_clinic_id INTEGER DEFAULT NULL",
-            "ALTER TABLE ads_accounts ADD COLUMN yahoo_account_id TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_id TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_secret TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN yahoo_refresh_token TEXT",
-            "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
-        ]
-        for sql in migrations:
-            try:
-                conn.execute(sql)
-            except sqlite3.OperationalError:
-                pass
-        conn.commit()
+    # マイグレーション（既存DBへのカラム追加）
+    migrations = [
+        "ALTER TABLE ads_accounts ADD COLUMN target_age_gender TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN target_job_lifestyle TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN target_pain_point TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN target_desired_outcome TEXT",
+        "ALTER TABLE ad_copies ADD COLUMN variant_group TEXT",
+        "ALTER TABLE ad_copies ADD COLUMN ctr_score REAL DEFAULT 0",
+        "ALTER TABLE ad_copies ADD COLUMN impressions INTEGER DEFAULT 0",
+        "ALTER TABLE ad_copies ADD COLUMN clicks INTEGER DEFAULT 0",
+        "ALTER TABLE ads_accounts ADD COLUMN notification_email TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN smtp_user TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN smtp_pass TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN ga4_property_id TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN ga4_api_secret TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN monthly_budget_yen INTEGER DEFAULT 300000",
+        "ALTER TABLE clinics ADD COLUMN plan_status TEXT DEFAULT 'active'",
+        "ALTER TABLE clinics ADD COLUMN max_sub_accounts INTEGER DEFAULT 1",
+        "ALTER TABLE clinics ADD COLUMN parent_clinic_id INTEGER DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN yahoo_account_id TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_id TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_secret TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN yahoo_refresh_token TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
+    ]
+    for sql in migrations:
+        try:
+            if USE_PG:
+                conn.execute("SAVEPOINT migration_sp")
+            conn.execute(sql)
+            if USE_PG:
+                conn.execute("RELEASE SAVEPOINT migration_sp")
+        except Exception:
+            if USE_PG:
+                conn.execute("ROLLBACK TO SAVEPOINT migration_sp")
+    conn.commit()
 
     # デフォルト入札ルールの投入（空の場合のみ）
     _insert_default_bid_rules(conn)
