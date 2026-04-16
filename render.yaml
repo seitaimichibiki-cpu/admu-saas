@@ -3,13 +3,14 @@ services:
   - type: web
     name: admu-backend
     runtime: python
-    pythonVersion: "3.12.3"
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: starter
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
       - key: DATABASE_URL
         fromDatabase:
           name: admu-db
@@ -73,9 +74,8 @@ services:
       - key: INTEGRATION_SECRET_KEY
         sync: false
 
-  - type: web
+  - type: static_site
     name: admu-lp
-    runtime: static
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
     pullRequestPreviewsEnabled: false
