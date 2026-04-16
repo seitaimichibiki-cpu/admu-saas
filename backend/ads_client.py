@@ -114,7 +114,8 @@ class AdsClient:
         # mock_modeは 1 / "1" / True なども全てモックとして扱う
         raw = account_config.get("mock_mode", 1)
         self.mock_mode = (str(raw) != "0") if raw is not None else True
-        self.customer_id = account_config.get("customer_id") or "DEMO"
+        raw_customer_id = account_config.get("customer_id") or "DEMO"
+        self.customer_id = str(raw_customer_id).replace("-", "")
         self._client: Optional[object] = None
 
         if not self.mock_mode and GOOGLE_ADS_AVAILABLE:
