@@ -121,18 +121,22 @@ class AdsClient:
         if not self.mock_mode and GOOGLE_ADS_AVAILABLE:
             try:
                 cfg = {
-                    "developer_token": account_config.get("developer_token") or "",
-                    "client_id":       account_config.get("client_id") or "",
-                    "client_secret":   account_config.get("client_secret") or "",
-                    "refresh_token":   account_config.get("refresh_token") or "",
+                    "developer_token": account_config.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", ""),
+                    "client_id":       account_config.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", ""),
+                    "client_secret":   account_config.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", ""),
+                    "refresh_token":   account_config.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", ""),
                     "use_proto_plus": True,
                 }
-                if account_config.get("login_customer_id"):
-                    cfg["login_customer_id"] = account_config["login_customer_id"]
-                # 認資情報が一つでも欠ければモックにフォールバック
+                
+                # login_customer_id（親MCCのID）の解決：顧客個別の設定があれば優先、なければマスターのMCC ID
+                login_id = account_config.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", "")
+                if login_id:
+                    cfg["login_customer_id"] = str(login_id).replace("-", "")
+
+                # 認証情報が一つでも欠ければモックにフォールバック
                 if not all([cfg["developer_token"], cfg["client_id"],
                             cfg["client_secret"], cfg["refresh_token"]]):
-                    print("[AdsClient] Ads認資情報が不完全のためモックモードで動作します")
+                    print(f"[AdsClient] Ads認資情報が不完全のためモックモードで動作します (Customer: {self.customer_id})")
                     self.mock_mode = True
                 else:
                     self._client = GoogleAdsClient.load_from_dict(cfg)
