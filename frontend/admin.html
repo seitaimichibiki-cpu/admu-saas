@@ -315,8 +315,11 @@
 </div>
 
 <script>
-const BASE = '';
-let adminToken = '';
+// デプロイ先バックエンドURL（LP側から開いた場合に対応するため絶対パスを指定）
+const API_BASE = window.location.hostname.includes('admu-lp') 
+  ? 'https://admu-backend-jxi0.onrender.com/api' 
+  : '/api';
+
 let allClinics = [];
 
 function toast(msg, type='success') {
@@ -340,12 +343,19 @@ async function api(path, opts={}) {
   const csrf = getCookie('csrf_token');
   if (csrf) headers['X-CSRF-Token'] = csrf;
 
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
     headers: headers,
     ...opts
   });
   if (res.status === 204) return {};
+  
+  // HTML（エラーページ等）が返ってきた場合の対策
+  const contentType = res.headers.get("content-type");
+  if (contentType && contentType.indexOf("application/json") === -1) {
+    if (res.ok) throw new Error("APIがHTMLを返しました。正しいバックエンドURLにアクセスしているか確認してください。");
+  }
+  
   const data = await res.json().catch(()=>({}));
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
@@ -364,12 +374,18 @@ async function doLogin() {
   const btn   = document.getElementById('loginBtn');
   btn.disabled = true; btn.textContent = 'ログイン中...';
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       credentials: 'include',
       body: JSON.stringify({ email, password: pass })
     });
+    
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") === -1) {
+       throw new Error("アクセスURLが間違っています。https://admu-backend-... 側から開いてください。");
+    }
+
     const data = await res.json();
     if (!res.ok) {
       document.getElementById('loginError').textContent = data.detail || 'ログインに失敗しました';
@@ -397,14 +413,14 @@ function doLogout() {
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminPassField').value = '';
   // サーバー側のログアウトAPIを呼ぶ
-  fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(()=>{});
+  fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(()=>{});
 }
 
 // 自動ログイン（Cookie + 情報が保存済みの場合）
 document.addEventListener('DOMContentLoaded', () => {
   const user  = JSON.parse(localStorage.getItem('admu_user') || '{}');
   if (user.role === 'admin') {
-    fetch('/api/auth/me', { credentials: 'include' })
+    fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d.role === 'admin') {
@@ -889,7 +905,7 @@ document.querySelectorAll('.modal-bg').forEach(m => {
 
 // Sentry initialization
 document.addEventListener('DOMContentLoaded', () => {
-  fetch('/api/config', { credentials: 'omit' })
+  fetch(`${API_BASE}/config`, { credentials: 'omit' })
     .then(res => res.json())
     .then(config => {
       if (config.sentry_dsn && typeof Sentry !== 'undefined') {
