@@ -1817,15 +1817,26 @@ def auto_score_ab(clinic_id: int = 1):
 # ============================================================
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
 
-def _check_admin(password: str = "", authorization: Optional[str] = None):
+def _check_admin(password: str = "", authorization: Optional[str] = None, request: Request = None):
+    if request and "access_token" in request.cookies:
+        try:
+            from auth import get_current_user_from_request
+            user = get_current_user_from_request(request)
+            if user and user.get("role") == "admin":
+                return True
+        except Exception:
+            pass
+
     if authorization and authorization.startswith("Bearer "):
         from auth import decode_access_token
         payload = decode_access_token(authorization[7:])
         if payload and payload.get("role") == "admin":
             return True
-    if password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=403, detail="管理者権限が必要です")
-    return True
+            
+    if password and password == ADMIN_PASSWORD:
+        return True
+        
+    raise HTTPException(status_code=403, detail="管理者権限が必要です")
 
 class AdminAuthReq(BaseModel):
     password: str
@@ -1866,41 +1877,34 @@ def admin_change_password(req: ChangePasswordReq):
     return {"success": True, "message": "パスワードを変更しました。本番環境では .env の ADMIN_PASSWORD も更新してください。"}
 
 @app.get("/api/admin/overview")
-def admin_overview(start: Optional[str] = None, end: Optional[str] = None, password: str = "", authorization: Optional[str] = Header(None)):
-    # JWTでadminロールの場合はパスワード不要でアクセス可能
-    if authorization and authorization.startswith("Bearer "):
-        from auth import decode_access_token
-        payload = decode_access_token(authorization[7:])
-        if payload and payload.get("role") == "admin":
-            return {"clinics": db.get_admin_overview(start, end)}
-    # フォールバック: パスワード認証
-    _check_admin(password)
+def admin_overview(request: Request, start: Optional[str] = None, end: Optional[str] = None, password: str = "", authorization: Optional[str] = Header(None)):
+    _check_admin(password, authorization, request)
     return {"clinics": db.get_admin_overview(start, end)}
 
 @app.get("/api/admin/contracts")
-def admin_contracts(password: str = "", authorization: Optional[str] = Header(None)):
-    _check_admin(password, authorization)
+def admin_contracts(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
+    _check_admin(password, authorization, request)
     return {"contracts": db.list_contracts()}
 
 @app.post("/api/admin/contracts")
-def admin_upsert_contract(req: ContractReq, password: str = "", authorization: Optional[str] = Header(None)):
-    _check_admin(password, authorization)
+def admin_upsert_contract(req: ContractReq, request: Request, password: str = "", authorization: Optional[str] = Header(None)):
+    _check_admin(password, authorization, request)
     db.upsert_contract(req.clinic_id, req.model_dump())
     return {"success": True}
 
 @app.delete("/api/admin/contracts/{clinic_id}")
-def admin_cancel_contract(clinic_id: int, password: str = "", authorization: Optional[str] = Header(None)):
+def admin_cancel_contract(clinic_id: int, request: Request, password: str = "", authorization: Optional[str] = Header(None)):
     """契約を解除（status=cancelledに変更）"""
-    _check_admin(password, authorization)
+    _check_admin(password, authorization, request)
     db.upsert_contract(clinic_id, {"clinic_id": clinic_id, "plan_name": "-",
                                     "monthly_fee": 0, "status": "cancelled",
                                     "notes": "解約済み"})
     return {"success": True, "message": f"clinic_id={clinic_id} の契約を解除しました"}
 
 @app.get("/api/admin/clinics/{clinic_id}/data")
-def admin_clinic_data(clinic_id: int, password: str):
+def admin_clinic_data(clinic_id: int, request: Request, password: str = ""):
     """管理者が特定クリニックの広告データを閲覧（Read-only）"""
-    _check_admin(password)
+    _check_admin(password, None, request)
     acct = db.get_ads_account(clinic_id)
     campaigns = db.list_campaigns(clinic_id)
     neg_kws = db.list_negative_keywords(clinic_id)
@@ -1922,9 +1926,9 @@ class AdminApplyReq(BaseModel):
     password: str
 
 @app.post("/api/admin/apply")
-def admin_apply(req: AdminApplyReq):
+def admin_apply(req: AdminApplyReq, request: Request):
     """管理者が閲覧中データを広告運用に反映（手動）"""
-    _check_admin(req.password)
+    _check_admin(req.password, None, request)
     if req.action == "apply_ad_copy":
         # 広告文を有効化
         with db.get_conn() as conn:
@@ -1943,8 +1947,8 @@ def admin_apply(req: AdminApplyReq):
         return {"success": False, "error": "不明なアクション"}
 
 @app.post("/api/admin/clinics")
-def admin_upsert_clinic(req: ClinicUpsertReq, authorization: Optional[str] = Header(None)):
-    _check_admin(req.password, authorization)
+def admin_upsert_clinic(req: ClinicUpsertReq, request: Request, authorization: Optional[str] = Header(None)):
+    _check_admin(req.password, authorization, request)
     
     # plan_statusのみの更新対応
     if req.id and not req.name and req.plan_status:
@@ -1961,9 +1965,9 @@ class MaxAccountsReq(BaseModel):
     password: str = ""
 
 @app.post("/api/admin/clinics/set-limit")
-def admin_set_account_limit(req: MaxAccountsReq, authorization: Optional[str] = Header(None)):
+def admin_set_account_limit(req: MaxAccountsReq, request: Request, authorization: Optional[str] = Header(None)):
     """管理者がクリニックのサブアカウント追加上限を設定"""
-    _check_admin(req.password, authorization)
+    _check_admin(req.password, authorization, request)
     db.set_max_sub_accounts(req.clinic_id, req.max_sub_accounts)
     label = "無制限" if req.max_sub_accounts == -1 else f"{req.max_sub_accounts}件まで"
     return {"success": True, "message": f"clinic_id={req.clinic_id} のアカウント上限を「{label}」に設定しました"}
@@ -1972,9 +1976,9 @@ class ArchiveAdsReq(BaseModel):
     notes: Optional[str] = ""
 
 @app.post("/api/admin/clinics/{clinic_id}/archive-ads")
-def admin_archive_ads(clinic_id: int, req: ArchiveAdsReq, authorization: Optional[str] = Header(None)):
+def admin_archive_ads(clinic_id: int, req: ArchiveAdsReq, request: Request, authorization: Optional[str] = Header(None)):
     """現在の広告詳細設定データをDBにアーカイブ（保存）する"""
-    _check_admin("", authorization)
+    _check_admin("", authorization, request)
     
     # 実際にはここでGoogle Ads APIなどで詳細を取得するが、今はダミーデータを取得して保存
     campaigns = [{"id": 101, "name": "指名検索キャンペーン", "status": "ENABLED", "budget": 5000}]
