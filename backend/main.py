@@ -1171,6 +1171,8 @@ def admin_update_plan_status(req: PlanStatusReq, request: Request):
     _require_admin(request)
     if req.status not in ("active", "suspended", "cancelled"):
         raise HTTPException(status_code=400, detail="statusは active / suspended / cancelled のいずれかを指定してください。")
+    if req.clinic_id == 1:
+        raise HTTPException(status_code=403, detail="システム管理者自身のプランステータスは変更できません。")
     
     old_status = db.get_clinic_plan_status(req.clinic_id)
     db.update_clinic_plan_status(req.clinic_id, req.status)

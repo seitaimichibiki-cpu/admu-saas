@@ -2569,13 +2569,15 @@ async function loadAdminContracts() {
           </td>
           <td style="text-align:right;font-size:12px">${c.started_at||'-'}</td>
           <td style="text-align:right;font-size:12px;color:${renewColor}">
+          <td style="text-align:right;font-size:12px;color:${renewColor}">
             ${c.renewal_at ? c.renewal_at + (renewDays!==null ? ` (${renewDays}日後)` : '') : '-'}
           </td>
           <td>
-            <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;color:var(--red)"
+            ${c.clinic_id === 1 ? '<span style="font-size:10px;color:var(--text-3)">システム管理者</span>' : 
+            `<button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;color:var(--red)"
               onclick="event.stopPropagation();adminCancelContractById(${c.clinic_id},'${c.clinic_name}')">
               🚫 解除
-            </button>
+            </button>`}
           </td>
         </tr>`;
     }).join('');
@@ -2661,6 +2663,10 @@ window.adminCancelContract = function() {
 
 // 契約解除（行の解除ボタン or フォーム）
 window.adminCancelContractById = async function(clinicId, clinicName) {
+  if (clinicId === 1) {
+    toast('システム管理者の契約は解除できません', 'error');
+    return;
+  }
   if (!confirm(`「${clinicName}」の契約を解除しますか？\nステータスが「解約」に変わります。`)) return;
   try {
     const res = await fetch(`${API}/admin/contracts/${clinicId}`, {

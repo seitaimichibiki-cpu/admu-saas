@@ -555,14 +555,14 @@ async function loadPlanStatus() {
           ${clinics.map(c => `<tr>
             <td><strong>${c.clinic_name}</strong></td>
             <td>
-              <select id="plan_${c.clinic_id}" class="form-input" style="width:160px">
+              <select id="plan_${c.clinic_id}" class="form-input" style="width:160px" ${c.clinic_id === 1 ? 'disabled title="管理者アカウントは変更できません"' : ''}>
                 <option value="active" ${c.plan_status==='active'||!c.plan_status?'selected':''}>✅ active（稼働中）</option>
                 <option value="suspended" ${c.plan_status==='suspended'?'selected':''}>⏸ suspended（停止中）</option>
                 <option value="cancelled" ${c.plan_status==='cancelled'?'selected':''}>❌ cancelled（解約）</option>
               </select>
             </td>
             <td>
-              <button class="btn btn-primary btn-sm" onclick="updatePlanStatus(${c.clinic_id})">更新</button>
+              <button class="btn btn-primary btn-sm" onclick="updatePlanStatus(${c.clinic_id})" ${c.clinic_id === 1 ? 'disabled style="opacity:0.5;cursor:not-allowed;" title="管理者は変更できません"' : ''}>更新</button>
             </td>
           </tr>`).join('')}
         </tbody>
