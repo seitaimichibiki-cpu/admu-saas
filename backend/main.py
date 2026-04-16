@@ -398,7 +398,7 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
         "campaigns": campaigns,
         "recent_alerts": alerts,
         "monitor_status": monitor.get_status(),
-        "mock_mode": bool(acc.get("mock_mode", 1)),
+        "mock_mode": client.mock_mode,
         "platform": platform,
         "settings": {
             "monthly_budget_yen": acc.get("monthly_budget_yen", 300000) or 300000,
