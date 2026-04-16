@@ -1370,12 +1370,46 @@
           <h3 class="card-title">🔰 初めての方へ（オンボーディング）</h3>
           <p style="color:var(--text-3);font-size:14px;line-height:1.6;margin-bottom:16px;">AdMuはGoogle広告の運用を自動化・簡略化するSaaSツールです。まずは「ダッシュボード」で現状を把握し、「予算設定」で1日に使える金額を指定してください。細かい入札調整や広告文の最適化はAIが自動で行います。</p>
           
+          <details style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.1)" open>
+            <summary style="font-weight:700;color:var(--text-1);cursor:pointer;outline:none;font-size:15px;">🔗 【超重要】Google広告との連携手順（かんたんマニュアル）</summary>
+            
+            <div style="color:var(--text-2);font-size:13px;line-height:1.8;margin-top:16px;padding-left:8px;">
+              外販をご利用の店舗様（お客様）がAdMuシステムをご利用になる際、システム専門の難しい設定（トークン発行など）は<strong>一切不要</strong>です。以下の3ステップのみで連携が完了します。
+            </div>
+
+            <div style="margin-top:16px;padding:16px;background:var(--bg-black);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+              <h4 style="color:var(--primary);margin-bottom:8px;font-size:14px;"><span style="display:inline-block;background:var(--primary);color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;margin-right:8px;">1</span>10桁の「顧客ID」を確認する</h4>
+              <p style="color:var(--text-3);font-size:13px;margin-left:28px;">
+                お手持ちのパソコン・スマホから <a href="https://ads.google.com/" target="_blank" style="color:var(--primary)">Google広告</a> にログインします。画面右上（アイコンの横）に表示されている <strong>10桁の数字（例: 123-456-7890）</strong> をメモまたはコピーしてください。
+              </p>
+            </div>
+
+            <div style="margin-top:12px;padding:16px;background:var(--bg-black);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+              <h4 style="color:var(--primary);margin-bottom:8px;font-size:14px;"><span style="display:inline-block;background:var(--primary);color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;margin-right:8px;">2</span>AdMuの設定画面に入力する</h4>
+              <p style="color:var(--text-3);font-size:13px;margin-left:28px;">
+                AdMuの左メニューにある「⚙ 設定」タブを開きます。「Google Ads 設定」の <strong>『顧客ID (Customer ID)』</strong> の欄に、先ほどコピーした10桁の数字を貼り付けて「保存」を押します。<br>
+                <span style="color:#f87171;font-weight:bold;">※注意：</span> その下にある暗号キー（開発者トークンやクライアントID等）の入力欄は、基本的に当システム管理側で一括処理するため**お客様はすべて「空欄」のままで大丈夫です**！
+              </p>
+            </div>
+
+            <div style="margin-top:12px;padding:16px;background:var(--bg-black);border-radius:8px;border:1px solid rgba(255,255,255,0.05);">
+              <h4 style="color:var(--primary);margin-bottom:8px;font-size:14px;"><span style="display:inline-block;background:var(--primary);color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:20px;margin-right:8px;">3</span>Google広告側で「承認」を押す</h4>
+              <p style="color:var(--text-3);font-size:13px;margin-left:28px;">
+                後日（1〜2日以内）、AdMuシステム本部からお客様のGoogleアカウント宛に「アカウントのリンク リクエスト」がメールで送信されます。メールのリンクを開き、Google広告画面の「承認」ボタンを押してください。<br>
+                <span style="color:var(--text-4)">承認が完了した翌日から、AdMuのダッシュボードに自動でグラフやデータが表示されるようになります！</span>
+              </p>
+            </div>
+          </details>
+
           <details style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.1)">
-            <summary style="font-weight:700;color:var(--text-1);cursor:pointer;outline:none">💡 Google広告との連携手順</summary>
-            <div style="color:var(--text-3);font-size:13px;line-height:1.8;margin-top:12px;padding-left:16px;border-left:2px solid var(--primary)">
-              1. お手持ちのGoogle広告にログインし、画面右上の「10桁の数字（例: 123-456-7890）」を確認します。<br>
-              2. 当システムの「設定タブ」にあるGoogle Ads API設定に10桁の数字を入力し保存します。<br>
-              3. 数日以内にGoogleから「連携リクエスト」のメールが届くため、承認を行ってください。
+            <summary style="font-weight:700;color:var(--text-1);cursor:pointer;outline:none">❓ よくある質問 (FAQ)</summary>
+            <div style="color:var(--text-3);font-size:13px;line-height:1.8;margin-top:12px;padding-left:16px;border-left:2px solid var(--text-4)">
+              <strong>Q. ダッシュボードの読み込みに失敗します。なぜですか？</strong><br>
+              A. 顧客IDを入力したばかりの段階や、Google側でのリンク承認が終わっていない場合は「データを取得する権限がない」ためエラーになります。承認後、1日程度お待ちください。<br><br>
+              <strong>Q. キャンペーンを手動で作成・停止してもいいですか？</strong><br>
+              A. 問題ありませんが、AdMuの「AIインサイト」が推奨する予算配分・アクションを優先していただくと、より高い費用対効果（ROAS）が見込めます。<br><br>
+              <strong>Q. 暗号化キー（開発者トークンなど）の入力欄が空欄ですが問題ないですか？</strong><br>
+              A. 外販のお客様ご自身でAPIキーを発行して運用する「玄人向け」の独自設定項目です。通常の連携サポートを行う場合、お客様には一切触っていただく必要はありません。
             </div>
           </details>
         </div>
