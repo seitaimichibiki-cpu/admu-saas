@@ -74,8 +74,9 @@ services:
       - key: INTEGRATION_SECRET_KEY
         sync: false
 
-  - type: static_site
+  - type: web
     name: admu-lp
+    runtime: static
     buildCommand: echo "No build needed"
     staticPublishPath: ./lp
     pullRequestPreviewsEnabled: false
