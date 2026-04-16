@@ -1412,8 +1412,11 @@ async function loadSettings() {
     document.getElementById('settDevToken').value   = s.developer_token === '***設定済み***' ? '' : (s.developer_token||'');
     document.getElementById('settDevToken').placeholder = s.developer_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '（取得後に入力）';
     document.getElementById('settClientId').value     = s.client_id || '';
+    document.getElementById('settClientSecret').value = s.client_secret === '***設定済み***' ? '' : (s.client_secret||'');
+    document.getElementById('settClientSecret').placeholder = s.client_secret === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
+    document.getElementById('settRefreshToken').value = s.refresh_token === '***設定済み***' ? '' : (s.refresh_token||'');
+    document.getElementById('settRefreshToken').placeholder = s.refresh_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
     document.getElementById('settMockMode').value     = s.mock_mode != null ? String(s.mock_mode) : '1';
-    
     // Yahoo設定
     if (document.getElementById('settYahooAccountId')) {
       document.getElementById('settYahooAccountId').value = s.yahoo_account_id || '';
