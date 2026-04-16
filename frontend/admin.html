@@ -327,18 +327,26 @@ function toast(msg, type='success') {
   setTimeout(() => t.remove(), 3000);
 }
 
-// JWTトークンをLocalStorageから取得
-function getAdminToken() {
-  return localStorage.getItem('admu_token') || adminToken;
+// JWTトークン・Cookie認証用
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return '';
 }
 
 async function api(path, opts={}) {
-  const token = getAdminToken();
+  const headers = { 'Content-Type': 'application/json' };
+  const csrf = getCookie('csrf_token');
+  if (csrf) headers['X-CSRF-Token'] = csrf;
+
   const res = await fetch(`/api${path}`, {
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: headers,
     ...opts
   });
-  const data = await res.json();
+  if (res.status === 204) return {};
+  const data = await res.json().catch(()=>({}));
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       // 権限エラー → ログアウト
@@ -359,6 +367,7 @@ async function doLogin() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
+      credentials: 'include',
       body: JSON.stringify({ email, password: pass })
     });
     const data = await res.json();
@@ -369,8 +378,6 @@ async function doLogin() {
       document.getElementById('loginError').textContent = '管理者アカウントでログインしてください';
       document.getElementById('loginError').style.display = 'block';
     } else {
-      adminToken = data.access_token;
-      localStorage.setItem('admu_token', data.access_token);
       localStorage.setItem('admu_user', JSON.stringify({ email: data.email, role: data.role, clinic_id: data.clinic_id }));
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('adminApp').style.display = 'block';
@@ -385,21 +392,19 @@ async function doLogin() {
 }
 
 function doLogout() {
-  adminToken = '';
-  localStorage.removeItem('admu_token');
   localStorage.removeItem('admu_user');
   document.getElementById('adminApp').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('adminPassField').value = '';
+  // サーバー側のログアウトAPIを呼ぶ
+  fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(()=>{});
 }
 
-// 自動ログイン（JWTが保存済みの場合）
+// 自動ログイン（Cookie + 情報が保存済みの場合）
 document.addEventListener('DOMContentLoaded', () => {
-  const token = localStorage.getItem('admu_token');
   const user  = JSON.parse(localStorage.getItem('admu_user') || '{}');
-  if (token && user.role === 'admin') {
-    adminToken = token;
-    fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
+  if (user.role === 'admin') {
+    fetch('/api/auth/me', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d.role === 'admin') {
@@ -409,10 +414,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else { doLogout(); }
       })
       .catch(() => {
-        // オフライン: adminならそのまま表示
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('adminApp').style.display = 'block';
-        initAdmin();
+        // オフラインまたはCookie無効
+        doLogout();
       });
   }
 });
@@ -566,15 +569,15 @@ async function changeAdminPassword() {
   if (!oldPass || !newPass) { toast('すべての項目を入力してください', 'error'); return; }
   if (newPass !== confirmPass) { toast('新しいパスワードが一致しません', 'error'); return; }
   if (newPass.length < 4) { toast('パスワードは4文字以上にしてください', 'error'); return; }
-  if (oldPass !== adminToken) { toast('現在のパスワードが違います', 'error'); return; }
+  if (oldPass !== '' && oldPass.length < 4) { toast('パスワードが短すぎます', 'error'); return; }
   try {
     const res = await fetch('/api/admin/change-password', {
       method: 'POST', headers: {'Content-Type':'application/json'},
+      credentials: 'include',
       body: JSON.stringify({ old_password: oldPass, new_password: newPass })
     });
     const data = await res.json();
     if (data.success) {
-      adminToken = newPass;
       toast('パスワードを変更しました ✅ 次回ログインから有効です', 'success');
       document.getElementById('oldAdminPass').value = '';
       document.getElementById('newAdminPass').value = '';
@@ -726,8 +729,10 @@ async function saveContract() {
   };
   try {
     const sep = '?';
-    await fetch(`/api/admin/contracts${sep}password=${encodeURIComponent(adminToken)}`, {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+    await fetch(`/api/admin/contracts`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, 
+      credentials: 'include',
+      body: JSON.stringify(data)
     });
     toast('契約情報を保存しました ✅', 'success');
     closeModal('contractModal');
@@ -810,11 +815,12 @@ function renderClinicData(data, clinicId, clinicName) {
 async function applyData(clinicId, action, targetId) {
   if (!confirm('この操作を広告運用システムに反映しますか？')) return;
   try {
-    const sep = '?';
-    const res = await fetch(`/api/admin/apply${sep}password=${encodeURIComponent(adminToken)}`, {
+    const res = await fetch(`/api/admin/apply`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ clinic_id: clinicId, action, target_id: targetId, password: adminToken })
+      credentials: 'include',
+      body: JSON.stringify({ clinic_id: clinicId, action, target_id: targetId })
     });
+    if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     toast(data.message || '反映しました ✅', 'success');
     loadClinicData();
@@ -858,12 +864,12 @@ async function saveClinic() {
   const body = {
     id: id ? parseInt(id) : null,
     name,
-    license_key: document.getElementById('clinicLicenseKey').value.trim() || null,
-    password: adminToken
+    license_key: document.getElementById('clinicLicenseKey').value.trim() || null
   };
   try {
     await fetch('/api/admin/clinics', {
       method: 'POST', headers: {'Content-Type':'application/json'},
+      credentials: 'include',
       body: JSON.stringify(body)
     });
     toast('保存しました ✅', 'success');
