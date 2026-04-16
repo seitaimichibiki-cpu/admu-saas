@@ -124,9 +124,10 @@ class AdsClient:
                     "client_id":       account_config.get("client_id") or "",
                     "client_secret":   account_config.get("client_secret") or "",
                     "refresh_token":   account_config.get("refresh_token") or "",
-                    "login_customer_id": account_config.get("login_customer_id") or "",
                     "use_proto_plus": True,
                 }
+                if account_config.get("login_customer_id"):
+                    cfg["login_customer_id"] = account_config["login_customer_id"]
                 # 認資情報が一つでも欠ければモックにフォールバック
                 if not all([cfg["developer_token"], cfg["client_id"],
                             cfg["client_secret"], cfg["refresh_token"]]):
