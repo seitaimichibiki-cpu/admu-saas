@@ -263,3 +263,46 @@ class AdsClient:
             return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
         # 実API実装省略（google-ads SDK での bid 更新）
         return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
+
+    # ---- コンバージョン送信 (OCT) ----
+    def upload_offline_conversion(self, gclid: str, conversion_name: str, conversion_value: float, conversion_time: str):
+        if self.mock_mode:
+            print(f"[MOCK] OCT送信: GCLID={gclid}, Name={conversion_name}, Value={conversion_value}")
+            return {"success": True, "mock": True}
+        
+        try:
+            # 1. コンバージョンアクションを取得
+            ga_service = self._client.get_service("GoogleAdsService")
+            query = f"SELECT conversion_action.resource_name FROM conversion_action WHERE conversion_action.name = '{conversion_name}' AND conversion_action.status = 'ENABLED' LIMIT 1"
+            resp = ga_service.search(customer_id=self.customer_id, query=query)
+            action_resource = None
+            for row in resp:
+                action_resource = row.conversion_action.resource_name
+                break
+                
+            if not action_resource:
+                return {"success": False, "error": f"Conversion action '{conversion_name}' not found."}
+                
+            # 2. コンバージョン送信
+            conversion_upload_service = self._client.get_service("ConversionUploadService")
+            click_conversion = self._client.get_type("ClickConversion")
+            click_conversion.conversion_action = action_resource
+            click_conversion.gclid = gclid
+            if conversion_value:
+                click_conversion.conversion_value = float(conversion_value)
+                click_conversion.currency_code = "JPY"
+            if conversion_time:
+                click_conversion.conversion_date_time = conversion_time
+                
+            request = self._client.get_type("UploadClickConversionsRequest")
+            request.customer_id = self.customer_id
+            request.conversions.append(click_conversion)
+            request.partial_failure = True
+            
+            upload_response = conversion_upload_service.upload_click_conversions(request=request)
+            
+            if hasattr(upload_response, "partial_failure_error") and upload_response.partial_failure_error.message:
+                return {"success": False, "error": upload_response.partial_failure_error.message}
+            return {"success": True, "mock": False, "resource": action_resource}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

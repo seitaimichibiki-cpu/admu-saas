@@ -23,14 +23,24 @@ class GA4Client:
     """
     def __init__(self, property_id: str):
         self.property_id = property_id
-        # TODO: 本番では credentials パスや dict を受け取って初期化する
         self.is_mock = os.getenv("MOCK_ADS_API", "true").lower() == "true"
+        self.client = None
         
         if not self.is_mock:
             # 本番用初期化処理
             try:
-                # self.client = BetaAnalyticsDataClient()
-                pass
+                from google.oauth2 import service_account
+                creds_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+                if creds_json:
+                    import json
+                    info = json.loads(creds_json)
+                    creds = service_account.Credentials.from_service_account_info(info)
+                    self.client = BetaAnalyticsDataClient(credentials=creds)
+                elif os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                    self.client = BetaAnalyticsDataClient()
+                else:
+                    logger.warning("No GA4 credentials provided. Falling back to mock.")
+                    self.is_mock = True
             except Exception as e:
                 logger.error(f"GA4 Client initialization failed: {str(e)}")
                 self.is_mock = True
@@ -39,12 +49,11 @@ class GA4Client:
         """
         指定期間のパフォーマンスデータをGA4から取得する。
         """
-        if self.is_mock:
+        if self.is_mock or not self.client:
             return self._get_mock_data(start_date, end_date)
             
         try:
-            # 本番用APIリクエストの骨組み (コメントアウト)
-            """
+            # 本番用APIリクエストの骨組み
             request = RunReportRequest(
                 property=f"properties/{self.property_id}",
                 dimensions=[Dimension(name="sessionSourceMedium")],
@@ -56,10 +65,19 @@ class GA4Client:
             )
             response = self.client.run_report(request)
             
-            # データの整形処理をここに記載
-            ...
-            """
-            return {"status": "pending_implementation"}
+            # 結果の集計
+            total_sessions = 0
+            total_conversions = 0
+            for row in response.rows:
+                total_sessions += int(row.metric_values[0].value)
+                total_conversions += int(row.metric_values[1].value)
+                
+            return {
+                "sessions": total_sessions,
+                "conversions": total_conversions,
+                "bounce_rate": 0.0, # Dummy for now, can query it if needed
+                "mock": False
+            }
             
         except Exception as e:
             logger.error(f"GA4 report fetch failed: {str(e)}")

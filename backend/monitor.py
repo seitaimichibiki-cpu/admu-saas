@@ -204,6 +204,30 @@ def _send_weekly_report(clinic_id: int):
         print(f"[Monitor] 週次LINE送信完了 clinic_id={clinic_id}")
 
 
+def _send_system_daily_report():
+    """毎朝9時: システム全体の稼働サマリーを管理者LINEへ送信"""
+    admin_line = os.environ.get("LINE_DEFAULT_USER_ID", "")
+    channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+    if not admin_line or not channel_token:
+        return
+
+    clinics = db.list_clinics()
+    active_count = sum(1 for c in clinics if c.get("plan_status") == "active")
+    pending_count = sum(1 for c in clinics if c.get("plan_status") == "pending")
+
+    msg = f"""⚙️ AdMu システム稼働レポート
+{datetime.now().strftime("%Y年%m月%d日")}
+━━━━━━━━━━━━━━
+✅ アクティブ院数: {active_count}
+⏳ 承認待ち(Pending): {pending_count}
+🏥 総登録院数: {len(clinics)}
+━━━━━━━━━━━━━━
+by AdMu System Monitor"""
+
+    line_notifier.send_text(channel_token, admin_line, msg)
+    print("[Monitor] システム日次レポート送信完了")
+
+
 def _run_cleanup():
     """週1回曜深夜: 古いログやアラートを削除"""
     try:
@@ -243,6 +267,12 @@ def start_scheduler():
             _send_weekly_report, CronTrigger(day_of_week='mon', hour=8, minute=0),
             id=f"weekly_{cid}", args=[cid], replace_existing=True
         )
+
+    # システム全体の日次稼働レポート（毎日 9:00 管理者宛）
+    _scheduler.add_job(
+        _send_system_daily_report, CronTrigger(hour=9, minute=0),
+        id="system_daily_report", replace_existing=True
+    )
 
     # システム全体のクリーンアップジョブ（日曜日 3:00）
     _scheduler.add_job(

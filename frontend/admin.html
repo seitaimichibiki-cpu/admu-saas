@@ -880,6 +880,25 @@ function closeModal(id) {
 document.querySelectorAll('.modal-bg').forEach(m => {
   m.addEventListener('click', e => { if(e.target === m) m.classList.remove('open'); });
 });
+
+// Sentry initialization
+document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/config', { credentials: 'omit' })
+    .then(res => res.json())
+    .then(config => {
+      if (config.sentry_dsn && typeof Sentry !== 'undefined') {
+        Sentry.init({
+          dsn: config.sentry_dsn,
+          integrations: [new Sentry.BrowserTracing()],
+          tracesSampleRate: 1.0,
+        });
+        console.log('[Sentry] Admin panel init completed');
+      }
+    })
+    .catch(err => console.warn('Config load failed:', err));
+});
 </script>
+<!-- Sentry Error Tracking -->
+<script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

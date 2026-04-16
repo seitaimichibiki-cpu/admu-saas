@@ -143,8 +143,20 @@ def verify_reset_token(token: str) -> Optional[str]:
 # FastAPI依存関数
 # ============================================================
 def get_current_user_from_header(authorization: Optional[str]) -> Optional[dict]:
-    """Authorizationヘッダーからユーザー情報を取得"""
+    """Authorizationヘッダーからユーザー情報を取得（非推奨: 今後はCookieを利用）"""
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization[7:]
+    return decode_access_token(token)
+
+def get_current_user_from_request(request) -> Optional[dict]:
+    """Cookie または Authorizationヘッダーからユーザー情報を取得"""
+    token = request.cookies.get("access_token")
+    if not token:
+        authorization = request.headers.get("Authorization")
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization[7:]
+    
+    if not token:
+        return None
     return decode_access_token(token)

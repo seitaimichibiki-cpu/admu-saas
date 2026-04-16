@@ -23,6 +23,16 @@ import db, monitor, line_notifier, ad_copy_generator as adcopy, campaign_manager
 import auth
 import urllib.request
 import stripe
+import sentry_sdk
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+    print(f"[Sentry] 初期化完了 (DSN設定済み)")
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -58,9 +68,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def verify_tenant_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/"):
-        auth_header = request.headers.get("Authorization")
-        user = auth.get_current_user_from_header(auth_header)
+    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and not path == "/api/csrf-token":
+        user = auth.get_current_user_from_request(request)
         if not user:
             return JSONResponse({"detail": "認証されていませんので再度ログインしてください"}, status_code=401)
         
@@ -100,12 +109,58 @@ async def verify_tenant_middleware(request: Request, call_next):
                 pass
 
     return await call_next(request)
+
+_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("ALLOWED_ORIGINS", "*").split(","),
+    allow_origins=_allowed_origins if _allowed_origins != ["*"] else [],
+    allow_origin_regex=".*" if _allowed_origins == ["*"] else None,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---- セキュリティ・ミドルウェア (Headers & CSRF) ----
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    # 1. CSRF Verification
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/stripe/webhook"):
+            # exclude endpoints that don't need CSRF or are login endpoints
+            if request.url.path not in ["/api/auth/login", "/api/auth/dev-autologin", "/api/auth/reset-request", "/api/auth/reset-confirm"]:
+                token_in_header = request.headers.get("X-CSRF-Token")
+                token_in_cookie = request.cookies.get("csrf_token")
+                # Double submit cookie pattern
+                if not token_in_header or not token_in_cookie or token_in_header != token_in_cookie:
+                    return JSONResponse({"detail": "CSRFトークンが無効または不足しています。"}, status_code=403)
+
+    # 2. Process Request
+    response = await call_next(request)
+    
+    return response
+
+@app.get("/api/config")
+def get_public_config():
+    """フロントエンドに必要な共通設定（Sentry等）を返す"""
+    return {
+        "sentry_dsn": SENTRY_DSN
+    }
+
+@app.get("/api/csrf-token")
+def get_csrf_token(response: Response):
+    """CSRFトークンを発行する"""
+    import secrets
+    token = secrets.token_urlsafe(32)
+    is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+    response.set_cookie(
+        key="csrf_token",
+        value=token,
+        httponly=False, # フロントエンドのJSが読み取るためここはFalse
+        secure=is_prod,
+        samesite="lax",
+        max_age=86400
+    )
+    return {"csrf_token": token}
 
 # ---- セキュリティヘッダミドルウェア ----
 @app.middleware("http")
@@ -117,6 +172,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https: blob:; frame-src 'self' https://js.stripe.com;"
     response.headers["X-Request-ID"] = request_id
     return response
 
@@ -281,9 +338,8 @@ def _check_plan_active(clinic_id: int):
         )
 
 def _get_current_user(request: Request) -> dict:
-    """認証ミドルウェア: JWTを検証しユーザー情報を返す"""
-    authorization = request.headers.get("Authorization", "")
-    user = auth.get_current_user_from_header(authorization)
+    """認証ミドルウェア: Cookie(またはヘッダー)からJWTを検証しユーザー情報を返す"""
+    user = auth.get_current_user_from_request(request)
     if not user:
         raise HTTPException(status_code=401, detail="認証が必要です。ログインしてください。")
     return user
@@ -901,8 +957,8 @@ def register(req: RegisterReq):
     }
 
 @app.post("/api/auth/login")
-def login(req: LoginReq):
-    """メール+パスワードでログインしJWTを返す"""
+def login(req: LoginReq, response: Response):
+    """メール+パスワードでログインしSecure CookieにJWTをセットする"""
     user = db.get_user_by_email(req.email)
     if not user or not auth.verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="メールアドレスまたはパスワードが違います。")
@@ -921,22 +977,39 @@ def login(req: LoginReq):
         role=user["role"]
     )
     plan = _get_plan_info(user["clinic_id"])
+    
+    is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=604800  # 7 days
+    )
+    
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "success": True,
         "clinic_id": user["clinic_id"],
         "email": user["email"],
         "role": user["role"],
         **plan,
     }
 
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    """ログアウト処理：Cookieを削除する"""
+    is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+    response.delete_cookie("access_token", secure=is_prod, samesite="lax", httponly=True)
+    return {"success": True, "message": "ログアウトしました"}
+
 # ── 開発者専用: localhost限定 自動ログイン ─────────────────────────
 @app.post("/api/auth/dev-autologin")
-def dev_autologin(request: Request):
+def dev_autologin(request: Request, response: Response):
     """
     localhost からのアクセス限定の自動ログイン。
     本番ホスト（localhost/127.0.0.1 以外）からは403を返す。
-    adminアカウントのJWTを無条件で発行する。
+    adminアカウントのJWTをCookieにセットする。
     """
     host = request.client.host if request.client else ""
     origin = request.headers.get("origin", "")
@@ -965,9 +1038,19 @@ def dev_autologin(request: Request):
     )
     clinic_id = admin.get("clinic_id", 1)
     plan = _get_plan_info(clinic_id)
+    
+    is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=is_prod,
+        samesite="lax",
+        max_age=604800
+    )
+    
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "success": True,
         "clinic_id": clinic_id,
         "email": admin["email"],
         "role": admin.get("role", "admin"),
@@ -1088,8 +1171,32 @@ def admin_update_plan_status(req: PlanStatusReq, request: Request):
     _require_admin(request)
     if req.status not in ("active", "suspended", "cancelled"):
         raise HTTPException(status_code=400, detail="statusは active / suspended / cancelled のいずれかを指定してください。")
+    
+    old_status = db.get_clinic_plan_status(req.clinic_id)
     db.update_clinic_plan_status(req.clinic_id, req.status)
     db.add_audit_log(req.clinic_id, "admin", "UPDATE_PLAN_STATUS", "clinic", f"Admin changed plan status to {req.status}")
+    
+    # 承認完了時の自動メール＆LINE通知
+    if old_status == "pending" and req.status == "active":
+        clinic = db.get_clinic(req.clinic_id)
+        users = db.list_users(req.clinic_id)
+        if clinic and users:
+            target_user = users[0]
+            try:
+                import email_notifier
+                email_notifier.send_welcome_email(target_user.get("email"), clinic.get("name"))
+            except Exception as e:
+                print(f"[Admin] ウェルカムメール送信エラー: {e}")
+                
+            try:
+                import line_notifier
+                admin_line = os.environ.get("LINE_DEFAULT_USER_ID", "")
+                channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+                if admin_line and channel_token:
+                    line_notifier.send_alert(channel_token, admin_line, "INFO", f"新規アカウントが承認され、有効化されました。\n院名: {clinic.get('name')}")
+            except Exception as e:
+                print(f"[Admin] LINE通知エラー: {e}")
+
     return {"clinic_id": req.clinic_id, "plan_status": req.status, "message": "プランステータスを更新しました。"}
 
 @app.get("/api/admin/plan-status/{clinic_id}")
@@ -1233,6 +1340,19 @@ async def stripe_webhook(request: Request):
             db.upsert_contract(clinic_id, upsert_data)
             db.update_clinic_plan_status(clinic_id, "active")
             db.add_audit_log(clinic_id, "stripe", "PAYMENT_SUCCESS", "contract", "Checkout session completed successfully")
+            
+            # Stripe課金完了時の自動LINE通知
+            try:
+                import line_notifier
+                admin_line = os.environ.get("LINE_DEFAULT_USER_ID", "")
+                channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+                if admin_line and channel_token:
+                    clinic = db.get_clinic(clinic_id)
+                    c_name = clinic.get("name") if clinic else f"ID:{clinic_id}"
+                    line_notifier.send_alert(channel_token, admin_line, "INFO", f"Stripe決済が完了し、ライセンスが有効化されました。\n院名: {c_name}")
+            except Exception as e:
+                print(f"[Stripe] LINE通知エラー: {e}")
+
     elif event["type"] in ["invoice.payment_failed", "customer.subscription.deleted"]:
         # 決済失敗あるいはサブスクリプション終了
         obj = event["data"]["object"]
@@ -1326,8 +1446,27 @@ async def receive_offline_conversion(req: OfflineConversionReq):
     )
     db.add_performance_log(req.clinic_id, log_msg, "INFO")
     print(log_msg)
-    # TODO: サーバー本番接続後、Google Ads API への OCT 送信を実装
-    return {"success": True, "message": "OCTデータを受信・記録しました", "stub": True}
+    
+    # Google Ads API への OCT 送信
+    try:
+        acc = _require_account(req.clinic_id, platform="google")
+    except Exception as e:
+        return {"success": False, "message": f"Ads account error: {e}", "stub": False}
+        
+    from ads_client import AdsClient
+    client = AdsClient(acc)
+    
+    result = client.upload_offline_conversion(
+        gclid=req.gclid,
+        conversion_name=req.conversion_name,
+        conversion_value=req.conversion_value,
+        conversion_time=req.conversion_time
+    )
+    
+    if result.get("success"):
+        return {"success": True, "message": "OCTデータをGoogle Adsへ送信しました", "mock": result.get("mock", False)}
+    else:
+        return {"success": False, "error": result.get("error")}
 
 class AdsEventReq(BaseModel):
     event: str

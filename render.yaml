@@ -22,6 +22,10 @@ services:
         generateValue: true
       - key: SECRET_KEY
         generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: SENTRY_DSN
+        sync: false
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

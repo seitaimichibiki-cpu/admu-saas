@@ -2,22 +2,34 @@
    app.js - Google広告自動運用システム メインJS
    ============================================================== */
 
-const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8001/api'
+const isFile = window.location.protocol === 'file:';
+const isDevServer = ['5500', '3000', '8080'].includes(window.location.port);
+const API = (isFile || isDevServer) 
+  ? `http://${window.location.hostname || '127.0.0.1'}:8001/api`
   : window.location.origin + '/api';
 
 // ============================================================
-// 認証管理 (JWT)
+// 認証管理 (JWT Cookie + CSRF)
 // ============================================================
-const AUTH_KEY = 'admu_token';
 const USER_KEY = 'admu_user';
 
-function getToken() { return localStorage.getItem(AUTH_KEY); }
+function getToken() { return getCookie("access_token"); } // Cookieの存在チェック(HttpOnlyの場合は読めないので簡易判定またはmeを信頼する。今回はme APIのみで判定に変更)
 function getUser()  { try { return JSON.parse(localStorage.getItem(USER_KEY) || '{}'); } catch { return {}; } }
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return '';
+}
+
 function authHeaders() {
-  const t = getToken();
-  return t ? { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json' };
+  const csrf = getCookie('csrf_token');
+  if (csrf) {
+    headers['X-CSRF-Token'] = csrf;
+  }
+  return headers;
 }
 
 // ログイン画面を表示
@@ -69,6 +81,7 @@ window.doLogin = async function doLogin() {
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
@@ -79,7 +92,7 @@ window.doLogin = async function doLogin() {
       return;
     }
     // 成功
-    localStorage.setItem(AUTH_KEY, data.access_token);
+    // トークンはCookieにセットされるので、localStorageではUser情報のみ保存
     localStorage.setItem(USER_KEY, JSON.stringify({
       email: data.email,
       role: data.role,
@@ -161,9 +174,11 @@ window.doSignup = async function doSignup() {
 };
 
 // ログアウト
-window.doLogout = function doLogout() {
+window.doLogout = async function doLogout() {
   if (!confirm('ログアウトしますか？')) return;
-  localStorage.removeItem(AUTH_KEY);
+  try {
+    await fetch(`${API}/auth/logout`, { method: 'POST', headers: authHeaders(), credentials: 'include' }).catch(e=>e);
+  } catch(e) {}
   localStorage.removeItem(USER_KEY);
   const userEl  = document.getElementById('loggedInUser');
   const logoutEl = document.getElementById('logoutBtn');
@@ -174,6 +189,21 @@ window.doLogout = function doLogout() {
 
 // Enterキーでログイン
 document.addEventListener('DOMContentLoaded', () => {
+  // Sentry等共通設定の取得
+  fetch(`${API}/config`, { credentials: 'omit' })
+    .then(res => res.json())
+    .then(config => {
+      if (config.sentry_dsn && typeof Sentry !== 'undefined') {
+        Sentry.init({
+          dsn: config.sentry_dsn,
+          integrations: [new Sentry.BrowserTracing()],
+          tracesSampleRate: 1.0,
+        });
+        console.log('[Sentry] 初期化完了');
+      }
+    })
+    .catch(err => console.warn('Config load failed:', err));
+
   document.getElementById('loginPassword')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
   });
@@ -206,14 +236,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const user  = getUser();
   if (token && user.email) {
     // サーバーで検証
-    fetch(`${API}/auth/me`, { headers: authHeaders() })
+    fetch(`${API}/auth/me`, { headers: authHeaders(), credentials: 'include' })
       .then(r => {
         if (r.ok) {
           showDashboard(user);
           if (user.clinic_id) currentClinicId = user.clinic_id;
         } else {
           // トークン無効 → ログアウト
-          localStorage.removeItem(AUTH_KEY);
           localStorage.removeItem(USER_KEY);
           showLoginScreen();
         }
@@ -226,11 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── localhost限定: 自動ログイン ──────────────────────────
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       // localhostなら自動でadminとしてログイン（操作不要）
-      fetch(`${API}/auth/dev-autologin`, { method: 'POST' })
+      fetch(`${API}/auth/dev-autologin`, { method: 'POST', credentials: 'include' })
         .then(r => r.json())
         .then(data => {
-          if (data.access_token) {
-            localStorage.setItem(AUTH_KEY, data.access_token);
+          if (data.success) { // access_tokenはCookieなのでsuccessフラグでチェック
             localStorage.setItem(USER_KEY, JSON.stringify({
               email:         data.email,
               role:          data.role,
@@ -250,6 +278,9 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(() => showLoginScreen());
     } else {
+      if (window.location.protocol === 'file:') {
+         toast('⚠️ ローカルファイル（file://）からはCookie認証がブロックされるため、正常に動作しません。http://localhost:8001/ へアクセスしてください。', 'error', 10000);
+      }
       showLoginScreen();
     }
   }
@@ -395,8 +426,13 @@ function fmtDate(s) { return s ? s.replace('T',' ').slice(0,16) : '-'; }
 
 async function api(path, options={}) {
   try {
+    // 初回APIコールの前にCSRFトークンを取得
+    if (!getCookie('csrf_token') && (options.method || 'GET') !== 'GET') {
+      await fetch(API + '/csrf-token', { credentials: 'include' });
+    }
     const res = await fetch(API + path, {
       headers: authHeaders(),
+      credentials: 'include',
       ...options,
     });
     if (!res.ok) {

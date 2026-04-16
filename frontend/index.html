@@ -1367,8 +1367,50 @@
         <h2 class="section-title" style="margin-bottom:24px"><span style="margin-right:8px">📘</span>ヘルプ＆マニュアル</h2>
         <div class="card" style="margin-bottom:24px">
           <h3 class="card-title">🔰 初めての方へ（オンボーディング）</h3>
-          <p style="color:var(--text-3);font-size:14px;line-height:1.6">AdMuはGoogle広告の運用を自動化・簡略化するSaaSツールです。まずは「ダッシュボード」で現状を把握し、「予算設定」で1日に使える金額を指定してください。細かい入札調整や広告文の最適化はAIが自動で行います。</p>
+          <p style="color:var(--text-3);font-size:14px;line-height:1.6;margin-bottom:16px;">AdMuはGoogle広告の運用を自動化・簡略化するSaaSツールです。まずは「ダッシュボード」で現状を把握し、「予算設定」で1日に使える金額を指定してください。細かい入札調整や広告文の最適化はAIが自動で行います。</p>
+          
+          <details style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid rgba(255,255,255,0.1)">
+            <summary style="font-weight:700;color:var(--text-1);cursor:pointer;outline:none">💡 Google広告との連携手順</summary>
+            <div style="color:var(--text-3);font-size:13px;line-height:1.8;margin-top:12px;padding-left:16px;border-left:2px solid var(--primary)">
+              1. お手持ちのGoogle広告にログインし、画面右上の「10桁の数字（例: 123-456-7890）」を確認します。<br>
+              2. 当システムの「設定タブ」にあるGoogle Ads API設定に10桁の数字を入力し保存します。<br>
+              3. 数日以内にGoogleから「連携リクエスト」のメールが届くため、承認を行ってください。
+            </div>
+          </details>
         </div>
+
+        <div class="card" style="margin-bottom:24px;border-top:3px solid var(--primary)">
+          <h3 class="card-title">🤖 AI機能を120%活かす「ペルソナ設定」のコツ</h3>
+          <p style="color:var(--text-3);font-size:13px;line-height:1.6">AdMuのAIは、設定された「ペルソナ（想定患者）」の悩みと理想に合わせて広告文を自動生成します。ここを具体的にするほど、クリック率（CTR）が跳ね上がります。</p>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+            <div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:8px;border:1px solid rgba(239,68,68,0.2)">
+              <div style="font-weight:700;color:#fca5a5;font-size:13px;margin-bottom:8px">❌ 悪い例（反応が薄い）</div>
+              <div style="font-size:12px;color:var(--text-3)">「30代 女性 腰痛 治したい」<br><br><span style="color:var(--text-4)">AI「腰痛でお悩みの30代女性へ。当院で治しませんか？」←ありきたりな広告になります。</span></div>
+            </div>
+            <div style="background:rgba(34,197,94,0.1);padding:12px;border-radius:8px;border:1px solid rgba(34,197,94,0.2)">
+              <div style="font-weight:700;color:#86efac;font-size:13px;margin-bottom:8px">⭕️ 良い例（刺さる）</div>
+              <div style="font-size:12px;color:var(--text-3)">「デスクワークで夕方になると腰が重い30代女性。休日は子供と遊びたいが痛みが怖くて動けない」<br><br><span style="color:var(--text-4)">AI「子供を思い切り抱っこできない…夕方のつらい腰痛を根本改善！」←具体的に刺さります。</span></div>
+            </div>
+          </div>
+          
+          <div style="margin-top:16px;font-size:12px;color:var(--warning);padding:8px;background:rgba(234,179,8,0.1);border-radius:6px">
+            <strong>⚠️ AIの学習期間について:</strong> キャンペーン開始から1〜2週間は、AIが「どんな人に配信すれば予約が入るか」をテスト・学習する期間です。初日から焦って設定を頻繁に変えると、いつまでも学習が終わらないためご注意ください。
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <h3 class="card-title">🛡 整体院ならではの「除外キーワード」の定石</h3>
+          <p style="color:var(--text-3);font-size:13px;line-height:1.6;margin-bottom:12px">Google広告で一番もったいないのは、<strong>「ターゲットではない人」にクリックされて無駄なお金がかかること</strong>です。</p>
+          <ul style="color:var(--text-3);font-size:13px;line-height:2.0;margin-left:20px;margin-bottom:12px">
+            <li><strong>「保険」「保険適用」</strong>： 自費診療メインの場合、必ず除外しましょう。</li>
+            <li><strong>「マッサージ」「リラク」</strong>： 根本治療目的ではない安い癒やしを求める人を弾けます。</li>
+            <li><strong>「整形外科」「病院」</strong>： レントゲンや医師の診断を求めている人です。</li>
+            <li><strong>「求人」「スクール」</strong>： 働き口や学校を探している同業者です。</li>
+          </ul>
+          <p style="color:var(--text-3);font-size:12px">※AdMuの「除外KW AIスキャナー」を使えば、こうした整体院特有の無駄クリックをワンクリックで一括ブロックできます！</p>
+        </div>
+
         <div class="card" style="margin-bottom:24px">
           <h3 class="card-title">📖 用語解説集</h3>
           <ul style="color:var(--text-3);font-size:13px;line-height:2.0;margin-left:20px">
@@ -1376,18 +1418,28 @@
             <li><strong style="color:var(--text-1)">CVR（コンバージョン率）</strong>：クリックした人のうち、予約や問い合わせ（CV）に至った割合です。</li>
             <li><strong style="color:var(--text-1)">CPA（獲得単価）</strong>：1件の予約や問い合わせを獲得するのにかかった費用です。「総費用 ÷ CV数」で計算されます。目安として整体院では3000円〜7000円程度が優秀とされます。</li>
             <li><strong style="color:var(--text-1)">インプレッション（表示回数）</strong>：広告が画面に表示された回数です。</li>
+            <li><strong style="color:var(--text-1)">LTV（顧客生涯価値）</strong>：一人の患者様が、初診から卒業（または現在）までに使ってくださる総額のことです。この数字が大きいほど、CPA（広告費）を多めにかけても利益が出ます。</li>
           </ul>
         </div>
+
         <div class="card">
-          <h3 class="card-title">❓ よくある質問（FAQ）</h3>
+          <h3 class="card-title">❓ よくある質問（FAQ）とサポート</h3>
           <div style="margin-top:16px;">
-            <div style="margin-bottom:12px">
+            <div style="margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:12px">
               <div style="font-weight:700;color:var(--text-1);font-size:14px">Q. キャンペーンを「停止」にしても費用はかかりますか？</div>
-              <div style="color:var(--text-3);font-size:13px;margin-top:4px">A. 「停止中」になるとその時点から広告は表示されなくなり、新たな費用は発生しません。</div>
+              <div style="color:var(--text-3);font-size:13px;margin-top:6px">A. いいえ。「停止中」になるとその時点からGoogle広告は表示されなくなり、新たな費用は一切発生しません。</div>
             </div>
-            <div style="margin-bottom:12px">
+            <div style="margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:12px">
               <div style="font-weight:700;color:var(--text-1);font-size:14px">Q. 「予算超過リスク」というアラートが出ました。どうすればいいですか？</div>
-              <div style="color:var(--text-3);font-size:13px;margin-top:4px">A. 設定している手動の月・日予算に対してクリック数が多すぎる状態です。キーワードを絞る（除外設定する）、または予算を引き上げるなどの対策が有効です。</div>
+              <div style="color:var(--text-3);font-size:13px;margin-top:6px">A. 設定している手動の月・日予算に対してクリック数が多すぎる状態です。キーワードを絞る（無駄なキーワードを除外設定する）、または予算を引き上げるなどの対策が有効です。</div>
+            </div>
+            <div style="margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:12px">
+              <div style="font-weight:700;color:var(--text-1);font-size:14px">Q. プランの変更や、クレジットカードの変更はどこで行えますか？</div>
+              <div style="color:var(--text-3);font-size:13px;margin-top:6px">A. 左メニューの「⚙️設定」から一番下へスクロールし、「サブスクリプション管理」ボタンをクリックしてください。専用のStripe決済画面が開き、ダウンクレード・アップグレード等の変更が24時間いつでも可能です。</div>
+            </div>
+            <div style="margin-bottom:8px">
+              <div style="font-weight:700;color:var(--text-1);font-size:14px">📞 サポートへの連絡先は？</div>
+              <div style="color:var(--text-3);font-size:13px;margin-top:6px">ヘルプを読んでも解決しない場合、またはシステムの不具合と思われる場合は、公式LINE（もしくは <a href="mailto:support@admu.jp" style="color:var(--primary);text-decoration:none">support@admu.jp</a> ）までお気軽にお問い合わせください。</div>
             </div>
           </div>
         </div>
@@ -1405,33 +1457,264 @@
         <div id="legalTOS" class="card" style="display:block">
           <h3 class="card-title">利用規約 (Terms of Service)</h3>
           <div style="color:var(--text-3);font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;padding:12px;background:var(--bg-app);border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
-            第1条（適用）<br>本利用規約は、当方が提供する「AdMu」（以下、「本サービス」といいます）の利用条件を定めるものです。登録ユーザーの皆さま（以下、「ユーザー」といいます）には、本規約に従って本サービスをご利用いただきます。<br><br>
-            第2条（利用登録）<br>利用登録を希望する者が、当方の定める方法によって利用登録を申請し、当方がこれを承認することによって利用登録が完了するものとします。...<br><br>
-            （※ 本文はプレースホルダーです。後日専門のフォーマットへ差し替えてください）
-          </div>
+<p>本利用規約（以下「本規約」）は、整体院導（以下「当社」）が提供するAI広告自動運用サービス「AdMu」（以下「本サービス」）の利用条件を定めるものです。本サービスを利用するすべてのお客様（以下「ユーザー」）は、本規約に同意したうえでご利用ください。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第1条（適用）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本規約は、ユーザーと当社との間の本サービスの利用に関わる一切の関係に適用されます。</li>
+    <li>当社が本サービス上で掲示する個別の規定も本規約の一部を構成します。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第2条（定義）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>「本サービス」とは、当社が提供するGoogle広告・Yahoo!広告の自動運用SaaSツール「AdMu」および関連する一切の機能を指します。</li>
+    <li>「エリア独占」とは、同一市区町村レベルの地域において1院のみに本サービスを提供する制度を指します。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第3条（利用登録）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>利用希望者が当社の定める方法により利用申込を行い、当社がこれを承認することにより利用登録が完了するものとします。</li>
+    <li>当社は、以下の場合に利用登録を拒否することがあり、その理由を開示する義務を負いません。
+      <br>（1）虚偽の事項を申告した場合
+      <br>（2）過去に本規約に違反したことがある場合
+      <br>（3）その他当社が不適切と判断した場合</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第4条（エリア独占制度）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本サービスは、同一市区町村レベルの地域において原則として1院のみに提供されます。</li>
+    <li>エリアの独占権は利用契約が有効な期間中のみ保証されます。</li>
+    <li>解約後のエリア独占権は失効し、新規ユーザーに提供される場合があります。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第5条（料金および支払い）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>ユーザーは、当社が定める利用料金を毎月支払うものとします。</li>
+    <li>利用料金はクレジットカードによる自動決済とし、支払い日は契約日に準じます。</li>
+    <li>Google広告・Yahoo!広告等のメディアへの広告費は本サービスの利用料金に含まれません。</li>
+    <li>支払い済みの利用料金は、理由の如何を問わず返金いたしません。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第6条（広告運用に関する免責）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本サービスはAIによる広告運用の最適化を支援するものであり、広告効果（集客数・売上等）を保証するものではありません。</li>
+    <li>Google・Yahoo!等プラットフォームの仕様変更により、一時的に機能が制限される場合があります。</li>
+    <li>広告審査の結果、広告が非承認となった場合の損害について当社は責任を負いません。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第7条（禁止事項）</h4>
+  <p>ユーザーは本サービスの利用にあたり、以下の行為を行ってはなりません。</p>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本サービスの不正アクセス、リバースエンジニアリング</li>
+    <li>他のユーザーまたは第三者の権利を侵害する行為</li>
+    <li>虚偽の情報を登録する行為</li>
+    <li>アカウント情報を第三者に貸与または譲渡する行為</li>
+    <li>その他当社が不適切と判断する行為</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第8条（解約）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>ユーザーは当月末日までに当社に通知することで、翌月末をもって解約できます。</li>
+    <li>解約に伴う違約金・解約手数料は一切発生しません。</li>
+    <li>解約後のデータは、解約日から30日間保持した後に削除されます。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第9条（サービスの変更・中断・終了）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>当社は、事前の通知なく本サービスの内容を変更し、または提供を中断・終了できるものとします。</li>
+    <li>これによりユーザーに生じた損害について、当社は一切の責任を負いません。</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第10条（個人情報の取扱い）</h4>
+  <p>ユーザーの個人情報は、当社の<a href="privacy.html">プライバシーポリシー</a>に従い適切に取り扱います。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第11条（準拠法・裁判管轄）</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本規約の解釈にあたっては日本法を準拠法とします。</li>
+    <li>本サービスに関する紛争については、当社の本店所在地を管轄する裁判所を専属的合意管轄裁判所とします。</li>
+  </ol>
+
+  <p style="margin-top:48px;color:var(--muted);font-size:12px">以上</p>
+</div>
         </div>
 
         <div id="legalPrivacy" class="card" style="display:none">
           <h3 class="card-title">プライバシーポリシー (Privacy Policy)</h3>
           <div style="color:var(--text-3);font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;padding:12px;background:var(--bg-app);border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
-            当事業は、本サービスの利用においてユーザーの個人情報の取扱いについてのプライバシーポリシーを以下の通り定めます。<br><br>
-            第1条（個人情報）<br>「個人情報」とは、個人情報保護法にいう「個人情報」を指すものとします。<br><br>
-            第2条（情報の収集方法）<br>当事業は、ユーザーが利用登録をする際に氏名、メールアドレスなどの個人情報をお尋ねすることがあります。またGoogle Ads等のAPIから取得する運用データに関しても厳重に保護いたします。<br><br>
-            （※ 本文はプレースホルダーです）
-          </div>
+<p>整体院導（以下「当社」）は、AI広告自動運用サービス「AdMu」（以下「本サービス」）における個人情報の取扱いについて、以下のとおりプライバシーポリシーを定めます。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">1. 収集する個人情報</h4>
+  <p>当社は、本サービスの提供にあたり、以下の個人情報を収集することがあります。</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:12px">
+    <tr><th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">情報の種類</th><th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">取得方法</th><th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">利用目的</th></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">氏名・院名</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">お問い合わせフォーム、利用登録</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">ご本人確認、契約管理</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">メールアドレス</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">利用登録時</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">ログイン認証、レポート送信、各種通知</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">地域（市区町村）</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">お問い合わせフォーム</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">エリア独占制度の管理</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">広告アカウント情報</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">OAuth連携</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">Google広告・Yahoo!広告の自動運用</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">広告パフォーマンスデータ</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">API連携（自動取得）</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">AI解析・最適化・レポート生成</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">支払い情報</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">決済システム（Stripe）経由</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">月額利用料の決済（当社はカード番号を直接保持しません）</td></tr>
+  </table>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">2. 利用目的</h4>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>本サービスの提供・運営・改善</li>
+    <li>広告運用の自動最適化およびAI解析</li>
+    <li>利用状況のモニタリング・分析</li>
+    <li>レポートメール・アラート通知の送信</li>
+    <li>お問い合わせへの回答</li>
+    <li>利用規約への違反行為への対応</li>
+    <li>新機能・キャンペーン等のご案内（オプトアウト可能）</li>
+  </ol>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">3. 第三者提供</h4>
+  <p>当社は、以下の場合を除き、個人情報を第三者に提供しません。</p>
+  <ul style="padding-left:24px;margin-bottom:12px">
+    <li>ユーザーの同意がある場合</li>
+    <li>法令に基づく場合</li>
+    <li>本サービスの提供に必要な範囲で業務委託先に提供する場合（Google、Yahoo!、Stripe等）</li>
+  </ul>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">4. 外部サービスとの連携</h4>
+  <p>本サービスでは以下の外部サービスを利用しています。各サービスのプライバシーポリシーもご確認ください。</p>
+  <ul style="padding-left:24px;margin-bottom:12px">
+    <li><strong>Google Ads API</strong> — 広告アカウントの閲覧・操作に使用。<a href="https://policies.google.com/privacy" target="_blank">Googleプライバシーポリシー</a></li>
+    <li><strong>Gemini AI（Google）</strong> — 広告文生成・レポート解析に使用。送信データにはユーザーの広告パフォーマンスデータを含みます。</li>
+    <li><strong>Stripe</strong> — 月額料金の決済処理に使用。<a href="https://stripe.com/jp/privacy" target="_blank">Stripeプライバシーポリシー</a></li>
+  </ul>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">5. セキュリティ</h4>
+  <p>当社は、個人情報の漏洩・滅失・毀損の防止のため、以下の措置を講じています。</p>
+  <ul style="padding-left:24px;margin-bottom:12px">
+    <li>通信のSSL/TLS暗号化</li>
+    <li>パスワードのハッシュ化保存（bcrypt）</li>
+    <li>JWTによるセッション管理・有効期限設定</li>
+    <li>アクセス権限の最小化（ロールベースアクセス制御）</li>
+  </ul>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">6. データの保持期間</h4>
+  <ul style="padding-left:24px;margin-bottom:12px">
+    <li>利用中: 契約期間中は継続保持</li>
+    <li>解約後: 解約日から30日間保持した後、完全に削除</li>
+    <li>法令上の保持義務がある場合はその期間に従います</li>
+  </ul>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">7. ユーザーの権利</h4>
+  <p>ユーザーは当社に対し、以下の請求を行うことができます。</p>
+  <ol style="padding-left:24px;margin-bottom:12px">
+    <li>自己の個人情報の開示</li>
+    <li>個人情報の訂正・追加・削除</li>
+    <li>個人情報の利用停止</li>
+    <li>第三者への提供の停止</li>
+  </ol>
+  <p>請求は下記のお問い合わせ先までご連絡ください。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">8. Cookieの使用</h4>
+  <p>本サービスでは、ログインセッションの維持および利用状況の改善を目的としてCookieおよびlocalStorageを使用しています。ブラウザの設定によりCookieを無効にすることが可能ですが、一部機能が使用できなくなる場合があります。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">9. ポリシーの変更</h4>
+  <p>当社は、法令の変更またはサービスの変更に伴い、本ポリシーを変更することがあります。変更後のポリシーは本ページに掲載した時点で効力を生じます。重要な変更がある場合はメール等でお知らせいたします。</p>
+
+  <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">10. お問い合わせ</h4>
+  <p>個人情報の取扱いに関するお問い合わせは、以下までご連絡ください。</p>
+  <p style="margin-top:12px;padding:16px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:13px;">
+    整体院導<br>
+    メール: info@admu.jp<br>
+    所在地: 東京都（詳細は<a href="company.html">特定商取引法に基づく表記</a>をご参照ください）
+  </p>
+</div>
         </div>
 
         <div id="legalSCTA" class="card" style="display:none">
           <h3 class="card-title">特定商取引法に基づく表記</h3>
           <div style="color:var(--text-3);font-size:13px;line-height:1.6;max-height:400px;overflow-y:auto;padding:12px;background:var(--bg-app);border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
-            <table style="width:100%;border-collapse:collapse;text-align:left">
-              <tr><th style="padding:8px;border-bottom:1px solid #334155;width:30%">販売業者</th><td style="padding:8px;border-bottom:1px solid #334155">（会社名または事業者名を入力）</td></tr>
-              <tr><th style="padding:8px;border-bottom:1px solid #334155">運営責任者</th><td style="padding:8px;border-bottom:1px solid #334155">（代表者名を入力）</td></tr>
-              <tr><th style="padding:8px;border-bottom:1px solid #334155">所在地</th><td style="padding:8px;border-bottom:1px solid #334155">（住所を入力）</td></tr>
-              <tr><th style="padding:8px;border-bottom:1px solid #334155">メールアドレス</th><td style="padding:8px;border-bottom:1px solid #334155">support@admu.jp</td></tr>
-              <tr><th style="padding:8px;border-bottom:1px solid #334155">お支払方法</th><td style="padding:8px;border-bottom:1px solid #334155">現在、銀行振込によるご請求とさせていただいております。</td></tr>
-            </table>
-          </div>
+<table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:12px">
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">事業者名</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">整体院導</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">代表者</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">石川（※公開請求があった場合に正式名を速やかに開示いたします）</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">所在地</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">東京都（※公開請求があった場合に速やかに開示いたします）</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">連絡先</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        メール: info@admu.jp<br>
+        ※お問い合わせはメールにてお願いいたします。<br>
+        電話番号は請求があった場合に遅滞なく開示いたします。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">サービス名</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">AdMu（AI広告自動運用システム）</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">販売価格</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        STARTER プラン: 月額 19,800円（税込）<br>
+        STANDARD プラン: 月額 29,800円（税込）<br>
+        初期設定費: 29,800円（税込・1回のみ）<br>
+        ※ Google広告・Yahoo!広告等への広告費は別途必要です。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">追加費用</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        本サービスの利用料金以外に、インターネット接続料金・通信料金等が別途必要となります。<br>
+        成果報酬・広告費に対する追加手数料は一切かかりません。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">支払方法</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">クレジットカード（Visa, Mastercard, American Express, JCB）<br>Stripeによる自動決済</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">支払時期</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        初期設定費: お申し込み時に一括払い<br>
+        月額利用料: 契約日を起算日とし、毎月自動決済<br>
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">サービスの提供時期</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">お申し込み後、初期設定完了次第（通常1〜3営業日以内）</td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">キャンセル・解約</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        当月末日までにご連絡いただくことで、翌月末をもって解約できます。<br>
+        <strong>違約金・解約手数料: なし</strong><br>
+        日割り返金は行いません。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">返品・返金</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        デジタルサービスの性質上、サービス提供後の返品・返金はお受けしておりません。<br>
+        ただし、サービスの重大な不具合により利用不能な期間が発生した場合は、該当期間の日割り分を返金いたします。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">動作環境</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        Google Chrome / Safari / Firefox / Microsoft Edge の最新版<br>
+        インターネット接続環境が必要です。
+      </td>
+    </tr>
+    <tr>
+      <th style="border:1px solid rgba(255,255,255,0.1);padding:8px;background:rgba(255,255,255,0.05);text-align:left">特記事項</th>
+      <td style="border:1px solid rgba(255,255,255,0.1);padding:8px">
+        本サービスは <strong>エリア独占制</strong> を採用しています。<br>
+        同一市区町村レベルの地域には原則1院のみに提供されます。<br>
+        お申し込みいただいた地域に既存の契約がある場合は、ご利用をお断りする場合がございます。
+      </td>
+    </tr>
+  </table>
+</div>
         </div>
       </section>
 
@@ -1455,6 +1738,8 @@
   <!-- モバイル サイドバーオーバーレイ -->
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+  <!-- Sentry Error Tracking -->
+  <script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js" crossorigin="anonymous"></script>
   <script src="js/app.js?v=20260405-autologin"></script>
 </body>
 </html>
