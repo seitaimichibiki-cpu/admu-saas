@@ -16,7 +16,7 @@ services:
           name: admu-db
           property: connectionString
       - key: MOCK_ADS_API
-        value: "false"
+        sync: false
       - key: PORT
         value: "10000"
       - key: JWT_SECRET
