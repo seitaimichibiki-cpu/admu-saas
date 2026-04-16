@@ -348,6 +348,7 @@ async function api(path, opts={}) {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
     headers: headers,
+    cache: 'no-store',
     ...opts
   });
   if (res.status === 204) return {};
@@ -882,12 +883,12 @@ async function saveClinic() {
   const body = {
     id: id ? parseInt(id) : null,
     name,
-    license_key: document.getElementById('clinicLicenseKey').value.trim() || null
+    license_key: document.getElementById('clinicLicenseKey').value.trim() || null,
+    password: localStorage.getItem('admu_admin_token') || ''
   };
   try {
-    await fetch('/api/admin/clinics', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      credentials: 'include',
+    await api('/admin/clinics', {
+      method: 'POST',
       body: JSON.stringify(body)
     });
     toast('保存しました ✅', 'success');

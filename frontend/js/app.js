@@ -433,6 +433,7 @@ async function api(path, options={}) {
     const res = await fetch(API + path, {
       headers: authHeaders(),
       credentials: 'include',
+      cache: 'no-store',
       ...options,
     });
     if (!res.ok) {
