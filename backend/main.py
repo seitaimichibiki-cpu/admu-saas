@@ -1390,6 +1390,21 @@ def serve_js(file_path: str):
         return FR(full_path, media_type="application/javascript")
     raise HTTPException(404)
 
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+def serve_apple_touch_icon():
+    p = os.path.join(FRONTEND_DIR, "apple-touch-icon.png")
+    return FileResponse(p, media_type="image/png") if os.path.exists(p) else {"error": "not found"}
+
+@app.get("/favicon.png", include_in_schema=False)
+def serve_favicon_png():
+    p = os.path.join(FRONTEND_DIR, "favicon.png")
+    return FileResponse(p, media_type="image/png") if os.path.exists(p) else {"error": "not found"}
+
+@app.get("/favicon.ico", include_in_schema=False)
+def serve_favicon_ico():
+    p = os.path.join(FRONTEND_DIR, "favicon.ico")
+    return FileResponse(p, media_type="image/x-icon") if os.path.exists(p) else {"error": "not found"}
+
 @app.get("/admin.html", include_in_schema=False)
 def serve_admin():
     admin_path = os.path.join(FRONTEND_DIR, "admin.html")
