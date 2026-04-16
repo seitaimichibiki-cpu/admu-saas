@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     yield
     monitor.stop_scheduler()
 
-app = FastAPI(title="Google広告自動運用システム", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Google広告自動運用システム", version="1.0.1", lifespan=lifespan)
 
 from fastapi.responses import JSONResponse
 import traceback
