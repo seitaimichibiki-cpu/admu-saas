@@ -44,8 +44,27 @@ def _check_campaigns(clinic_id: int):
     acc = _get_account_and_notify_config(clinic_id)
     if not acc:
         return
-    client = AdsClient(acc)
-    campaigns = client.list_campaigns()
+    try:
+        client = AdsClient(acc)
+        campaigns = client.list_campaigns()
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[Monitor] API接続エラー clinic_id={clinic_id}: {error_msg}")
+        # API認証・トークンエラーの検知
+        if any(err in error_msg for err in ["invalid_grant", "UNAUTHENTICATED", "DEVELOPER_TOKEN", "PERMISSION_DENIED"]):
+            msg = f"🚨 API認証・トークンエラー発生 (clinic_id={clinic_id})\n{error_msg[:100]}...\n至急、トークンの有効期限やアカウントの停止状態を確認してください。"
+            db.create_alert(clinic_id, "API認証エラー: Google Adsへの接続に失敗しました", level="ERROR")
+            
+            # 管理者へ緊急LINE通知
+            admin_line = os.environ.get("LINE_DEFAULT_USER_ID", "")
+            channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+            if admin_line and channel_token:
+                try:
+                    import line_notifier
+                    line_notifier.send_text(channel_token, admin_line, msg)
+                except Exception as ne:
+                    print(f"[Monitor] 管理者へのLINE通知に失敗: {ne}")
+        return
 
     abnormal = []
     budget_warnings = []
@@ -228,6 +247,62 @@ by AdMu System Monitor"""
     print("[Monitor] システム日次レポート送信完了")
 
 
+def _run_auto_negative_keyword_scan(clinic_id: int):
+    """毎週水曜3時: 検索語句を自動スキャンし除外KW候補をDBに追加 ②"""
+    acc = _get_account_and_notify_config(clinic_id)
+    if not acc:
+        return
+
+    try:
+        client = AdsClient(acc)
+        # コスト¥500以上使ってコンバージョン0の語句をムダと判定
+        wasted_terms = [
+            t for t in client.get_search_term_report(
+                days=30, min_cost_yen=500, max_conversions=0
+            ) if t["is_wasted"]
+        ]
+
+        newly_added = []
+        for term in wasted_terms:
+            kw = term["search_term"]
+            # すでに除外リストにあればスキップ
+            existing = db.list_negative_keywords(clinic_id)
+            if any(nk["keyword"] == kw for nk in existing):
+                continue
+            db.add_negative_keyword(
+                clinic_id, kw, "BROAD",
+                campaign_id=None, source="auto_scan"
+            )
+            db.create_alert(
+                clinic_id,
+                f"除外KW自動追加: 「{kw}」 費用¥{term['cost_yen']:,} CV={term['conversions']}",
+                level="INFO"
+            )
+            newly_added.append(term)
+
+        if newly_added:
+            # LINE通知
+            token = acc.get("line_channel_token", "")
+            uid   = acc.get("line_user_id", "")
+            if token and uid:
+                summary = "\n".join(
+                    [f"・「{t['search_term']}」(費用¥{t['cost_yen']:,}、CV{t['conversions']})"]
+                    for t in newly_added[:5]  # 最大5件表示
+                )
+                msg = (
+                    f"🔍 除外KW自動スキャン完了\n"
+                    f"{len(newly_added)}件のムダ語句を除外リストに追加しました。\n\n"
+                    f"{summary}\n\n"
+                    f"AdMuダッシュボードで詳細を確認してください。"
+                )
+                line_notifier.send_text(token, uid, msg)
+
+        print(f"[Monitor] 検索語句自動スキャン完了 clinic_id={clinic_id} 新規除外={len(newly_added)}件")
+
+    except Exception as e:
+        print(f"[Monitor] 検索語句自動スキャンエラー clinic_id={clinic_id}: {e}")
+
+
 def _run_cleanup():
     """週1回曜深夜: 古いログやアラートを削除"""
     try:
@@ -266,6 +341,11 @@ def start_scheduler():
         _scheduler.add_job(
             _send_weekly_report, CronTrigger(day_of_week='mon', hour=8, minute=0),
             id=f"weekly_{cid}", args=[cid], replace_existing=True
+        )
+        # ② 検索語句自動スキャン（毎週水曜 3:00）
+        _scheduler.add_job(
+            _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
+            id=f"nkw_scan_{cid}", args=[cid], replace_existing=True
         )
 
     # システム全体の日次稼働レポート（毎日 9:00 管理者宛）
