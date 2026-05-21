@@ -16,7 +16,7 @@ services:
           name: admu-db
           property: connectionString
       - key: MOCK_ADS_API
-        sync: false
+        value: "false"  # Basic Access承認済み（2026-05）のため本番モード固定
       - key: PORT
         value: "10000"
       - key: JWT_SECRET
@@ -72,6 +72,18 @@ services:
       - key: LOGICTION_BASE_URL
         sync: false
       - key: INTEGRATION_SECRET_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: "production"
+      - key: MASTER_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: MASTER_ADS_CLIENT_ID
+        sync: false
+      - key: MASTER_ADS_CLIENT_SECRET
+        sync: false
+      - key: MASTER_ADS_REFRESH_TOKEN
+        sync: false
+      - key: MASTER_ADS_LOGIN_CUSTOMER_ID
         sync: false
 
   - type: web
