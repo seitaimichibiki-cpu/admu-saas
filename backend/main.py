@@ -286,6 +286,10 @@ class SettingsReq(BaseModel):
     yahoo_client_secret: Optional[str] = None
     yahoo_refresh_token: Optional[str] = None
     yahoo_mock_mode: Optional[int] = None
+    # BYOK: 顧客自身のGemini APIキー
+    gemini_api_key: Optional[str] = None
+    # AI機能の月間呼び出し上限（0=無効, -1=無制限, 1以上=N回まで）
+    ai_monthly_limit: Optional[int] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -599,8 +603,8 @@ def _run_ai_budget_allocation(clinic_id: int, monthly_budget_yen: int, ads_clien
             "reason":           _allocation_reason(cp.get("name",""), s["roi_score"], s["est_cpa"]),
         })
 
-    # Gemini AIで配分の解説文を生成
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    # Gemini AIで配分の解説文を生成（顧客自身のGemini APIキーを使用）
+    gemini_key = db.get_gemini_api_key(clinic_id)
     ai_comment = ""
     if gemini_key:
         try:
@@ -672,10 +676,11 @@ def run_bid_now(clinic_id: int = 1):
 # ---- API: 広告文生成 ----
 @app.post("/api/ad-copy/generate")
 def generate_ad_copy(req: AdCopyReq):
-    if not db.check_ai_quota_available(req.clinic_id):
-        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+    ok, reason = db.check_ai_limit(req.clinic_id)
+    if not ok:
+        raise HTTPException(status_code=429, detail=reason)
 
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(req.clinic_id)
     acc = db.get_ads_account(req.clinic_id) or {}
     context = req.model_dump()
     context.update({
@@ -698,9 +703,10 @@ def generate_ad_copy(req: AdCopyReq):
 
 @app.post("/api/analyze-report")
 async def analyze_report(file: UploadFile = File(...), clinic_id: int = 1):
-    if not db.check_ai_quota_available(clinic_id):
-        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    ok, reason = db.check_ai_limit(clinic_id)
+    if not ok:
+        raise HTTPException(status_code=429, detail=reason)
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         # モックレスポンスを返す（デモ・テスト用）
         db.increment_ai_quota(clinic_id, feature_name="lp_analysis")
@@ -853,7 +859,7 @@ def test_line(req: LineTestReq):
 def get_settings(clinic_id: int = 1):
     acc = db.get_ads_account(clinic_id) or {}
     # シークレット系はマスク
-    for secret_key in ["developer_token", "client_secret", "refresh_token", "yahoo_client_secret", "yahoo_refresh_token", "smtp_pass"]:
+    for secret_key in ["developer_token", "client_secret", "refresh_token", "yahoo_client_secret", "yahoo_refresh_token", "smtp_pass", "gemini_api_key"]:
         if acc.get(secret_key):
             acc[secret_key] = "***設定済み***"
     return {"settings": acc}
@@ -1809,7 +1815,7 @@ async def lp_diagnosis(req: LpDiagReq):
         fetch_error = str(e)
         lp_content = f"（URLの取得に失敗しました: {e}\nモックモードで診断を実行します）"
 
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -1865,7 +1871,7 @@ class KwSuggestReq(BaseModel):
 @app.post("/api/keyword-suggest")
 async def keyword_suggest(req: KwSuggestReq):
     """現在の広告データとペルソナを元にKW提案をAI生成"""
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -1928,7 +1934,7 @@ class CompetitorReq(BaseModel):
 @app.post("/api/competitor-analysis")
 async def competitor_analysis(req: CompetitorReq):
     """競合院の広告文をAIで分析して差別化提案を生成"""
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -2616,7 +2622,7 @@ async def psych_score_ad_copy(req: PsychScoreReq):
     広告文をCialdini心理原則に基づく9軸でAI採点する。
     各軸0〜10でスコアリングし、改善提案も添付。
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -2693,7 +2699,7 @@ async def daily_intelligence_brief(clinic_id: int = 1):
     「今日やるべき最優先アクション Top3」を返す。
     HubSpot Einstein / Salesforce Einstein相当の機能。
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -2871,7 +2877,7 @@ async def ltv_simulator(req: LtvSimReq):
         })
 
     # AI解釈コメント生成
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     ai_insight = ""
     if gemini_key:
         try:
@@ -2920,7 +2926,7 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
     if not db.check_ai_quota_available(clinic_id):
         raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
         
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
 
@@ -3118,7 +3124,7 @@ async def seasonal_calendar(clinic_id: int = 1, generate_copy: bool = False):
     }
 
     if generate_copy:
-        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        gemini_key = db.get_gemini_api_key(clinic_id)
         if gemini_key:
             try:
                 import google.genai as genai
@@ -3210,7 +3216,7 @@ async def performance_heatmap(clinic_id: int = 1):
     }
 
     # AI解釈
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     ai_insight = ""
     if gemini_key:
         try:
@@ -3338,7 +3344,7 @@ async def negative_kw_ai_scan(clinic_id: int = 1):
             })
 
     # AI追加提案（現状のキャンペーンを考慮した追加提案）
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = db.get_gemini_api_key(clinic_id)
     ai_additional = []
     if gemini_key:
         try:

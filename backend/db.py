@@ -316,6 +316,10 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
         # contractsテーブル: AI利用上限（プラン別設定用、-1=無制限）
         "ALTER TABLE contracts ADD COLUMN ai_quota_monthly INTEGER DEFAULT 30",
+        # 顧客自身のGemini APIキー（BYOK: Bring Your Own Key）
+        "ALTER TABLE ads_accounts ADD COLUMN gemini_api_key TEXT",
+        # 月間AI呼び出し上限（0=AI機能無効, -1=無制限）
+        "ALTER TABLE ads_accounts ADD COLUMN ai_monthly_limit INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -441,16 +445,19 @@ def get_ads_account(clinic_id: int):
         if not row:
             return None
         data = dict(row)
-        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token"]
+        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key"]
         for field in SECRET_FIELDS:
             if data.get(field):
-                data[field] = crypto_utils.decrypt(data[field])
+                try:
+                    data[field] = crypto_utils.decrypt(data[field])
+                except Exception:
+                    pass  # 復号失敗時はそのまま（平文で保存されている場合の後方互換）
         return data
 
 def save_ads_account(clinic_id: int, data: dict):
     import crypto_utils
     secure_data = dict(data)
-    SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token"]
+    SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key"]
     for field in SECRET_FIELDS:
         if field in secure_data and secure_data[field]:
             secure_data[field] = crypto_utils.encrypt(secure_data[field])
@@ -462,7 +469,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "target_age_gender", "target_job_lifestyle", "target_pain_point", "target_desired_outcome",
                   "notification_email", "smtp_user", "smtp_pass", "ga4_property_id", "ga4_api_secret",
                   "monthly_budget_yen", "yahoo_account_id", "yahoo_client_id", "yahoo_client_secret",
-                  "yahoo_refresh_token", "yahoo_mock_mode"]
+                  "yahoo_refresh_token", "yahoo_mock_mode",
+                  "gemini_api_key", "ai_monthly_limit"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]
@@ -473,6 +481,61 @@ def save_ads_account(clinic_id: int, data: dict):
                 (clinic_id, secure_data.get("customer_id", ""), secure_data.get("mock_mode", 1))
             )
         conn.commit()
+
+def get_gemini_api_key(clinic_id: int) -> str:
+    """クリニック自身のGemini APIキーを取得（DB優先→環境変数フォールバック）"""
+    account = get_ads_account(clinic_id)
+    if account and account.get("gemini_api_key"):
+        return account["gemini_api_key"]
+    # フォールバック: システム管理者共有キー（石川さんのキー）
+    return os.environ.get("GEMINI_API_KEY", "")
+
+
+def check_ai_limit(clinic_id: int) -> tuple[bool, str]:
+    """AI呼び出しが可能かチェック。(ok: bool, reason: str) を返す。"""
+    account = get_ads_account(clinic_id)
+    if not account:
+        return False, "アカウント情報が見つかりません"
+    limit = account.get("ai_monthly_limit", 0)
+    if limit == 0:
+        return False, "AI機能が無効です。設定からGemini APIキーを登録してください。"
+    if limit == -1:
+        return True, ""  # 無制限
+    # 今月の使用回数チェック
+    from datetime import datetime
+    ym = datetime.now().strftime("%Y-%m")
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT usage_count FROM ai_usage_logs WHERE clinic_id=? AND year_month=? AND feature_name='gemini'",
+            (clinic_id, ym)
+        ).fetchone()
+    count = row["usage_count"] if row else 0
+    if count >= limit:
+        return False, f"今月のAI利用上限（{limit}回）に達しました。設定から上限を変更するか、来月までお待ちください。"
+    return True, ""
+
+
+def increment_ai_usage(clinic_id: int):
+    """AI機能を1回使用したときに呼び出すカウンター"""
+    from datetime import datetime
+    ym = datetime.now().strftime("%Y-%m")
+    with get_conn() as conn:
+        if USE_PG:
+            conn.execute("""
+                INSERT INTO ai_usage_logs (clinic_id, year_month, feature_name, usage_count)
+                VALUES (%s, %s, 'gemini', 1)
+                ON CONFLICT (clinic_id, year_month, feature_name)
+                DO UPDATE SET usage_count = ai_usage_logs.usage_count + 1
+            """, (clinic_id, ym))
+        else:
+            conn.execute("""
+                INSERT INTO ai_usage_logs (clinic_id, year_month, feature_name, usage_count)
+                VALUES (?, ?, 'gemini', 1)
+                ON CONFLICT (clinic_id, year_month, feature_name)
+                DO UPDATE SET usage_count = usage_count + 1
+            """, (clinic_id, ym))
+        conn.commit()
+
 
 # ---- キャンペーン ----
 def list_campaigns(clinic_id: int):
