@@ -94,7 +94,10 @@ class _PGConnWrapper:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
+        if hasattr(self, "_is_closed") and self._is_closed:
+            return
+        self._is_closed = True
+        get_pg_pool().putconn(self._conn)
 
     def cursor(self, **kwargs):
         return self._conn.cursor(**kwargs)
@@ -105,13 +108,23 @@ class _PGConnWrapper:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self._conn.rollback()
-        self._conn.close()
+        self.close()
         return False
+
+
+_pg_pool = None
+def get_pg_pool():
+    global _pg_pool
+    if _pg_pool is None:
+        from psycopg2.pool import SimpleConnectionPool
+        _pg_pool = SimpleConnectionPool(1, 20, DATABASE_URL)
+    return _pg_pool
 
 
 def get_conn():
     if USE_PG:
-        pg_conn = psycopg2.connect(DATABASE_URL)
+        pool = get_pg_pool()
+        pg_conn = pool.getconn()
         pg_conn.autocommit = False
         return _PGConnWrapper(pg_conn)
     else:
@@ -244,12 +257,38 @@ def init_db():
     # 初期データが存在しなければ作成（ID:1となる）
     has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
     if not has_clinics:
-        conn.execute("INSERT INTO clinics (name, license_key) VALUES ('システム管理者', 'DEMO-0000-0000-0000')")
+        conn.execute("INSERT INTO clinics (name, license_key, plan_status) VALUES ('システム管理者', 'DEMO-0000-0000-0000', 'active')")
         conn.commit()
         demo = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
         clinic_id = demo["id"]
         conn.execute("INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, 'DEMO-CUSTOMER-ID', 1)", (clinic_id,))
         conn.commit()
+
+    # 管理者ユーザーが存在しなければ作成
+    has_admin = conn.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone()
+    if not has_admin:
+        import auth
+        # ユーザー指定の初期管理者パスワード
+        admin_pass_hash = auth.hash_password("gai1124714")
+        demo = conn.execute("SELECT id FROM clinics ORDER BY id ASC LIMIT 1").fetchone()
+        if demo:
+            clinic_id = demo[0] if isinstance(demo, tuple) else demo["id"]
+            # 既に別のアカウントで登録されている場合は削除して作り直すか、存在しない場合のみ作成
+            has_user = conn.execute("SELECT id FROM users WHERE email='seitaimichibiki@gmail.com'").fetchone()
+            if not has_user:
+                conn.execute(
+                    "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
+                    (clinic_id, "seitaimichibiki@gmail.com", admin_pass_hash)
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET role='admin', password_hash=?, clinic_id=? WHERE email='seitaimichibiki@gmail.com'",
+                    (admin_pass_hash, clinic_id)
+                )
+            conn.commit()
+            # adminの所属クリニックを必ずactiveにする
+            conn.execute("UPDATE clinics SET plan_status='active' WHERE id=?", (clinic_id,))
+            conn.commit()
 
     # マイグレーション（既存DBへのカラム追加）
     migrations = [
