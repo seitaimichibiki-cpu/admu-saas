@@ -489,7 +489,46 @@
             </div>
           </div>
         </div>
+
+        <!-- ⑤ 今週のアクションウィジェット -->
+        <div class="card" id="weeklyActionsCard" style="margin-top:16px;border:1px solid rgba(16,185,129,0.3);background:linear-gradient(135deg,rgba(16,185,129,0.05),rgba(30,41,59,0.8))">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
+              <div>
+                <div style="font-weight:800;font-size:14px">今週すべき3つのアクション <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;border-radius:99px;padding:2px 8px;font-weight:700">AI自動生成</span></div>
+                <div style="font-size:11px;color:var(--text-3)">毎週月曜に自動更新</div>
+              </div>
+            </div>
+            <button class="btn btn-ghost" style="font-size:11px;padding:5px 12px" onclick="loadWeeklyActions()">🔄 更新</button>
+          </div>
+          <div id="weeklyActionsContent">
+            <div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center">
+              <div class="spinner" style="width:16px;height:16px"></div><span>AIが分析中...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ⑦ 業界ベンチマーク -->
+        <div class="card" id="benchmarkCard" style="margin-top:16px;border:1px solid rgba(245,158,11,0.3);background:linear-gradient(135deg,rgba(245,158,11,0.05),rgba(30,41,59,0.8))">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">🏆</div>
+              <div>
+                <div style="font-weight:800;font-size:14px">業界ベンチマーク</div>
+                <div style="font-size:11px;color:var(--text-3)">同業他院との匿名比較</div>
+              </div>
+            </div>
+          </div>
+          <div id="benchmarkContent">
+            <div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center">
+              <div class="spinner" style="width:16px;height:16px"></div><span>比較データ読み込み中...</span>
+            </div>
+          </div>
+        </div>
       </section>
+
+
 
       <!-- Campaigns -->
       <section id="page-campaigns" class="page hidden">
@@ -1000,6 +1039,22 @@
 
       <!-- 競合分析 -->
       <section id="page-competitor" class="page hidden">
+        <!-- オークションインサイト -->
+        <div class="card" style="margin-bottom:16px;border:1px solid rgba(180,83,9,0.3)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <div style="width:36px;height:36px;background:linear-gradient(135deg,#b45309,#92400e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">📡</div>
+            <div>
+              <div style="font-weight:800;font-size:14px">オークションインサイト</div>
+              <div style="font-size:11px;color:var(--text-3)">Google広告オークションでの競合シェア分析</div>
+            </div>
+          </div>
+          <div id="auctionInsightContent">
+            <div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center">
+              <div class="spinner" style="width:16px;height:16px"></div><span>競合データ読み込み中...</span>
+            </div>
+          </div>
+        </div>
+
         <div class="card" style="margin-bottom:16px">
           <h3 class="card-title">🕵️ 競合広告スパイ — 差別化分析</h3>
           <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">エリアと業種を指定すると、競合広告のパターンをAIが分析して差別化ポイントと推奨見出しを提案します。</p>
@@ -1011,6 +1066,7 @@
         </div>
         <div id="competitorResults"></div>
       </section>
+
 
       <!-- Settings -->
 
@@ -1798,5 +1854,222 @@
   <!-- Sentry Error Tracking -->
   <script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js" crossorigin="anonymous"></script>
   <script src="js/app.js?v=20260416-fix-mock-mode"></script>
+
+  <!-- ① AIアドバイザーチャット フローティングウィジェット -->
+  <style>
+    #aiChatBtn{position:fixed;bottom:24px;right:24px;z-index:9990;width:56px;height:56px;background:linear-gradient(135deg,#3b82f6,#6366f1);border-radius:50%;border:none;cursor:pointer;box-shadow:0 8px 24px rgba(59,130,246,0.5);display:flex;align-items:center;justify-content:center;font-size:24px;transition:all 0.3s;animation:pulse-chat 3s infinite}
+    @keyframes pulse-chat{0%,100%{box-shadow:0 8px 24px rgba(59,130,246,0.5)}50%{box-shadow:0 8px 32px rgba(59,130,246,0.8)}}
+    #aiChatBtn:hover{transform:scale(1.1)}
+    #aiChatPanel{position:fixed;bottom:92px;right:24px;z-index:9990;width:360px;max-width:calc(100vw - 32px);background:#1e293b;border:1px solid rgba(59,130,246,0.3);border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,0.6);display:none;flex-direction:column;overflow:hidden;max-height:520px}
+    #aiChatPanel.open{display:flex;animation:slide-up 0.3s ease-out}
+    @keyframes slide-up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .ai-chat-header{background:linear-gradient(135deg,#1e3a5f,#1e293b);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(59,130,246,0.2)}
+    .ai-chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:200px;max-height:340px}
+    .ai-msg{padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.7;max-width:88%;white-space:pre-wrap}
+    .ai-msg.ai{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.2);color:#e2e8f0;align-self:flex-start}
+    .ai-msg.user{background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;align-self:flex-end}
+    .ai-msg.thinking{color:#64748b;font-style:italic;display:flex;align-items:center;gap:8px}
+    .ai-chat-input-row{padding:12px;border-top:1px solid rgba(255,255,255,0.06);display:flex;gap:8px}
+    .ai-chat-input{flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;color:#f1f5f9;font-size:13px;outline:none;resize:none;font-family:inherit}
+    .ai-chat-input:focus{border-color:#3b82f6}
+    .ai-chat-send{background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;border-radius:8px;padding:8px 14px;color:#fff;cursor:pointer;font-size:14px;transition:opacity 0.2s}
+    .ai-chat-send:hover{opacity:0.85}
+  </style>
+
+  <button id="aiChatBtn" onclick="toggleAiChat()" title="AIアドバイザーに質問する">🤖</button>
+  <div id="aiChatPanel">
+    <div class="ai-chat-header">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;background:linear-gradient(135deg,#3b82f6,#6366f1);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px">🤖</div>
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#f1f5f9">AdMu AI アドバイザー</div>
+          <div style="font-size:11px;color:#64748b">広告のことなら何でも聞いてください</div>
+        </div>
+      </div>
+      <button onclick="toggleAiChat()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div class="ai-chat-messages" id="aiChatMessages">
+      <div class="ai-msg ai">👋 こんにちは！AdMu AIアドバイザーです。<br>「なぜCTRが下がったの？」「今すぐできる改善は？」など、広告に関することは何でも聞いてください。</div>
+    </div>
+    <div class="ai-chat-input-row">
+      <textarea class="ai-chat-input" id="aiChatInput" rows="1" placeholder="例: なぜCTRが下がっているの？" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAiChat()}"></textarea>
+      <button class="ai-chat-send" onclick="sendAiChat()">→</button>
+    </div>
+  </div>
+
+  <script>
+  // ① AIチャット
+  function toggleAiChat() {
+    const panel = document.getElementById('aiChatPanel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) {
+      document.getElementById('aiChatInput').focus();
+    }
+  }
+
+  async function sendAiChat() {
+    const input = document.getElementById('aiChatInput');
+    const q = input.value.trim();
+    if (!q) return;
+    const msgs = document.getElementById('aiChatMessages');
+
+    // ユーザーメッセージ表示
+    msgs.innerHTML += `<div class="ai-msg user">${q.replace(/</g,'&lt;')}</div>`;
+    input.value = '';
+    const thinking = document.createElement('div');
+    thinking.className = 'ai-msg thinking';
+    thinking.innerHTML = '<div class="spinner" style="width:14px;height:14px"></div> 考え中...';
+    msgs.appendChild(thinking);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // KPIコンテキストを収集
+    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
+    const kpiEl = document.getElementById('kpiGrid');
+    let context = {};
+    try {
+      const kpiData = window._lastKpiData || {};
+      context = kpiData;
+    } catch {}
+
+    try {
+      const res = await fetch(`${window.API_BASE || ''}/api/ai-chat`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {'Content-Type':'application/json', 'X-CSRF-Token': getCookie('csrf_token') || ''},
+        body: JSON.stringify({ clinic_id: cid, question: q, context })
+      });
+      const data = await res.json();
+      thinking.remove();
+      const answer = data.answer || data.detail || '回答を取得できませんでした';
+      msgs.innerHTML += `<div class="ai-msg ai">${answer.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+    } catch(e) {
+      thinking.remove();
+      msgs.innerHTML += `<div class="ai-msg ai" style="color:#f87171">エラーが発生しました: ${e.message}</div>`;
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  // ⑤ 今週のアクション
+  async function loadWeeklyActions() {
+    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
+    const el = document.getElementById('weeklyActionsContent');
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center"><div class="spinner" style="width:16px;height:16px"></div><span>AIが分析中...</span></div>';
+    try {
+      const res = await fetch(`${window.API_BASE || ''}/api/dashboard/weekly-actions?clinic_id=${cid}`, {credentials:'include'});
+      const data = await res.json();
+      const urgencyColor = {high:'#ef4444', medium:'#f59e0b', low:'#10b981'};
+      const urgencyLabel = {high:'🔴 緊急', medium:'🟡 今週中', low:'🟢 余裕あり'};
+      if (!data.actions || data.actions.length === 0) {
+        el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-3);font-size:13px">データが不足しています。Google広告を連携するとAIがアクションを提案します。</div>';
+        return;
+      }
+      el.innerHTML = data.actions.map((a, i) => `
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;${i < data.actions.length-1 ? 'border-bottom:1px solid rgba(255,255,255,0.06)' : ''}">
+          <div style="width:36px;height:36px;background:rgba(255,255,255,0.05);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${a.icon}</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:13px;margin-bottom:3px">${a.title}</div>
+            <div style="font-size:12px;color:var(--text-2)">${a.desc}</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${urgencyColor[a.urgency]||'#64748b'};white-space:nowrap">${urgencyLabel[a.urgency]||a.urgency}</span>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗しました: ${e.message}</div>`;
+    }
+  }
+
+  // ⑦ ベンチマーク
+  async function loadBenchmark() {
+    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
+    const el = document.getElementById('benchmarkContent');
+    try {
+      const res = await fetch(`${window.API_BASE || ''}/api/benchmark?clinic_id=${cid}`, {credentials:'include'});
+      const data = await res.json();
+      if (!data.available) {
+        el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-3);font-size:13px">📊 ${data.message}</div>`;
+        return;
+      }
+      const pct = data.percentile;
+      const my = data.my_stats;
+      const avg = data.industry_avg;
+      const badge = (v) => v === null ? '─' : v > 66 ? `<span style="color:#10b981;font-weight:700">上位${100-v}%</span>` : v > 33 ? `<span style="color:#f59e0b;font-weight:700">中位</span>` : `<span style="color:#ef4444;font-weight:700">下位${v}%</span>`;
+      el.innerHTML = `
+        <div style="margin-bottom:8px;font-size:11px;color:var(--text-3)">比較対象: ${data.tenant_count}院（匿名・同業）</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          ${[
+            {label:'CTR', my:my.ctr+'%', avg:avg.ctr+'%', pct:pct.ctr, unit:'%'},
+            {label:'CVR', my:my.cvr+'%', avg:avg.cvr+'%', pct:pct.cvr, unit:'%'},
+            {label:'CPA', my:'¥'+my.cpa.toLocaleString(), avg:'¥'+avg.cpa.toLocaleString(), pct:pct.cpa_inv, unit:''},
+          ].map(m => `
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center">
+              <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">${m.label}</div>
+              <div style="font-size:18px;font-weight:800;color:#f1f5f9">${m.my}</div>
+              <div style="font-size:11px;color:var(--text-3)">業界平均 ${m.avg}</div>
+              <div style="margin-top:6px;font-size:12px">${badge(m.pct)}</div>
+            </div>`).join('')}
+        </div>`;
+    } catch(e) {
+      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗: ${e.message}</div>`;
+    }
+  }
+
+  // ⑨ 競合分析（オークションインサイト）
+  async function loadAuctionInsight() {
+    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
+    const el = document.getElementById('auctionInsightContent');
+    if (!el) return;
+    try {
+      const res = await fetch(`${window.API_BASE || ''}/api/competitor-analysis?clinic_id=${cid}`, {credentials:'include'});
+      const data = await res.json();
+      const competitors = data.competitors || [];
+      const myShare = data.my_impression_share;
+      const mockNote = data.mock ? `<div style="margin-bottom:10px;padding:8px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:11px;color:#f59e0b">⚠ ${data.message || 'デモデータを表示しています'}</div>` : '';
+      el.innerHTML = mockNote + `
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
+          <div style="font-size:13px;color:var(--text-2)">自院インプレッションシェア:</div>
+          <div style="font-size:20px;font-weight:800;color:#f1f5f9">${myShare !== null ? Math.round(myShare*100)+'%' : '─'}</div>
+        </div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);color:var(--text-3)">
+            <th style="text-align:left;padding:8px">競合</th>
+            <th style="text-align:right;padding:8px">IMP シェア</th>
+            <th style="text-align:right;padding:8px">重複率</th>
+            <th style="text-align:right;padding:8px">上位表示率</th>
+          </tr></thead>
+          <tbody>${competitors.map(c => `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:8px;color:#f1f5f9">${c.display_name}</td>
+            <td style="text-align:right;padding:8px;color:#f59e0b">${Math.round(c.impression_share*100)}%</td>
+            <td style="text-align:right;padding:8px;color:#94a3b8">${Math.round(c.overlap_rate*100)}%</td>
+            <td style="text-align:right;padding:8px;color:#ef4444">${Math.round(c.position_above_rate*100)}%</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+    } catch(e) {
+      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗: ${e.message}</div>`;
+    }
+  }
+
+  // ページ切替時に各機能をロード
+  document.addEventListener('DOMContentLoaded', () => {
+    // ダッシュボード表示時に追加ウィジェットをロード
+    const origSwitchPage = window.switchPage;
+    if (origSwitchPage) {
+      window.switchPage = function(page) {
+        origSwitchPage(page);
+        if (page === 'dashboard') {
+          setTimeout(() => { loadWeeklyActions(); loadBenchmark(); }, 800);
+        }
+        if (page === 'competitor') {
+          setTimeout(() => loadAuctionInsight(), 300);
+        }
+      };
+    }
+    // 初期ロード
+    setTimeout(() => { loadWeeklyActions(); loadBenchmark(); }, 2000);
+  });
+
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+  }
+  </script>
 </body>
 </html>

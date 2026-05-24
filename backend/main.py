@@ -2039,6 +2039,281 @@ LPコンテンツ（一部）:
 
 
 # ============================================================
+# ---- ① AIアドバイザーチャット ----
+# ============================================================
+class AiChatReq(BaseModel):
+    clinic_id: int = 1
+    question: str
+    context: Optional[dict] = None
+
+@app.post("/api/ai-chat")
+async def ai_chat(req: AiChatReq, request: Request):
+    """AIアドバイザーへの質問応答"""
+    _get_current_user(request)
+    ok, reason = db.check_ai_limit(req.clinic_id)
+    if not ok:
+        raise HTTPException(status_code=429, detail=reason)
+    gemini_key = db.get_gemini_api_key(req.clinic_id)
+    if not gemini_key:
+        raise HTTPException(status_code=400, detail="Gemini APIキーが設定されていません。設定画面から登録してください。")
+
+    acc = db.get_ads_account(req.clinic_id) or {}
+    clinic_name = (db.get_clinic(req.clinic_id) or {}).get("name", "クリニック")
+    region = acc.get("region", "")
+    target_issues = acc.get("target_issues", "")
+
+    kpi_text = ""
+    if req.context:
+        k = req.context
+        kpi_text = f"""
+【直近の広告KPI】
+- 総費用: ¥{k.get('cost',0):,} / クリック: {k.get('clicks',0):,}
+- CTR: {k.get('ctr',0):.2f}% / CV数: {k.get('conversions',0):.1f}件
+- CPA: ¥{k.get('cpa',0):,} / インプレッション: {k.get('impressions',0):,}"""
+
+    import google.genai as genai
+    client = genai.Client(api_key=gemini_key)
+    prompt = f"""あなたはGoogle広告に特化した整体院専門AIアドバイザー「AdMu AI」です。
+院名: {clinic_name}（{region}）主な症状: {target_issues}{kpi_text}
+
+回答は日本語で、箇条書きを使って200〜300字で簡潔にまとめてください。
+すぐ実行できる具体的なアクションを最優先で提案してください。
+
+質問: {req.question}"""
+    try:
+        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        db.increment_ai_usage(req.clinic_id)
+        db.increment_ai_quota(req.clinic_id, feature_name="ai_chat")
+        return {"success": True, "answer": resp.text.strip()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI応答エラー: {str(e)}")
+
+
+# ============================================================
+# ---- ⑤ 今週のアクションウィジェット ----
+# ============================================================
+@app.get("/api/dashboard/weekly-actions")
+async def weekly_actions(clinic_id: int = 1):
+    """AIが今週すべき3アクションを生成"""
+    gemini_key = db.get_gemini_api_key(clinic_id)
+
+    with db.get_conn() as conn:
+        camps = conn.execute(
+            "SELECT name,impressions,clicks,conversions,cost_micros FROM campaigns WHERE clinic_id=? AND status='ENABLED' LIMIT 10",
+            (clinic_id,)
+        ).fetchall()
+        unread_alerts = conn.execute(
+            "SELECT message,level FROM alerts WHERE clinic_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 5",
+            (clinic_id,)
+        ).fetchall()
+
+    if not gemini_key or not camps:
+        return {"success": True, "generated_by": "static", "actions": [
+            {"priority":1,"icon":"🤖","title":"Gemini APIキーを設定","desc":"AIが広告を自動分析してアクションを提案します","urgency":"high"},
+            {"priority":2,"icon":"📊","title":"Google広告を連携","desc":"リアルタイムの広告成果データを監視できます","urgency":"medium"},
+            {"priority":3,"icon":"👤","title":"ペルソナを設定","desc":"AI広告文の精度が大幅に向上します","urgency":"low"},
+        ]}
+
+    camp_summary = "\n".join([
+        f"- {c['name']}: 費用¥{(c['cost_micros'] or 0)//1_000_000:,} CTR{round((c['clicks'] or 0)/max(c['impressions'] or 1,1)*100,2)}% CV{c['conversions'] or 0}"
+        for c in camps
+    ])
+    alert_text = "\n".join([f"- [{a['level']}] {a['message']}" for a in unread_alerts]) or "なし"
+
+    import google.genai as genai
+    client = genai.Client(api_key=gemini_key)
+    prompt = f"""整体院Google広告専門AIとして、以下のデータを元に今週すべき3アクションをJSONで返してください。
+
+【キャンペーン】\n{camp_summary}
+【未読アラート】\n{alert_text}
+
+JSON配列のみ返してください:
+[{{"priority":1,"icon":"絵文字","title":"アクション名(20字以内)","desc":"説明(60字以内)","urgency":"high/medium/low"}},...]"""
+    try:
+        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        import json, re as _re
+        m = _re.search(r"\[.*\]", resp.text.strip(), _re.DOTALL)
+        actions = json.loads(m.group(0))[:3] if m else []
+        db.increment_ai_usage(clinic_id)
+        return {"success": True, "generated_by": "ai", "actions": actions}
+    except Exception as e:
+        return {"success": True, "generated_by": "error", "actions": [], "error": str(e)}
+
+
+# ============================================================
+# ---- ⑦ クロスクリニックベンチマーク ----
+# ============================================================
+@app.get("/api/benchmark")
+def get_benchmark(clinic_id: int = 1):
+    """業界匿名平均と自クリニックを比較"""
+    with db.get_conn() as conn:
+        all_rows = conn.execute("""
+            SELECT clinic_id,
+                   AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
+                   AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
+                   AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
+            FROM campaigns WHERE status='ENABLED' AND impressions>0
+            GROUP BY clinic_id
+        """).fetchall()
+        my_row = conn.execute("""
+            SELECT AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
+                   AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
+                   AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
+            FROM campaigns WHERE clinic_id=? AND status='ENABLED' AND impressions>0
+        """, (clinic_id,)).fetchone()
+
+    if len(all_rows) < 2:
+        return {"success": True, "available": False,
+                "message": "比較データが不足しています（複数テナントのデータが揃うと表示されます）"}
+
+    import statistics
+    def safe_mean(lst): return round(statistics.mean([x for x in lst if x]), 4) if any(lst) else None
+    def pct_rank(val, lst):
+        lst = [x for x in lst if x]; return round(sum(1 for x in lst if x < val)/max(len(lst),1)*100) if val and lst else None
+
+    ctrs = [r["ctr"] for r in all_rows]; cvrs = [r["cvr"] for r in all_rows]; cpas = [r["cpa"] for r in all_rows]
+    my_ctr = my_row["ctr"] if my_row else None
+    my_cvr = my_row["cvr"] if my_row else None
+    my_cpa = my_row["cpa"] if my_row else None
+
+    return {
+        "success": True, "available": True, "tenant_count": len(all_rows),
+        "industry_avg": {
+            "ctr": round((safe_mean(ctrs) or 0)*100, 2),
+            "cvr": round((safe_mean(cvrs) or 0)*100, 2),
+            "cpa": round(safe_mean(cpas) or 0),
+        },
+        "my_stats": {
+            "ctr": round((my_ctr or 0)*100, 2),
+            "cvr": round((my_cvr or 0)*100, 2),
+            "cpa": round(my_cpa or 0),
+        },
+        "percentile": {
+            "ctr": pct_rank(my_ctr, ctrs),
+            "cvr": pct_rank(my_cvr, cvrs),
+            "cpa_inv": 100 - pct_rank(my_cpa, cpas) if pct_rank(my_cpa, cpas) is not None else None,
+        }
+    }
+
+
+# ============================================================
+# ---- ⑥ 招待制マルチユーザー ----
+# ============================================================
+import secrets as _secrets
+
+class InviteReq(BaseModel):
+    clinic_id: int
+    email: str
+    role: str = "staff"
+
+@app.post("/api/invite")
+def invite_user(req: InviteReq, request: Request):
+    """スタッフ招待メールを送信"""
+    current = _get_current_user(request)
+    if current.get("clinic_id") != req.clinic_id and current.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="権限がありません")
+    if req.role not in ("admin", "staff"):
+        raise HTTPException(status_code=400, detail="roleはadminまたはstaffを指定してください")
+    if db.get_user_by_email(req.email):
+        raise HTTPException(status_code=400, detail="このメールアドレスは既に登録済みです")
+
+    token = _secrets.token_urlsafe(32)
+    import datetime
+    expires = (datetime.datetime.now() + datetime.timedelta(hours=48)).isoformat()
+
+    with db.get_conn() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS invitations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clinic_id INTEGER NOT NULL, email TEXT NOT NULL, role TEXT DEFAULT 'staff',
+            token TEXT UNIQUE NOT NULL, expires_at TEXT NOT NULL, accepted INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+        conn.execute(
+            "INSERT INTO invitations (clinic_id,email,role,token,expires_at) VALUES (?,?,?,?,?)",
+            (req.clinic_id, req.email, req.role, token, expires)
+        )
+        conn.commit()
+
+    base_url = os.environ.get("APP_BASE_URL", "https://admu-backend-jxi0.onrender.com")
+    invite_url = f"{base_url}/accept-invite.html?token={token}"
+    clinic_name = (db.get_clinic(req.clinic_id) or {}).get("name", "クリニック")
+
+    import email_notifier
+    email_notifier._send(req.email, f"【AdMu】{clinic_name} からの招待が届いています",
+        f"""<body style="background:#0b0f1a;padding:32px;font-family:sans-serif;color:#94a3b8">
+        <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid #334155">
+        <h2 style="color:#f1f5f9;text-align:center">👥 AdMuへ招待されました</h2>
+        <p style="text-align:center">{clinic_name} からAdMuへの招待が届きました。<br>48時間以内に登録を完了してください。</p>
+        <div style="text-align:center;margin:24px 0">
+        <a href="{invite_url}" style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:14px 36px;border-radius:99px;text-decoration:none;font-weight:700;font-size:15px">
+        招待を受け入れる →</a></div></div></body>""")
+    return {"success": True, "message": f"招待メールを {req.email} に送信しました"}
+
+
+@app.get("/api/invite/verify")
+def verify_invite(token: str):
+    """招待トークンの有効性確認"""
+    import datetime
+    with db.get_conn() as conn:
+        try:
+            inv = conn.execute(
+                "SELECT i.*,c.name as clinic_name FROM invitations i JOIN clinics c ON i.clinic_id=c.id WHERE i.token=? AND i.accepted=0",
+                (token,)
+            ).fetchone()
+        except Exception:
+            return {"valid": False, "reason": "invalid"}
+    if not inv: return {"valid": False, "reason": "invalid"}
+    if datetime.datetime.now().isoformat() > inv["expires_at"]: return {"valid": False, "reason": "expired"}
+    return {"valid": True, "email": inv["email"], "clinic_name": inv["clinic_name"], "role": inv["role"]}
+
+
+@app.post("/api/invite/accept")
+def accept_invite(body: dict):
+    """招待トークンを検証してアカウント作成"""
+    token = body.get("token",""); password = body.get("password","")
+    if len(password) < 6: raise HTTPException(status_code=400, detail="パスワードは6文字以上")
+    import datetime
+    with db.get_conn() as conn:
+        try:
+            inv = conn.execute("SELECT * FROM invitations WHERE token=? AND accepted=0",(token,)).fetchone()
+        except Exception:
+            raise HTTPException(status_code=404, detail="無効な招待リンクです")
+        if not inv: raise HTTPException(status_code=404, detail="無効または使用済みの招待リンクです")
+        if datetime.datetime.now().isoformat() > inv["expires_at"]:
+            raise HTTPException(status_code=400, detail="招待リンクの有効期限が切れています（48時間以内に登録が必要）")
+        pw_hash = auth.hash_password(password)
+        conn.execute("INSERT INTO users (clinic_id,email,password_hash,role) VALUES (?,?,?,?)",
+                     (inv["clinic_id"], inv["email"], pw_hash, inv["role"]))
+        conn.execute("UPDATE invitations SET accepted=1 WHERE token=?", (token,))
+        conn.commit()
+    return {"success": True, "message": "アカウントの作成が完了しました。ログインしてください。"}
+
+
+# ============================================================
+# ---- ⑨ 競合分析 ----
+# ============================================================
+@app.get("/api/competitor-analysis")
+def competitor_analysis(clinic_id: int = 1):
+    """オークションインサイトベースの競合分析（実データ or モック）"""
+    try:
+        acc = db.get_ads_account(clinic_id) or {}
+        if not acc.get("customer_id"):
+            return {"success": True, "mock": True,
+                "message": "Google広告の顧客IDを設定すると実際の競合データが表示されます",
+                "my_impression_share": 0.35,
+                "competitors": [
+                    {"display_name":"競合A（整体院）","impression_share":0.42,"overlap_rate":0.31,"position_above_rate":0.18},
+                    {"display_name":"競合B（カイロプラクティック）","impression_share":0.38,"overlap_rate":0.22,"position_above_rate":0.09},
+                    {"display_name":"競合C（鍼灸院）","impression_share":0.25,"overlap_rate":0.15,"position_above_rate":0.05},
+                ]}
+        from ads_client import AdsClient
+        client = AdsClient(acc)
+        data = client.get_auction_insights() if hasattr(AdsClient, 'get_auction_insights') else {}
+        return {"success": True, "mock": False, **data}
+    except Exception as e:
+        return {"success": True, "mock": True, "error": str(e), "competitors": [], "my_impression_share": None}
+
+
+# ============================================================
 # ---- Phase 2C: キーワード提案AI ----
 # ============================================================
 class KwSuggestReq(BaseModel):
