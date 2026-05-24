@@ -3,327 +3,431 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AdMu | 初期設定</title>
+  <title>AdMu | 初期セットアップ</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0f172a; --bg-card: #1e293b; --border: #334155;
-      --accent: #3b82f6; --green: #10b981; --text-1: #f1f5f9;
-      --text-2: #94a3b8; --text-3: #64748b; --radius: 14px;
+      --accent: #3b82f6; --green: #10b981; --orange: #f59e0b;
+      --text-1: #f1f5f9; --text-2: #94a3b8; --text-3: #64748b;
+      --radius: 16px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg); color: var(--text-1);
       font-family: 'Inter','Noto Sans JP',sans-serif;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      padding: 20px;
+      min-height: 100vh; display: flex; align-items: center;
+      justify-content: center; padding: 20px;
     }
-    .wrap { width: 100%; max-width: 560px; }
+    .wrap { width: 100%; max-width: 580px; }
+
+    /* Header */
+    .logo { text-align: center; margin-bottom: 28px; }
+    .logo span { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo small { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; }
 
     /* Progress */
-    .progress-bar { display: flex; gap: 8px; margin-bottom: 32px; }
-    .progress-step {
-      flex: 1; height: 4px; border-radius: 2px;
-      background: var(--border); transition: background 0.3s;
-    }
-    .progress-step.done { background: var(--accent); }
-    .progress-step.active { background: var(--accent); opacity: 0.5; }
+    .progress-bar { display: flex; gap: 6px; margin-bottom: 28px; }
+    .prog { flex: 1; height: 3px; border-radius: 2px; background: var(--border); transition: background 0.4s; }
+    .prog.done { background: var(--green); }
+    .prog.active { background: var(--accent); }
 
     /* Card */
-    .card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 40px;
-      animation: fadeUp 0.3s ease;
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .step { display: none; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px; }
+    .step { display: none; animation: fadeUp 0.3s ease; }
     .step.active { display: block; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 
     .step-badge {
-      display: inline-block; background: rgba(59,130,246,0.15);
-      color: var(--accent); border-radius: 99px; padding: 4px 12px;
-      font-size: 12px; font-weight: 600; margin-bottom: 20px;
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(59,130,246,0.12); color: var(--accent);
+      border-radius: 99px; padding: 4px 12px; font-size: 11px;
+      font-weight: 700; margin-bottom: 20px; letter-spacing: 0.5px;
     }
-    h2 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
-    .subtitle { font-size: 14px; color: var(--text-2); margin-bottom: 28px; line-height: 1.6; }
+    h2 { font-size: 22px; font-weight: 800; margin-bottom: 8px; line-height: 1.3; }
+    .subtitle { font-size: 13px; color: var(--text-2); margin-bottom: 28px; line-height: 1.7; }
 
-    label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; font-weight: 500; }
+    /* Form */
+    label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 5px; font-weight: 600; }
     input, select, textarea {
       width: 100%; padding: 11px 14px; background: #0f172a;
       border: 1px solid var(--border); border-radius: 8px;
-      color: var(--text-1); font-size: 14px; margin-bottom: 16px;
+      color: var(--text-1); font-size: 14px; margin-bottom: 14px;
       font-family: inherit; transition: border-color 0.2s;
     }
-    input:focus, select:focus, textarea:focus {
-      outline: none; border-color: var(--accent);
-    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
     textarea { resize: vertical; min-height: 80px; }
-
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+    /* Tip / Alert */
+    .tip {
+      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+      font-size: 12px; color: var(--text-2); line-height: 1.6;
+    }
+    .tip strong { color: var(--accent); }
+    .tip a { color: var(--accent); text-decoration: none; }
+    .tip a:hover { text-decoration: underline; }
+    .warn {
+      background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25);
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
+      font-size: 12px; color: #fbbf24; line-height: 1.6;
+    }
+
+    /* Radio group */
+    .radio-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .radio-opt {
+      border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 8px;
+      text-align: center; cursor: pointer; transition: all 0.2s;
+      font-size: 13px; font-weight: 600;
+    }
+    .radio-opt:hover { border-color: var(--accent); }
+    .radio-opt.selected { border-color: var(--accent); background: rgba(59,130,246,0.12); color: var(--accent); }
+    .radio-opt .opt-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+    .radio-opt .opt-label { font-size: 11px; color: var(--text-2); font-weight: 400; }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 10px; margin-top: 8px; align-items: center; }
     .btn {
       padding: 12px 24px; border-radius: 10px; border: none;
       cursor: pointer; font-size: 14px; font-weight: 600;
       font-family: inherit; transition: all 0.2s;
     }
-    .btn-primary {
-      background: var(--accent); color: #fff; flex: 1;
-    }
-    .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
-    .btn-ghost {
-      background: transparent; color: var(--text-2);
-      border: 1px solid var(--border); padding: 12px 20px;
-    }
+    .btn-primary { background: var(--accent); color: #fff; flex: 1; }
+    .btn-primary:hover:not(:disabled) { background: #2563eb; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--text-2); border: 1px solid var(--border); padding: 12px 20px; }
     .btn-ghost:hover { background: var(--border); color: var(--text-1); }
-    .btn-skip {
-      background: transparent; color: var(--text-3); border: none;
-      font-size: 13px; cursor: pointer; padding: 12px 8px; text-decoration: underline;
-    }
+    .btn-skip { background: transparent; color: var(--text-3); border: none; font-size: 12px; cursor: pointer; padding: 12px 4px; text-decoration: underline; }
 
-    /* Step 1: Welcome */
-    .welcome-icon { font-size: 56px; margin-bottom: 20px; }
-    .feature-list { margin: 24px 0; }
+    /* Welcome */
+    .welcome-icon { font-size: 60px; text-align: center; margin-bottom: 20px; }
+    .feature-list { margin: 20px 0; }
     .feature-item {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 0; border-bottom: 1px solid rgba(51,65,85,0.5);
-      font-size: 14px;
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 12px 0; border-bottom: 1px solid rgba(51,65,85,0.5); font-size: 13px;
     }
     .feature-item:last-child { border-bottom: none; }
-    .feature-icon { font-size: 20px; width: 28px; text-align: center; }
+    .fi-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+    .fi-text strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .fi-text small { color: var(--text-3); font-size: 11px; }
 
-    /* Step 5: Complete */
-    .complete-icon { font-size: 64px; margin-bottom: 20px; text-align: center; }
-    .summary-card {
-      background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3);
+    /* Complete */
+    .complete-icon { font-size: 72px; text-align: center; margin-bottom: 16px; }
+    .summary-box {
+      background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.25);
       border-radius: 10px; padding: 16px; margin: 20px 0;
     }
-    .summary-item {
-      display: flex; justify-content: space-between;
-      font-size: 13px; padding: 5px 0;
-    }
-    .summary-label { color: var(--text-2); }
-    .summary-value { font-weight: 600; }
+    .si { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px solid rgba(51,65,85,0.4); }
+    .si:last-child { border-bottom: none; }
+    .si-label { color: var(--text-2); }
+    .si-val { font-weight: 600; }
+    .si-val.ok { color: var(--green); }
+    .si-val.warn { color: var(--orange); background: none; border: none; padding: 0; }
 
-    /* Tip box */
-    .tip {
-      background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25);
-      border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;
-      font-size: 12px; color: var(--text-2); line-height: 1.5;
-    }
-    .tip strong { color: var(--accent); }
+    /* Toast */
+    .toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; font-size: 13px; z-index: 9999; }
+    .toast.success { border-color: var(--green); color: var(--green); }
+    .toast.error { border-color: #ef4444; color: #ef4444; }
   </style>
-<link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="shortcut icon" href="/favicon.ico">
 </head>
 <body>
 <div class="wrap">
-  <!-- Progress Bar -->
-  <div class="progress-bar" id="progressBar">
-    <div class="progress-step active" id="prog-1"></div>
-    <div class="progress-step" id="prog-2"></div>
-    <div class="progress-step" id="prog-3"></div>
-    <div class="progress-step" id="prog-4"></div>
-    <div class="progress-step" id="prog-5"></div>
+  <div class="logo">
+    <span>AdMu</span>
+    <small>AI広告自動運用システム — 初期セットアップ</small>
+  </div>
+
+  <!-- プログレスバー (6ステップ) -->
+  <div class="progress-bar">
+    <div class="prog active" id="p1"></div>
+    <div class="prog" id="p2"></div>
+    <div class="prog" id="p3"></div>
+    <div class="prog" id="p4"></div>
+    <div class="prog" id="p5"></div>
+    <div class="prog" id="p6"></div>
   </div>
 
   <div class="card">
+
     <!-- STEP 1: ようこそ -->
-    <div class="step active" id="step-1">
+    <div class="step active" id="s1">
       <div class="welcome-icon">🚀</div>
-      <div class="step-badge">STEP 1 / 5</div>
-      <h2>ようこそ！初期設定を<br>始めましょう</h2>
-      <p class="subtitle">
-        このウィザードに沿って設定すれば、約3分で広告AIの自動運用がスタートします。
-      </p>
+      <div class="step-badge">STEP 1 / 6 — ようこそ</div>
+      <h2>AdMuへようこそ！<br>3分で初期設定を完了しましょう</h2>
+      <p class="subtitle">このウィザードを完了すると、AIが自動で広告を最適化し始めます。</p>
       <div class="feature-list">
-        <div class="feature-item"><span class="feature-icon">📊</span> AIが24時間、広告成果をリアルタイム監視</div>
-        <div class="feature-item"><span class="feature-icon">✍️</span> ペルソナに最適化したAI広告文を自動生成</div>
-        <div class="feature-item"><span class="feature-icon">🚫</span> 無駄なキーワードを除外して費用を最適化</div>
-        <div class="feature-item"><span class="feature-icon">📧</span> 毎週月曜、自動で成果レポートをメール送信</div>
+        <div class="feature-item">
+          <span class="fi-icon">📊</span>
+          <div class="fi-text"><strong>24時間リアルタイム監視</strong><small>CTR・CVR・予算消化率を5分ごとにAIがチェック</small></div>
+        </div>
+        <div class="feature-item">
+          <span class="fi-icon">✍️</span>
+          <div class="fi-text"><strong>AI広告文の自動生成</strong><small>あなたのペルソナに最適化した広告文を自動で作成・提案</small></div>
+        </div>
+        <div class="feature-item">
+          <span class="fi-icon">🚫</span>
+          <div class="fi-text"><strong>ムダな広告費を自動カット</strong><small>コンバージョンに繋がらないキーワードをAIが自動で除外</small></div>
+        </div>
+        <div class="feature-item">
+          <span class="fi-icon">📧</span>
+          <div class="fi-text"><strong>週次レポート自動送信</strong><small>毎週月曜朝8時に成果サマリーをメールでお届け</small></div>
+        </div>
+        <div class="feature-item">
+          <span class="fi-icon">🤖</span>
+          <div class="fi-text"><strong>あなたのAIキーを使用</strong><small>Gemini APIキーをご自身で設定 → AI費用はお客様のGoogleアカウントへ直接計上</small></div>
+        </div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="nextStep()">設定をはじめる →</button>
+        <button class="btn btn-primary" onclick="go(2)">設定をはじめる →</button>
       </div>
     </div>
 
-    <!-- STEP 2: クリニック基本情報 -->
-    <div class="step" id="step-2">
-      <div class="step-badge">STEP 2 / 5</div>
-      <h2>クリニック情報を<br>入力してください</h2>
-      <p class="subtitle">広告文生成やレポートに使われる基本情報です。</p>
+    <!-- STEP 2: クリニック情報 -->
+    <div class="step" id="s2">
+      <div class="step-badge">STEP 2 / 6 — クリニック情報</div>
+      <h2>クリニックの基本情報を<br>入力してください</h2>
+      <p class="subtitle">広告文やレポートに使われます。後から「設定」画面で変更できます。</p>
       <label>クリニック名 <span style="color:#ef4444">*</span></label>
-      <input type="text" id="wiz_clinic_name" placeholder="例: ○○整体院" required>
+      <input type="text" id="w_name" placeholder="例: ○○整体院" autocomplete="organization">
       <div class="form-row">
         <div>
-          <label>地域（都市名）</label>
-          <input type="text" id="wiz_region" placeholder="例: 渋谷区、大阪市">
+          <label>地域（市区町村名）</label>
+          <input type="text" id="w_region" placeholder="例: 渋谷区、大阪市">
         </div>
         <div>
-          <label>駅からの徒歩分数</label>
-          <input type="text" id="wiz_station_minutes" placeholder="例: 5">
+          <label>最寄り駅 徒歩分数</label>
+          <input type="number" id="w_walk" placeholder="例: 5" min="1" max="30">
         </div>
       </div>
-      <label>主なターゲット悩み</label>
-      <input type="text" id="wiz_target_issues" placeholder="例: 腰痛、肩こり、産後骨盤矯正">
+      <label>月間広告予算（円）</label>
+      <input type="number" id="w_budget" placeholder="例: 100000" min="10000" step="10000">
+      <label>主なターゲット症状</label>
+      <input type="text" id="w_issues" placeholder="例: 腰痛、肩こり、産後骨盤矯正">
       <div class="btn-row">
-        <button class="btn btn-ghost" onclick="prevStep()">← 戻る</button>
-        <button class="btn btn-primary" onclick="nextStep()">次へ →</button>
+        <button class="btn btn-ghost" onclick="go(1)">← 戻る</button>
+        <button class="btn btn-primary" onclick="validateStep2()">次へ →</button>
       </div>
     </div>
 
-    <!-- STEP 3: Google Ads 設定 -->
-    <div class="step" id="step-3">
-      <div class="step-badge">STEP 3 / 5</div>
-      <h2>Google広告の<br>顧客ID（任意）</h2>
-      <p class="subtitle">Google広告アカウントのIDを入力すると、実際の広告データと連携できます。後から設定画面で入力することも可能です。</p>
+    <!-- STEP 3: Gemini AI設定 -->
+    <div class="step" id="s3">
+      <div class="step-badge">STEP 3 / 6 — AI設定（重要）</div>
+      <h2>Gemini APIキーを<br>設定してください</h2>
+      <p class="subtitle">AdMuのAI機能（広告文生成・レポート解説・診断）はGoogle Gemini AIを使用します。<strong style="color:var(--text-1)">ご自身のAPIキーを設定することで、AI費用を完全にコントロールできます。</strong></p>
       <div class="tip">
-        <strong>💡 顧客IDの確認方法</strong><br>
-        Google広告管理画面の右上に「xxx-xxxx-xxxx」形式で表示されています。
+        💡 <strong>APIキーの取得方法（無料）</strong><br>
+        1. <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> にアクセス<br>
+        2. 「APIキーを作成」をクリック<br>
+        3. 表示されたキー（AIzaSy...）をコピーして下記に貼り付け
       </div>
-      <label>Google広告 顧客ID</label>
-      <input type="text" id="wiz_customer_id" placeholder="例: 123-456-7890（ハイフンなしでもOK）">
-      <label>Gemini API Key（AI機能を使う場合）</label>
-      <input type="password" id="wiz_gemini_key" placeholder="AIzaSy...">
+      <label>Gemini API Key</label>
+      <input type="password" id="w_gemini" placeholder="AIzaSy...">
+      <label>月間AI利用上限（回数）</label>
+      <div class="radio-group" id="aiLimitGroup">
+        <div class="radio-opt" onclick="selectLimit(30, this)">
+          <span class="opt-icon">🌱</span>30回
+          <span class="opt-label">約¥数十円/月</span>
+        </div>
+        <div class="radio-opt selected" onclick="selectLimit(100, this)">
+          <span class="opt-icon">⚡</span>100回
+          <span class="opt-label">約¥数百円/月</span>
+        </div>
+        <div class="radio-opt" onclick="selectLimit(-1, this)">
+          <span class="opt-icon">♾️</span>無制限
+          <span class="opt-label">都度課金</span>
+        </div>
+      </div>
+      <input type="hidden" id="w_ai_limit" value="100">
+      <div class="warn">
+        ⚠️ APIキーを設定しない場合、AI機能（広告文生成・診断など）は利用できません。後から「設定」画面で追加できます。
+      </div>
       <div class="btn-row">
-        <button class="btn btn-ghost" onclick="prevStep()">← 戻る</button>
-        <button class="btn btn-primary" onclick="nextStep()">次へ →</button>
-        <button class="btn btn-skip" onclick="skipStep()">スキップ</button>
+        <button class="btn btn-ghost" onclick="go(2)">← 戻る</button>
+        <button class="btn btn-primary" onclick="go(4)">次へ →</button>
+        <button class="btn btn-skip" onclick="go(4)">スキップ</button>
       </div>
     </div>
 
-    <!-- STEP 4: ペルソナ設定 -->
-    <div class="step" id="step-4">
-      <div class="step-badge">STEP 4 / 5</div>
-      <h2>ターゲットペルソナを<br>設定（任意）</h2>
-      <p class="subtitle">広告を届けたい理想のお客様像を設定すると、AIがより刺さる広告文を生成します。スキップして後から設定することも可能です。</p>
+    <!-- STEP 4: Google広告連携 -->
+    <div class="step" id="s4">
+      <div class="step-badge">STEP 4 / 6 — Google広告連携</div>
+      <h2>Google広告アカウントを<br>連携してください</h2>
+      <p class="subtitle">Google広告の顧客IDを入力すると、実際の広告データと連携できます。後から設定できます。</p>
+      <div class="tip">
+        💡 <strong>顧客IDの確認方法</strong><br>
+        Google広告管理画面（ads.google.com）の右上に<br>「<strong>xxx-xxxx-xxxx</strong>」形式で表示されています。
+      </div>
+      <label>Google広告 顧客ID（任意）</label>
+      <input type="text" id="w_cid" placeholder="例: 123-456-7890">
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="go(3)">← 戻る</button>
+        <button class="btn btn-primary" onclick="go(5)">次へ →</button>
+        <button class="btn btn-skip" onclick="go(5)">スキップ</button>
+      </div>
+    </div>
+
+    <!-- STEP 5: ペルソナ設定 -->
+    <div class="step" id="s5">
+      <div class="step-badge">STEP 5 / 6 — ターゲットペルソナ</div>
+      <h2>理想の患者さんを<br>教えてください</h2>
+      <p class="subtitle">詳しく設定するほど、AIが「刺さる広告文」を生成できます。スキップして後から入力することも可能です。</p>
       <label>年齢・性別</label>
-      <input type="text" id="wiz_persona_age_gender" placeholder="例: 30〜40代の主婦">
+      <input type="text" id="w_p_age" placeholder="例: 30〜40代の主婦・子育て中の女性">
       <label>職業・ライフスタイル</label>
-      <input type="text" id="wiz_persona_job" placeholder="例: デスクワーク中心、子育て中">
-      <label>深いお悩み</label>
-      <textarea id="wiz_persona_pain" placeholder="例: 長年の腰痛で旅行や外出を諦めていた。薬を飲んでも根本的に治らず悩んでいる。"></textarea>
+      <input type="text" id="w_p_job" placeholder="例: デスクワーク中心、車の運転が多い">
+      <label>深いお悩み（できるだけ具体的に）</label>
+      <textarea id="w_p_pain" placeholder="例: 長年の腰痛で旅行を諦めていた。病院に行っても「異常なし」と言われ続け、根本的に治したいと思っている。"></textarea>
       <label>理想の状態（ゴール）</label>
-      <input type="text" id="wiz_persona_goal" placeholder="例: 痛みなく子供と公園で遊べるようになりたい">
+      <input type="text" id="w_p_goal" placeholder="例: 痛みなく子供と公園で遊べるようになりたい">
       <div class="btn-row">
-        <button class="btn btn-ghost" onclick="prevStep()">← 戻る</button>
-        <button class="btn btn-primary" onclick="completeSetup()">完了して保存 →</button>
-        <button class="btn btn-skip" onclick="completeSetup()">スキップ</button>
+        <button class="btn btn-ghost" onclick="go(4)">← 戻る</button>
+        <button class="btn btn-primary" onclick="saveAll()">保存して完了 →</button>
+        <button class="btn btn-skip" onclick="saveAll()">スキップ</button>
       </div>
     </div>
 
-    <!-- STEP 5: 完了 -->
-    <div class="step" id="step-5">
+    <!-- STEP 6: 完了 -->
+    <div class="step" id="s6">
       <div class="complete-icon">🎉</div>
-      <div class="step-badge">セットアップ完了！</div>
+      <div class="step-badge" style="background:rgba(16,185,129,0.12);color:var(--green)">セットアップ完了！</div>
       <h2 style="text-align:center">準備完了です！</h2>
-      <p class="subtitle" style="text-align:center">
-        AIが自動で広告運用を最適化します。<br>いつでも設定画面から変更できます。
-      </p>
-      <div class="summary-card" id="setupSummary"></div>
-      <button class="btn btn-primary" style="width:100%;font-size:15px;padding:14px" onclick="goDashboard()">
-        📊 ダッシュボードへ進む →
-      </button>
+      <p class="subtitle" style="text-align:center">AIが自動で広告運用を最適化します。<br>いつでも「設定」から変更できます。</p>
+      <div class="summary-box" id="summary"></div>
+      <div style="margin-top:20px">
+        <button class="btn btn-primary" style="width:100%;font-size:15px;padding:14px" onclick="goDash()">
+          📊 ダッシュボードへ →
+        </button>
+        <a href="/help.html" style="display:block;text-align:center;margin-top:12px;font-size:12px;color:var(--text-3)">
+          📖 使い方ガイドを見る
+        </a>
+      </div>
     </div>
-  </div>
-</div>
+
+  </div><!-- /card -->
+</div><!-- /wrap -->
 
 <script>
-let currentStep = 1;
-const totalSteps = 5;
+const TOTAL = 6;
+let cur = 1;
+let aiLimit = 100;
+
+// ログイン確認
+const user = JSON.parse(localStorage.getItem('admu_user') || '{}');
+const clinicId = user.clinic_id || 1;
+
+function selectLimit(val, el) {
+  document.querySelectorAll('.radio-opt').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  aiLimit = val;
+  document.getElementById('w_ai_limit').value = val;
+}
 
 function updateProgress() {
-  for (let i = 1; i <= totalSteps; i++) {
-    const prog = document.getElementById(`prog-${i}`);
-    if (i < currentStep) prog.className = 'progress-step done';
-    else if (i === currentStep) prog.className = 'progress-step active';
-    else prog.className = 'progress-step';
+  for (let i = 1; i <= TOTAL; i++) {
+    const el = document.getElementById('p' + i);
+    if (i < cur) el.className = 'prog done';
+    else if (i === cur) el.className = 'prog active';
+    else el.className = 'prog';
   }
 }
 
-function showStep(n) {
+function go(n) {
   document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-  document.getElementById(`step-${n}`).classList.add('active');
-  currentStep = n;
+  document.getElementById('s' + n).classList.add('active');
+  cur = n;
   updateProgress();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function nextStep() {
-  if (currentStep === 2) {
-    const name = document.getElementById('wiz_clinic_name').value.trim();
-    if (!name) { alert('クリニック名は必須です'); return; }
-  }
-  if (currentStep < totalSteps - 1) showStep(currentStep + 1);
+function validateStep2() {
+  const name = document.getElementById('w_name').value.trim();
+  if (!name) { toast('クリニック名は必須です', 'error'); return; }
+  go(3);
 }
 
-function prevStep() {
-  if (currentStep > 1) showStep(currentStep - 1);
+async function getCsrf() {
+  try {
+    const r = await fetch('/api/csrf-token', { credentials: 'include' });
+    const d = await r.json();
+    return d.csrf_token || '';
+  } catch { return ''; }
 }
 
-function skipStep() {
-  showStep(currentStep + 1);
-}
+async function saveAll() {
+  const btn = document.querySelector('#s5 .btn-primary');
+  btn.disabled = true; btn.textContent = '保存中...';
 
-async function completeSetup() {
-  const data = {
-    clinic_name: document.getElementById('wiz_clinic_name').value.trim(),
-    region: document.getElementById('wiz_region').value.trim(),
-    station_minutes: document.getElementById('wiz_station_minutes').value.trim(),
-    target_issues: document.getElementById('wiz_target_issues').value.trim(),
-    customer_id: document.getElementById('wiz_customer_id').value.replace(/-/g, '').trim(),
-    gemini_api_key: document.getElementById('wiz_gemini_key').value.trim(),
-    persona: {
-      target_age_gender: document.getElementById('wiz_persona_age_gender').value.trim(),
-      target_job_lifestyle: document.getElementById('wiz_persona_job').value.trim(),
-      target_pain_point: document.getElementById('wiz_persona_pain').value.trim(),
-      target_desired_outcome: document.getElementById('wiz_persona_goal').value.trim(),
-    }
+  const csrf = await getCsrf();
+  const body = {
+    clinic_id: clinicId,
+    customer_id: document.getElementById('w_cid').value.replace(/-/g,'').trim() || undefined,
+    gemini_api_key: document.getElementById('w_gemini').value.trim() || undefined,
+    ai_monthly_limit: parseInt(document.getElementById('w_ai_limit').value),
+    monthly_budget_yen: parseInt(document.getElementById('w_budget').value) || undefined,
+    target_age_gender: document.getElementById('w_p_age').value.trim() || undefined,
+    target_job_lifestyle: document.getElementById('w_p_job').value.trim() || undefined,
+    target_pain_point: document.getElementById('w_p_pain').value.trim() || undefined,
+    target_desired_outcome: document.getElementById('w_p_goal').value.trim() || undefined,
   };
 
-  // ローカルに保存
-  localStorage.setItem('onboarding_done', 'true');
-  localStorage.setItem('onboarding_data', JSON.stringify(data));
+  // undefinedキーを除去
+  Object.keys(body).forEach(k => body[k] === undefined && delete body[k]);
 
-  // バックエンドに保存（設定APIを利用）
   try {
-    const existingSettings = await fetch('/api/settings/1').then(r => r.json());
-    const merged = {
-      ...existingSettings,
-      clinic_name: data.clinic_name || existingSettings.clinic_name,
-      region: data.region || existingSettings.region,
-      target_issues: data.target_issues || existingSettings.target_issues,
-      gemini_api_key: data.gemini_api_key || existingSettings.gemini_api_key,
-      customer_id: data.customer_id || existingSettings.customer_id,
-      target_age_gender: data.persona.target_age_gender || existingSettings.target_age_gender,
-      target_job_lifestyle: data.persona.target_job_lifestyle || existingSettings.target_job_lifestyle,
-      target_pain_point: data.persona.target_pain_point || existingSettings.target_pain_point,
-      target_desired_outcome: data.persona.target_desired_outcome || existingSettings.target_desired_outcome,
-    };
-    await fetch('/api/settings/1', {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(merged)
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf },
+      credentials: 'include',
+      body: JSON.stringify(body)
     });
+    if (!r.ok) throw new Error('API Error');
+    localStorage.setItem('onboarding_done', '1');
+    showSummary();
+    go(6);
   } catch(e) {
-    console.warn('設定保存エラー（続行します）:', e);
+    toast('保存に失敗しました。後から「設定」画面で入力してください。', 'error');
+    localStorage.setItem('onboarding_done', '1');
+    showSummary();
+    go(6);
   }
 
-  // 完了画面
-  const summaryEl = document.getElementById('setupSummary');
-  summaryEl.innerHTML = `
-    <div class="summary-item"><span class="summary-label">クリニック名</span><span class="summary-value">${data.clinic_name || '未設定'}</span></div>
-    <div class="summary-item"><span class="summary-label">地域</span><span class="summary-value">${data.region || '未設定'}</span></div>
-    <div class="summary-item"><span class="summary-label">Gemini AI</span><span class="summary-value">${data.gemini_api_key ? '✅ 設定済み' : '⚠ 未設定'}</span></div>
-    <div class="summary-item"><span class="summary-label">ペルソナ</span><span class="summary-value">${data.persona.target_age_gender ? '✅ 設定済み' : '─ スキップ'}</span></div>
-  `;
-  showStep(5);
+  btn.disabled = false; btn.textContent = '保存して完了 →';
 }
 
-function goDashboard() {
-  window.location.href = '/';
+function showSummary() {
+  const name = document.getElementById('w_name').value.trim();
+  const region = document.getElementById('w_region').value.trim();
+  const budget = document.getElementById('w_budget').value;
+  const gemini = document.getElementById('w_gemini').value.trim();
+  const cid = document.getElementById('w_cid').value.trim();
+  const persona = document.getElementById('w_p_age').value.trim();
+  const limitVal = document.getElementById('w_ai_limit').value;
+  const limitLabel = limitVal === '-1' ? '無制限' : `月${limitVal}回まで`;
+
+  document.getElementById('summary').innerHTML = `
+    <div class="si"><span class="si-label">クリニック名</span><span class="si-val">${name || '─'}</span></div>
+    <div class="si"><span class="si-label">地域</span><span class="si-val">${region || '─'}</span></div>
+    <div class="si"><span class="si-label">月間予算</span><span class="si-val">${budget ? '¥'+Number(budget).toLocaleString() : '─'}</span></div>
+    <div class="si"><span class="si-label">Google広告連携</span><span class="si-val ${cid?'ok':'warn'}">${cid ? '✅ 連携済み' : '⚠ 未設定'}</span></div>
+    <div class="si"><span class="si-label">Gemini AI</span><span class="si-val ${gemini?'ok':'warn'}">${gemini ? `✅ 設定済み（${limitLabel}）` : '⚠ 未設定（AI機能は利用不可）'}</span></div>
+    <div class="si"><span class="si-label">ペルソナ</span><span class="si-val ${persona?'ok':'warn'}">${persona ? '✅ 設定済み' : '─ スキップ'}</span></div>
+  `;
+}
+
+function goDash() { window.location.href = '/'; }
+
+function toast(msg, type='success') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// すでに完了済みならスキップ
+if (localStorage.getItem('onboarding_done') === '1') {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (!urlParams.get('force')) window.location.href = '/';
 }
 </script>
 </body>

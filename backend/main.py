@@ -2110,6 +2110,74 @@ def admin_overview(request: Request, start: Optional[str] = None, end: Optional[
     _check_admin(password, authorization, request)
     return {"clinics": db.get_admin_overview(start, end)}
 
+
+@app.get("/api/admin/aggregated-stats")
+def admin_aggregated_stats(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
+    """全テナントのKPIを集計（管理者専用・ベンチマーク用）"""
+    _check_admin(password, authorization, request)
+    with db.get_conn() as conn:
+        # 全クリニックの広告パフォーマンス集計
+        rows = conn.execute("""
+            SELECT
+                c.id as clinic_id, c.name as clinic_name, c.plan_status,
+                COALESCE(a.monthly_budget_yen, 0) as monthly_budget,
+                COALESCE(a.customer_id, '') as customer_id,
+                COALESCE(a.gemini_api_key, '') as has_gemini,
+                COALESCE(a.ai_monthly_limit, 0) as ai_limit
+            FROM clinics c
+            LEFT JOIN ads_accounts a ON c.id = a.clinic_id
+            ORDER BY c.id
+        """).fetchall()
+
+        # AI使用量集計
+        import datetime
+        ym = datetime.datetime.now().strftime("%Y-%m")
+        ai_rows = conn.execute("""
+            SELECT clinic_id, SUM(usage_count) as total_usage
+            FROM ai_usage_logs
+            WHERE year_month = ?
+            GROUP BY clinic_id
+        """, (ym,)).fetchall()
+        ai_usage = {r["clinic_id"]: r["total_usage"] for r in ai_rows}
+
+        # キャンペーン数集計
+        camp_rows = conn.execute("""
+            SELECT clinic_id, COUNT(*) as count, SUM(budget_micros) as total_budget_micros
+            FROM campaigns WHERE status='ENABLED'
+            GROUP BY clinic_id
+        """).fetchall()
+        camp_map = {r["clinic_id"]: dict(r) for r in camp_rows}
+
+    clinics = []
+    for r in rows:
+        cid = r["clinic_id"]
+        camp = camp_map.get(cid, {})
+        clinics.append({
+            "clinic_id": cid,
+            "clinic_name": r["clinic_name"],
+            "plan_status": r["plan_status"],
+            "monthly_budget_yen": r["monthly_budget"],
+            "has_google_ads": bool(r["customer_id"]),
+            "has_gemini": bool(r["has_gemini"]),
+            "ai_limit": r["ai_limit"],
+            "ai_usage_this_month": ai_usage.get(cid, 0),
+            "active_campaigns": camp.get("count", 0),
+            "total_campaign_budget_micros": camp.get("total_budget_micros", 0),
+        })
+
+    # 業界ベンチマーク用集計（匿名統計）
+    active = [c for c in clinics if c["plan_status"] == "active"]
+    benchmark = {
+        "total_tenants": len(clinics),
+        "active_tenants": len(active),
+        "gemini_adoption_rate": round(sum(1 for c in active if c["has_gemini"]) / max(len(active),1) * 100, 1),
+        "google_ads_adoption_rate": round(sum(1 for c in active if c["has_google_ads"]) / max(len(active),1) * 100, 1),
+        "avg_monthly_budget_yen": round(sum(c["monthly_budget_yen"] for c in active if c["monthly_budget_yen"]) / max(len(active),1)),
+        "total_ai_usage_this_month": sum(c["ai_usage_this_month"] for c in clinics),
+    }
+
+    return {"clinics": clinics, "benchmark": benchmark, "month": ym}
+
 @app.get("/api/admin/contracts")
 def admin_contracts(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
     _check_admin(password, authorization, request)
