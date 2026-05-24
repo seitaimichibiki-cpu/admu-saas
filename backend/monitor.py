@@ -383,3 +383,46 @@ def trigger_check_now(clinic_id: int):
 
 def trigger_bid_now(clinic_id: int):
     _run_bid_adjustment(clinic_id)
+
+
+def register_clinic_jobs(clinic_id: int):
+    """新規クリニック登録時にサーバー再起動なしでスケジューラにジョブを動的追加する"""
+    global _scheduler
+    if not _scheduler or not _scheduler.running:
+        print(f"[Monitor] スケジューラ未起動のためジョブ登録をスキップ (clinic_id={clinic_id})")
+        return
+    _scheduler.add_job(
+        _check_campaigns, IntervalTrigger(minutes=5),
+        id=f"check_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
+    _scheduler.add_job(
+        _run_bid_adjustment, IntervalTrigger(hours=1),
+        id=f"bid_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
+    _scheduler.add_job(
+        _send_daily_report, CronTrigger(hour=9, minute=0),
+        id=f"daily_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
+    _scheduler.add_job(
+        _send_weekly_report, CronTrigger(day_of_week='mon', hour=8, minute=0),
+        id=f"weekly_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
+    _scheduler.add_job(
+        _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
+        id=f"nkw_scan_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
+    print(f"[Monitor] 新規クリニックのジョブを動的登録完了 (clinic_id={clinic_id})")
+
+
+def unregister_clinic_jobs(clinic_id: int):
+    """クリニック解約/停止時にスケジューラからジョブを動的削除する"""
+    global _scheduler
+    if not _scheduler or not _scheduler.running:
+        return
+    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_"]:
+        job_id = f"{job_prefix}{clinic_id}"
+        try:
+            _scheduler.remove_job(job_id)
+        except Exception:
+            pass  # ジョブが存在しない場合は無視
+    print(f"[Monitor] クリニックのジョブを削除完了 (clinic_id={clinic_id})")

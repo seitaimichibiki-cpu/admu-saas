@@ -232,6 +232,10 @@ def init_db():
             feature_name TEXT NOT NULL, usage_count INTEGER DEFAULT 0,
             last_used_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id),
             UNIQUE(clinic_id, year_month, feature_name))""",
+        # Stripe Webhook冪等性チェック用（2重処理防止）
+        f"""CREATE TABLE IF NOT EXISTS stripe_processed_events (
+            event_id TEXT PRIMARY KEY,
+            processed_at {TS})""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -271,6 +275,8 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_secret TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN yahoo_refresh_token TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
+        # contractsテーブル: AI利用上限（プラン別設定用、-1=無制限）
+        "ALTER TABLE contracts ADD COLUMN ai_quota_monthly INTEGER DEFAULT 30",
     ]
     for sql in migrations:
         try:
@@ -607,9 +613,21 @@ def get_monthly_ai_usage(clinic_id: int) -> int:
         ).fetchone()
         return row["total"] if row and row["total"] else 0
 
+def get_ai_quota_limit(clinic_id: int) -> int:
+    """クリニックAI利用上限を返す。契約プランから取得し、未設定の場合は30（デフォルト）。
+    ai_quota_monthly = -1 の場合は無制限（パートナー向け等）。
+    """
+    contract = get_contract(clinic_id)
+    if contract and contract.get("ai_quota_monthly") is not None:
+        quota = int(contract["ai_quota_monthly"])
+        return 999999 if quota == -1 else quota
+    return 30  # デフォルト：標準プラン
+
 def check_ai_quota_available(clinic_id: int, limit: int = 30) -> bool:
+    """クリニックAIクォータが残っているか確認。プラン別上限を優先（limit引数は後方互換用）。"""
+    quota = get_ai_quota_limit(clinic_id)
     count = get_monthly_ai_usage(clinic_id)
-    return count < limit
+    return count < quota
 
 def increment_ai_quota(clinic_id: int, feature_name: str):
     import datetime
@@ -1084,3 +1102,27 @@ def get_ad_strategy_archives(clinic_id: int) -> list:
                 "performance_summary": json.loads(r[4] or "{}")
             })
         return res
+
+
+# ---- Stripe 冪等性チェック ----
+def is_stripe_event_processed(event_id: str) -> bool:
+    """Stripe Webhookの同一イベントが既に処理済みかチェックする（2重課金防止）"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT event_id FROM stripe_processed_events WHERE event_id=?",
+            (event_id,)
+        ).fetchone()
+        return row is not None
+
+
+def mark_stripe_event_processed(event_id: str):
+    """Stripe Webhookイベントを処理済みとしてDBに記録する"""
+    with get_conn() as conn:
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO stripe_processed_events (event_id) VALUES (?)",
+                (event_id,)
+            )
+            conn.commit()
+        except Exception as e:
+            print(f"[DB] stripe_processed_events 記録失敗: {e}")

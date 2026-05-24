@@ -405,7 +405,7 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
         },
         "ai_quota": {
             "used": db.get_monthly_ai_usage(clinic_id),
-            "limit": 30
+            "limit": db.get_ai_quota_limit(clinic_id)
         }
     }
 
@@ -509,27 +509,48 @@ def _run_ai_budget_allocation(clinic_id: int, monthly_budget_yen: int, ads_clien
     total_clicks = sum(p.get("clicks", 0)      for p in perf_data)
     total_imp    = sum(p.get("impressions", 0) for p in perf_data)
 
-    # キャンペーン別スコア計算（モック環境では全体パフォーマンスを比率で分割）
+    # キャンペーン別スコア計算
+    # 本番APIモード: 実際のCTR/CVR/コンバージョンデータを使用
+    # モックモード: デモ用推定値（固定シードのランダム）
     import random
-    random.seed(clinic_id + len(enabled))
 
-    # 各キャンペーンに仮の効率スコアを割り当て
-    # 本番接続後は campaign_id別の実績データから算出
     raw_scores = []
     for cp in enabled:
         cp_name = cp.get("name", "")
-        # キャンペーン名から特性を推定してスコアを設定
-        base  = random.uniform(0.6, 1.4)
-        if "指名" in cp_name or "ブランド" in cp_name:
-            base *= 1.5  # 指名検索は高CVR
-        if "リターゲ" in cp_name or "再来院" in cp_name:
-            base *= 1.3  # リターゲティングも高効率
-        if "一般" in cp_name or "汎用" in cp_name:
-            base *= 0.8  # 一般キーワードは効率低め
-        cpa_est   = max(1000, 8000 - base * 2000)
-        cvr_est   = round(base * 3.5, 2)
-        ctr_est   = round(base * 4.2, 2)
-        roi_score = base  # スコアが高いほど予算を多く配分
+
+        if not ads_client.mock_mode:
+            # ---- 本番API: 実績データからROIスコアを算出 ----
+            real_cvr  = float(cp.get("cvr", 0))
+            real_ctr  = float(cp.get("ctr", 0))
+            real_conv = float(cp.get("conversions", 0))
+            real_cost = float(cp.get("cost_micros", 0)) / 1_000_000
+            cpa_est   = round(real_cost / real_conv) if real_conv > 0 else 15000
+            cvr_est   = round(real_cvr, 2)
+            ctr_est   = round(real_ctr, 2)
+            # ROIスコア: CVRを基準に正規化（整体院平均CVR≒5%を1.0とする）
+            roi_score = max(0.1, real_cvr / 5.0)
+            # キャンペーン名による補正（指名・リターゲは効率的なため加点）
+            if "指名" in cp_name or "ブランド" in cp_name:
+                roi_score = min(2.0, roi_score * 1.5)
+            if "リターゲ" in cp_name or "再来院" in cp_name:
+                roi_score = min(2.0, roi_score * 1.3)
+            if "一般" in cp_name or "汎用" in cp_name:
+                roi_score = max(0.1, roi_score * 0.8)
+        else:
+            # ---- モックモード: デモ用推定値（clinic_idで固定シード）----
+            random.seed(clinic_id + len(enabled))
+            base = random.uniform(0.6, 1.4)
+            if "指名" in cp_name or "ブランド" in cp_name:
+                base *= 1.5
+            if "リターゲ" in cp_name or "再来院" in cp_name:
+                base *= 1.3
+            if "一般" in cp_name or "汎用" in cp_name:
+                base *= 0.8
+            cpa_est   = max(1000, 8000 - base * 2000)
+            cvr_est   = round(base * 3.5, 2)
+            ctr_est   = round(base * 4.2, 2)
+            roi_score = base
+
         raw_scores.append({
             "campaign": cp,
             "roi_score": roi_score,
@@ -1320,15 +1341,25 @@ async def stripe_webhook(request: Request):
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
     except Exception as e:
-        if not STRIPE_WEBHOOK_SECRET:
-            # モック環境用（ローカルテストなどで強制発火させる場合）
+        _is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+        if not STRIPE_WEBHOOK_SECRET and not _is_prod:
+            # 開発環境のみ: シークレット未設定時はモックイベントとして処理（本番では拒否）
             import json
             try:
-                event = {"type": "mock.event", "data": {"object": json.loads(payload)}}
+                event = {"type": "mock.event", "data": {"object": json.loads(payload)}, "id": "mock_event"}
             except:
                 raise HTTPException(status_code=400, detail="Invalid payload")
         else:
-            raise HTTPException(status_code=400, detail=f"Webhook Error: {e}")
+            # 本番環境でシークレット未設定 or 署名不正は必ず拒否
+            raise HTTPException(status_code=400, detail=f"Webhook署名の検証に失敗しました。STRIPE_WEBHOOK_SECRETをRenderの環境変数に設定してください。")
+
+    # --- 🔒 冪等性チェック: 同一イベントの2重処理を防止 ---
+    event_id = event.get("id", "")
+    if event_id and event_id != "mock_event":
+        if db.is_stripe_event_processed(event_id):
+            print(f"[Stripe] 重複Webhookをスキップ: {event_id}")
+            return {"status": "already_processed"}
+        db.mark_stripe_event_processed(event_id)
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
@@ -1442,6 +1473,89 @@ def serve_images(file_path: str):
 
 
 # ---- API: システム間連携 (LOGICTION ↔ 広告運用システム) ----
+# ============================================================
+# ---- API: LOGICTION直結エンドポイント /api/admu/cv ----
+# LOGICTIONのJSから直接叩く。LTV計算→OCT送信をまとめて行う。
+# ============================================================
+class AdmuCvReq(BaseModel):
+    gclid: str
+    patient_id: Optional[str] = None
+    clinic_id: int = 1
+    conversion_name: str = "来院"
+    # LTV計算用パラメータ（LOGICTIONから送られてくる）
+    visit_count: int = 1
+    total_revenue: float = 0
+    is_churned: bool = False
+    is_course_member: bool = False
+    last_menu: Optional[str] = None
+
+@app.post("/api/admu/cv")
+async def receive_admu_cv(req: AdmuCvReq):
+    """
+    LOGICTIONのフロントエンドから来院・決済完了時に直接呼ばれるエンドポイント。
+    患者データからLTVを計算し、Google Ads Offline Conversion APIへ送信する。
+
+    フロー:
+        LOGICTION(JS) → POST /api/admu/cv → LTV計算 → Google Ads OCT
+    """
+    from integration_bridge import calculate_patient_ltv
+    import hashlib
+
+    # LTV計算
+    ltv = calculate_patient_ltv(
+        visit_count=req.visit_count,
+        total_revenue=req.total_revenue,
+        is_churned=req.is_churned,
+        is_course_member=req.is_course_member,
+        last_menu=req.last_menu,
+    )
+
+    log_msg = (
+        f"[AdMu-CV] {req.conversion_name} "
+        f"LTV¥{ltv['ltv_value']:,}({ltv['ltv_grade']}) "
+        f"GCLID={req.gclid[:8]}... (clinic_id={req.clinic_id})"
+    )
+    db.add_performance_log(req.clinic_id, log_msg, "INFO")
+    print(log_msg)
+
+    # Google Ads API への OCT 送信
+    try:
+        acc = _require_account(req.clinic_id, platform="google")
+    except Exception as e:
+        # アカウント未設定時はLTV計算結果だけ返す（サイレント）
+        return {
+            "success": False,
+            "message": f"Ads account error: {e}",
+            "ltv_value": ltv["ltv_value"],
+            "ltv_grade": ltv["ltv_grade"],
+            "reason": ltv["reason"],
+        }
+
+    from ads_client import AdsClient
+    client = AdsClient(acc)
+
+    # patient_idをハッシュ化
+    patient_id_hash = hashlib.sha256((req.patient_id or "").encode()).hexdigest() if req.patient_id else None
+
+    result = client.upload_offline_conversion(
+        gclid=req.gclid,
+        conversion_name=req.conversion_name,
+        conversion_value=ltv["ltv_value"],
+        conversion_time=None,  # 現在時刻
+    )
+
+    return {
+        "success": result.get("success", False),
+        "mock": result.get("mock", True),
+        "ltv_value": ltv["ltv_value"],
+        "ltv_grade": ltv["ltv_grade"],
+        "reason": ltv["reason"],
+        "visit_count": req.visit_count,
+        "is_course_member": req.is_course_member,
+        "is_churned": req.is_churned,
+    }
+
+
 class OfflineConversionReq(BaseModel):
     gclid: str
     conversion_name: str        # 例: "来院", "回数券購入", "コース契約"
@@ -1508,6 +1622,98 @@ def integration_status():
         "status": "ready" if secret_set else "pending_configuration",
         "note": ".env で LOGICTION_BASE_URL と INTEGRATION_SECRET_KEY を設定してください"
     }
+
+
+# ---- API: LTV計算プレビュー ① ----
+class LtvPreviewReq(BaseModel):
+    clinic_id: int = 1
+    visit_count: int = 1
+    total_revenue: float = 0
+    is_churned: bool = False
+    last_menu: Optional[str] = None
+    is_course_member: bool = False
+
+@app.post("/api/integration/ltv-preview")
+def preview_ltv(req: LtvPreviewReq):
+    """
+    患者データを受け取りLTV計算結果をプレビューする。
+    LOGICTIONとの連携設定画面でリアルタイムに確認できる。
+    """
+    from integration_bridge import calculate_patient_ltv
+    ltv = calculate_patient_ltv(
+        visit_count=req.visit_count,
+        total_revenue=req.total_revenue,
+        is_churned=req.is_churned,
+        last_menu=req.last_menu,
+        is_course_member=req.is_course_member,
+    )
+    return {"success": True, "ltv": ltv}
+
+
+# ---- API: 検索語句レポート ② ----
+@app.get("/api/search-terms")
+def get_search_terms(
+    clinic_id: int = 1,
+    platform: str = "google",
+    days: int = 30,
+    min_cost_yen: int = 500,
+    max_conversions: float = 0,
+):
+    """
+    検索語句レポートを取得。is_wasted=True の語句が「ムダ遣い候補」。
+    フロントエンドでは1クリックで除外リストへ追加できる。
+    """
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, platform)
+    terms = client.get_search_term_report(
+        days=days, min_cost_yen=min_cost_yen, max_conversions=max_conversions
+    )
+    wasted_cost = sum(t["cost_yen"] for t in terms if t["is_wasted"])
+    return {
+        "terms": terms,
+        "wasted_count": sum(1 for t in terms if t["is_wasted"]),
+        "wasted_cost_yen": wasted_cost,
+        "total_terms": len(terms),
+    }
+
+@app.post("/api/search-terms/bulk-exclude")
+def bulk_exclude_search_terms(clinic_id: int = 1, keywords: list[str] = None):
+    """選択した検索語句を一括で除外リストに追加する"""
+    if not keywords:
+        raise HTTPException(400, "除外するキーワードを指定してください")
+    added = []
+    for kw in keywords:
+        nkw_id = db.add_negative_keyword(clinic_id, kw, "BROAD", campaign_id=None, source="manual_from_report")
+        added.append({"keyword": kw, "id": nkw_id})
+    return {"success": True, "added": added, "count": len(added)}
+
+
+# ---- API: 入札スケジュール適用 ⑤ ----
+class ScheduleApplyReq(BaseModel):
+    clinic_id: int = 1
+    campaign_id: str
+    modifiers: list  # [{ "day_of_week": "MONDAY", "start_hour": 9, "end_hour": 10, "bid_modifier": 1.3 }]
+
+@app.post("/api/schedule/apply")
+def apply_bid_schedule(req: ScheduleApplyReq):
+    """
+    時間帯ヒートマップの推奨スケジュールをGoogle Adsに実際に適用する。
+    モックモードではシミュレーション結果のみ返す。
+    """
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+    result = client.apply_ad_schedule_bid_modifiers(
+        campaign_id=req.campaign_id,
+        schedule_modifiers=req.modifiers,
+    )
+    if result.get("success"):
+        db.create_alert(
+            req.clinic_id,
+            f"入札スケジュール適用: キャンペーン{req.campaign_id} {result['applied_count']}スロット設定",
+            level="INFO"
+        )
+    return result
+
 
 
 # ============================================================
@@ -1832,7 +2038,7 @@ def auto_score_ab(clinic_id: int = 1):
 # ============================================================
 # ---- Phase 2H: 管理者パネル API ----
 # ============================================================
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")  # デフォルト値なし（本番では必ず環境変数で設定）
 
 def _check_admin(password: str = "", authorization: Optional[str] = None, request: Request = None):
     if request and "access_token" in request.cookies:
@@ -1970,9 +2176,21 @@ def admin_upsert_clinic(req: ClinicUpsertReq, request: Request, authorization: O
     # plan_statusのみの更新対応
     if req.id and not req.name and req.plan_status:
         db.update_clinic_plan_status(req.id, req.plan_status)
+        # 停止・解約時はスケジューラからジョブを削除
+        if req.plan_status in ("suspended", "cancelled"):
+            monitor.unregister_clinic_jobs(req.id)
+        elif req.plan_status == "active":
+            # 復活時はジョブを再登録
+            monitor.register_clinic_jobs(req.id)
         return {"success": True, "clinic_id": req.id, "message": "ステータスを更新しました"}
         
+    is_new = not req.id  # IDがなければ新規登録
     clinic_id = db.upsert_clinic(req.model_dump())
+    
+    # 新規クリニック登録時: スケジューラに動的にジョブを追加（再起動不要）
+    if is_new and clinic_id:
+        monitor.register_clinic_jobs(clinic_id)
+    
     return {"success": True, "clinic_id": clinic_id}
 
 
@@ -2102,10 +2320,10 @@ def get_ga_summary(clinic_id: int = 1):
         except Exception as e:
             print(f"[GA4] API取得失敗: {e}")
 
-    # モックデータ（未接続 or エラー時）
+    # モックデータ（未接続 or GA4 APIエラー時）
     import random
     return {
-        "connected": bool(ga4_prop),
+        "connected": False,  # API失敗時は接続済みと偽らない
         "sessions": random.randint(800, 2400),
         "bounce_rate": round(random.uniform(35, 65), 1),
         "avg_session_duration": round(random.uniform(60, 240), 1),
@@ -3016,6 +3234,8 @@ async def performance_heatmap(clinic_id: int = 1):
         "max_ctr": max_ctr,
         "bid_schedule": bid_schedule,
         "ai_insight": ai_insight,
+        "data_source": "industry_model",
+        "data_note": "整体院業界の標準的な検索行動パターンモデルに基づく推定値です。実データが蓄積されると自動的に精度が向上します。",
     }
 
 
@@ -3384,7 +3604,8 @@ def lp_contact(req: LPContactReq):
       <p style="font-size:12px;color:#888;margin-top:16px">受信時刻: {dt.now().strftime("%Y/%m/%d %H:%M")}</p>
     </div>
     """
-    email_notifier._send("info@admu.jp", f"【AdMu LP】新規お問い合わせ: {req.clinic}（{req.area}）", admin_html)
+    _admin_notify_email = os.environ.get("ADMIN_NOTIFICATION_EMAIL", "info@admu.jp")
+    email_notifier._send(_admin_notify_email, f"【AdMu LP】新規お問い合わせ: {req.clinic}（{req.area}）", admin_html)
 
     # ── ユーザー自動返信メール ────────────────────────────────
     user_html = f"""

@@ -1,8 +1,11 @@
 """
 yahoo_ads_client.py - Yahoo! Ads API クライアント（モックモード対応）
 MOCK_MODE=True のときはダミーデータを返す。
+本番モードではYahoo! Ads Display API v10を使用。
 """
 import random
+import os
+import requests
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -13,6 +16,10 @@ _CAMPAIGN_TEMPLATES = [
     {"name": "症状別 | 腰痛・肩こり (Yahoo)",    "budget": 6_000_000_000,  "ctr_base": 3.8, "cvr_base": 4.8,  "status": "ENABLED"},
     {"name": "リターゲティング (YDN)",          "budget": 4_000_000_000,  "ctr_base": 0.9, "cvr_base": 6.2,  "status": "ENABLED"},
 ]
+
+# Yahoo! Ads API エンドポイント
+YAHOO_ADS_API_BASE  = "https://ads-search.yahooapis.jp/api/v10"
+YAHOO_TOKEN_URL     = "https://biz-oauth.yahoo.co.jp/oauth/v1/token"
 
 def _mock_campaign(i: int, name: str = None, customer_id: str = "DEMO"):
     tpl = _CAMPAIGN_TEMPLATES[i % len(_CAMPAIGN_TEMPLATES)]
@@ -95,55 +102,217 @@ def _mock_performance_series(days: str = "7", start_date: str = None, end_date: 
     return series
 
 class YahooAdsClient:
-    """最小化されたYahoo Ads APIラッパー。mock_mode=True なら全てダミーデータを返す。"""
+    """Yahoo! Ads APIラッパー。mock_mode=True なら全てダミーデータを返す。"""
 
     def __init__(self, account_config: dict):
         raw = account_config.get("yahoo_mock_mode", 1)
         self.mock_mode = (str(raw) != "0") if raw is not None else True
         self.account_id = account_config.get("yahoo_account_id") or "Y-DEMO"
-        self._client: Optional[object] = None
+        self._access_token: Optional[str] = None
+        self._token_expires_at: Optional[datetime] = None
+
+        self._client_id     = account_config.get("yahoo_client_id") or ""
+        self._client_secret = account_config.get("yahoo_client_secret") or ""
+        self._refresh_token = account_config.get("yahoo_refresh_token") or ""
 
         if not self.mock_mode:
-            try:
-                cfg = {
-                    "client_id":       account_config.get("yahoo_client_id") or "",
-                    "client_secret":   account_config.get("yahoo_client_secret") or "",
-                    "refresh_token":   account_config.get("yahoo_refresh_token") or "",
-                }
-                if not all([cfg["client_id"], cfg["client_secret"], cfg["refresh_token"]]):
-                    print("[YahooAdsClient] Yahoo Ads認資情報が不完全のためモックモードで動作します")
-                    self.mock_mode = True
-                else:
-                    print("[YahooAdsClient] Yahoo Ads 実API初期化 (Not fully implemented, falling back to mock)")
-                    self.mock_mode = True
-            except Exception as e:
-                print(f"[YahooAdsClient] API初期化失敗、モックモードに切替: {e}")
+            if not all([self._client_id, self._client_secret, self._refresh_token]):
+                print("[YahooAdsClient] Yahoo Ads認証情報が不完全のためモックモードで動作します")
                 self.mock_mode = True
+            else:
+                # 初期アクセストークン取得
+                try:
+                    self._refresh_access_token()
+                    print(f"[YahooAdsClient] Yahoo Ads 実API接続成功 (account_id={self.account_id})")
+                except Exception as e:
+                    print(f"[YahooAdsClient] アクセストークン取得失敗、モックモードに切替: {e}")
+                    self.mock_mode = True
+
+    def _refresh_access_token(self):
+        """リフレッシュトークンからアクセストークンを再取得する"""
+        resp = requests.post(YAHOO_TOKEN_URL, data={
+            "grant_type":    "refresh_token",
+            "client_id":     self._client_id,
+            "client_secret": self._client_secret,
+            "refresh_token": self._refresh_token,
+        }, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        self._access_token       = data["access_token"]
+        expires_in               = data.get("expires_in", 3600)
+        self._token_expires_at   = datetime.now() + timedelta(seconds=expires_in - 60)
+
+    def _get_headers(self) -> dict:
+        """有効なアクセストークンを付与したヘッダーを返す"""
+        if not self._access_token or datetime.now() >= (self._token_expires_at or datetime.min):
+            self._refresh_access_token()
+        return {
+            "Authorization": f"Bearer {self._access_token}",
+            "Content-Type":  "application/json",
+        }
+
+    def _post(self, endpoint: str, payload: dict) -> dict:
+        """Yahoo Ads API へのPOSTリクエスト共通処理"""
+        url = f"{YAHOO_ADS_API_BASE}/{endpoint}"
+        resp = requests.post(url, json=payload, headers=self._get_headers(), timeout=15)
+        resp.raise_for_status()
+        return resp.json()
 
     def list_campaigns(self):
         if self.mock_mode:
             return [_mock_campaign(i, customer_id=self.account_id) for i in range(4)]
-        return []
+
+        try:
+            data = self._post("CampaignService/get", {
+                "accountId": self.account_id,
+                "selector": {
+                    "fields": ["CAMPAIGN_ID", "CAMPAIGN_NAME", "CAMPAIGN_DAILY_BUDGET",
+                               "CAMPAIGN_STATUS", "IMPRESSIONS", "CLICKS", "CTR",
+                               "AVERAGE_CPC", "COST", "CONVERSIONS", "CONV_RATE"],
+                    "dateRange": {"endDate": datetime.now().strftime("%Y%m%d"),
+                                  "startDate": (datetime.now() - timedelta(days=7)).strftime("%Y%m%d")},
+                }
+            })
+            results = []
+            for item in data.get("rval", {}).get("values", []):
+                c = item.get("campaign", {})
+                m = item.get("campaignStats", {})
+                results.append({
+                    "id":             str(c.get("campaignId", "")),
+                    "name":           c.get("campaignName", ""),
+                    "status":         c.get("userStatus", "ENABLED"),
+                    "budget_micros":  int(float(c.get("campaignDailyBudget", {}).get("budget", 0)) * 1_000_000),
+                    "impressions":    int(m.get("impressions", 0)),
+                    "clicks":         int(m.get("clicks", 0)),
+                    "ctr":            round(float(m.get("ctr", 0)) * 100, 2),
+                    "avg_cpc_micros": int(float(m.get("averageCpc", 0)) * 1_000_000),
+                    "cost_micros":    int(float(m.get("cost", 0)) * 1_000_000),
+                    "conversions":    float(m.get("conversions", 0)),
+                    "cvr":            round(float(m.get("convRate", 0)) * 100, 2),
+                })
+            return results
+        except Exception as e:
+            print(f"[YahooAdsClient] list_campaigns エラー: {e}")
+            return []
 
     def create_campaign(self, name: str, budget_micros: int, target_region: str = "", campaign_type: str = "SEARCH") -> str:
         if self.mock_mode:
             mock_id = f"Y-MOCK-{self.account_id}-{random.randint(2000,9999)}"
             print(f"[Y-MOCK] キャンペーン作成: {name} id={mock_id}")
             return mock_id
-        return ""
+
+        try:
+            data = self._post("CampaignService/mutate", {
+                "accountId": self.account_id,
+                "operand": [{
+                    "operator": "ADD",
+                    "campaign": {
+                        "campaignName": name,
+                        "campaignType": campaign_type,
+                        "userStatus": "ENABLED",
+                        "campaignDailyBudget": {"budget": budget_micros / 1_000_000},
+                        "biddingStrategyType": "MANUAL_CPC",
+                    }
+                }]
+            })
+            return str(data.get("rval", {}).get("values", [{}])[0].get("campaign", {}).get("campaignId", ""))
+        except Exception as e:
+            print(f"[YahooAdsClient] create_campaign エラー: {e}")
+            return ""
 
     def update_campaign_status(self, campaign_id: str, status: str):
         if self.mock_mode:
             print(f"[Y-MOCK] ステータス更新: {campaign_id} -> {status}")
             return
 
+        try:
+            self._post("CampaignService/mutate", {
+                "accountId": self.account_id,
+                "operand": [{
+                    "operator": "SET",
+                    "campaign": {"campaignId": campaign_id, "userStatus": status}
+                }]
+            })
+        except Exception as e:
+            print(f"[YahooAdsClient] update_campaign_status エラー: {e}")
+
     def get_performance_series(self, days: str = "7", start_date: str = None, end_date: str = None):
         if self.mock_mode:
             return _mock_performance_series(days, start_date, end_date)
-        return []
+
+        try:
+            if start_date and end_date:
+                sd = start_date.replace("-", "")
+                ed = end_date.replace("-", "")
+            else:
+                d_int = int(days) if str(days).isdigit() else 7
+                ed = datetime.now().strftime("%Y%m%d")
+                sd = (datetime.now() - timedelta(days=d_int)).strftime("%Y%m%d")
+
+            data = self._post("ReportDefinitionService/mutate", {
+                "accountId": self.account_id,
+                "operand": [{
+                    "operator": "ADD",
+                    "reportDefinition": {
+                        "reportName": f"daily_report_{sd}_{ed}",
+                        "reportType": "CAMPAIGN",
+                        "dateRangeType": "CUSTOM_DATE",
+                        "dateRange": {"startDate": sd, "endDate": ed},
+                        "fields": ["DAY", "IMPRESSIONS", "CLICKS", "CTR",
+                                   "AVERAGE_CPC", "COST", "CONVERSIONS", "CONV_RATE"],
+                        "format": "JSON",
+                    }
+                }]
+            })
+            # レポートのダウンロードURLを取得して解析
+            report_id = data.get("rval", {}).get("values", [{}])[0].get("reportDefinition", {}).get("reportDefinitionId")
+            if not report_id:
+                return _mock_performance_series(days, start_date, end_date)
+
+            # レポートダウンロード（ポーリングを省略し、利用可能なら即取得）
+            report_resp = requests.get(
+                f"{YAHOO_ADS_API_BASE}/ReportService/download?accountId={self.account_id}&reportDefinitionId={report_id}",
+                headers=self._get_headers(), timeout=30
+            )
+            report_resp.raise_for_status()
+            rows = report_resp.json().get("report", {}).get("rows", [])
+            result = []
+            for row in rows:
+                result.append({
+                    "date":           row.get("day", ""),
+                    "impressions":    int(row.get("impressions", 0)),
+                    "clicks":         int(row.get("clicks", 0)),
+                    "ctr":            round(float(row.get("ctr", 0)) * 100, 2),
+                    "avg_cpc_micros": int(float(row.get("averageCpc", 0)) * 1_000_000),
+                    "cost_micros":    int(float(row.get("cost", 0)) * 1_000_000),
+                    "conversions":    float(row.get("conversions", 0)),
+                    "cvr":            round(float(row.get("convRate", 0)) * 100, 2),
+                })
+            return result
+        except Exception as e:
+            print(f"[YahooAdsClient] get_performance_series エラー: {e}。モックデータで代替。")
+            return _mock_performance_series(days, start_date, end_date)
 
     def adjust_keyword_bid(self, ad_group_id: str, keyword_id: str, new_cpc_micros: int):
         if self.mock_mode:
             print(f"[Y-MOCK] 入札調整: keyword={keyword_id} new_cpc={new_cpc_micros}")
             return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
-        return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
+
+        try:
+            self._post("BidLandscapeService/mutate", {
+                "accountId": self.account_id,
+                "operand": [{
+                    "operator": "SET",
+                    "adGroupCriterion": {
+                        "adGroupId": ad_group_id,
+                        "criterionId": keyword_id,
+                        "bid": {"maxCpc": new_cpc_micros / 1_000_000},
+                    }
+                }]
+            })
+            return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
+        except Exception as e:
+            print(f"[YahooAdsClient] adjust_keyword_bid エラー: {e}")
+            return {"adjusted": False, "error": str(e)}
+
+

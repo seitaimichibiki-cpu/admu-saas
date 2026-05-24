@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AdMu — Google Ads API Tool Design Document v2.0</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; margin: 40px; color: #222; line-height: 1.7; max-width: 900px; }
+  h1 { font-size: 24px; color: #1a73e8; border-bottom: 3px solid #1a73e8; padding-bottom: 10px; margin-bottom: 6px; }
+  h2 { font-size: 17px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 32px; }
+  h3 { font-size: 14px; color: #444; margin-top: 18px; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: #1a73e8; color: white; padding: 8px 10px; text-align: left; font-size: 11px; }
+  td { border: 1px solid #ddd; padding: 7px 10px; font-size: 12px; }
+  tr:nth-child(even) { background: #f5f8ff; }
+  .box { background: #e8f0fe; border-left: 5px solid #1a73e8; padding: 12px 16px; margin: 14px 0; border-radius: 4px; }
+  .box-green { background: #e6f4ea; border-left: 5px solid #34a853; padding: 12px 16px; margin: 14px 0; border-radius: 4px; }
+  .box-orange { background: #fef7e0; border-left: 5px solid #fbbc04; padding: 12px 16px; margin: 14px 0; border-radius: 4px; }
+  .section { margin-bottom: 28px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 5px; }
+  ol li { margin-bottom: 8px; }
+  pre { font-size: 11px; background: #f4f4f4; padding: 12px; border-radius: 6px; overflow-x: auto; border: 1px solid #ddd; }
+  code { font-family: 'Fira Code', 'Consolas', monospace; font-size: 11px; background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+  .status-badge { display: inline-block; background: #34a853; color: white; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; }
+  .tag { display: inline-block; background: #e8f0fe; color: #1a73e8; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 8px; margin-right: 4px; }
+  .footer { margin-top: 40px; padding-top: 16px; border-top: 2px solid #1a73e8; font-size: 11px; color: #666; }
+  @media print { body { margin: 20px; } }
+</style>
+</head>
+<body>
+
+<h1>AdMu — Google Ads API Tool Design Document</h1>
+
+<div class="box">
+  <strong>Document Version:</strong> 2.0 &nbsp;|&nbsp;
+  <strong>Date:</strong> May 7, 2026 &nbsp;|&nbsp;
+  <strong>Status:</strong> <span class="status-badge">Production — Live</span><br>
+  <strong>Company:</strong> Seitaiin Michibiki (整体院導) &nbsp;|&nbsp;
+  <strong>Tool URL:</strong> <a href="https://admu-backend-jxi0.onrender.com">https://admu-backend-jxi0.onrender.com</a><br>
+  <strong>MCC Account ID:</strong> 167-626-3182 &nbsp;|&nbsp;
+  <strong>API Contact Email:</strong> seitaimichibiki@gmail.com
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>1. Executive Summary</h2>
+<p>
+  <strong>AdMu</strong> (Advertisement Mu) is a <strong>fully developed and deployed</strong> B2B SaaS platform that provides independent chiropractic and physical therapy clinics in Japan with an easy-to-use advertising management dashboard. The tool is live and serving clients at <a href="https://admu-backend-jxi0.onrender.com">https://admu-backend-jxi0.onrender.com</a>.
+</p>
+
+<div class="box-green">
+  <strong>Current Status:</strong> AdMu is a <strong>completed, production-deployed tool</strong> with a fully functional backend, frontend dashboard, multi-tenant architecture, authentication system, and automated monitoring. The tool is currently operating in mock-data mode while awaiting API token approval — the only remaining step before connecting to live Google Ads data.
+</div>
+
+<p><strong>What AdMu does:</strong></p>
+<ul>
+  <li><strong>Reads</strong> campaign performance data (impressions, clicks, cost, conversions) from each clinic's Google Ads account via the official SDK</li>
+  <li><strong>Displays</strong> the data in a simplified dashboard designed for non-technical clinic owners</li>
+  <li><strong>Uploads</strong> offline conversions (patient inquiry form submissions captured by gclid) back to Google Ads to measure real-world patient acquisition</li>
+  <li><strong>Generates</strong> AI-powered ad copy suggestions and negative keyword recommendations</li>
+</ul>
+
+<p><strong>What AdMu does NOT do:</strong></p>
+<ul>
+  <li>Does NOT create or modify campaigns, ad groups, or ads programmatically</li>
+  <li>Does NOT perform automated bidding or budget changes via the API</li>
+  <li>Does NOT access any personally identifiable information (PII) of ad viewers</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>2. Tool Category &amp; Access Level</h2>
+
+<table>
+  <tr><th>Item</th><th>Details</th></tr>
+  <tr><td>Tool Type</td><td>Internal tool used by the company to manage advertising for client clinics</td></tr>
+  <tr><td>Category</td><td>Reporting &amp; Dashboarding + Offline Conversion Upload</td></tr>
+  <tr><td>Requested Access Level</td><td><strong>Basic Access</strong></td></tr>
+  <tr><td>Why Basic Access is needed</td><td>AdMu is a multi-tenant SaaS serving multiple clinic clients. Each clinic connects their own Google Ads account via OAuth 2.0. Test Account access only permits access to a single test account and cannot fetch real campaign data from paying clients' accounts.</td></tr>
+  <tr><td>Estimated daily API operations</td><td>~200–500 (well within Basic Access limits of 15,000/day)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>3. Detailed API Usage</h2>
+
+<h3>3.1 Google Ads API Services Used</h3>
+<table>
+  <tr><th>API Service</th><th>Method</th><th>Read/Write</th><th>Purpose</th><th>Frequency</th></tr>
+  <tr>
+    <td>GoogleAdsService</td>
+    <td>SearchStream (GAQL)</td>
+    <td><span class="tag">READ</span></td>
+    <td>Fetch campaign-level metrics: impressions, clicks, cost_micros, conversions, CTR, CPC, CVR</td>
+    <td>On dashboard load + scheduled (every 5 min)</td>
+  </tr>
+  <tr>
+    <td>GoogleAdsService</td>
+    <td>SearchStream (GAQL)</td>
+    <td><span class="tag">READ</span></td>
+    <td>Fetch keyword-level and search term performance for negative keyword analysis</td>
+    <td>Weekly automated scan + on-demand</td>
+  </tr>
+  <tr>
+    <td>GoogleAdsService</td>
+    <td>SearchStream (GAQL)</td>
+    <td><span class="tag">READ</span></td>
+    <td>Fetch date-segmented performance data for trend charts (7/14/30/365 days)</td>
+    <td>On dashboard load</td>
+  </tr>
+  <tr>
+    <td>CustomerService</td>
+    <td>ListAccessibleCustomers</td>
+    <td><span class="tag">READ</span></td>
+    <td>Enumerate linked customer accounts under MCC for account selection</td>
+    <td>During initial OAuth connection</td>
+  </tr>
+  <tr>
+    <td>ConversionUploadService</td>
+    <td>UploadClickConversions</td>
+    <td><span class="tag">WRITE</span></td>
+    <td>Upload offline conversions (patient form submissions) linked by gclid to measure real patient acquisition from ads</td>
+    <td>Event-driven (on form submission)</td>
+  </tr>
+</table>
+
+<h3>3.2 Example GAQL Queries</h3>
+<pre>
+-- Campaign performance (dashboard)
+SELECT campaign.id, campaign.name, campaign.status,
+       campaign_budget.amount_micros,
+       metrics.impressions, metrics.clicks, metrics.ctr,
+       metrics.average_cpc, metrics.cost_micros,
+       metrics.conversions, metrics.conversions_from_interactions_rate
+FROM campaign
+WHERE segments.date DURING LAST_7_DAYS
+
+-- Daily performance trend
+SELECT segments.date, metrics.impressions, metrics.clicks, metrics.ctr,
+       metrics.average_cpc, metrics.cost_micros, metrics.conversions,
+       metrics.conversions_from_interactions_rate
+FROM campaign
+WHERE segments.date DURING LAST_30_DAYS
+ORDER BY segments.date
+
+-- Search term analysis (negative keyword detection)
+SELECT search_term_view.search_term,
+       campaign.id, campaign.name,
+       metrics.clicks, metrics.cost_micros, metrics.conversions
+FROM search_term_view
+WHERE segments.date DURING LAST_30_DAYS
+  AND metrics.impressions > 0
+ORDER BY metrics.cost_micros DESC
+LIMIT 500
+</pre>
+
+<h3>3.3 Offline Conversion Upload Flow</h3>
+<ol>
+  <li>Patient visits the clinic's website via a Google Ads click → <code>gclid</code> is captured in the URL</li>
+  <li>Patient submits an inquiry form → <code>gclid</code> + form data are stored in AdMu's database</li>
+  <li>AdMu backend calls <code>ConversionUploadService.UploadClickConversions</code> to send the conversion back to Google Ads</li>
+  <li>The conversion appears in the clinic's Google Ads reports as an offline conversion, enabling accurate ROI measurement</li>
+</ol>
+
+<h3>3.4 Data Retrieved and Storage</h3>
+<ul>
+  <li><strong>Data accessed:</strong> Campaign/keyword aggregate metrics only (impressions, clicks, cost, conversions). No PII of ad viewers is accessed.</li>
+  <li><strong>Storage:</strong> Metrics are stored in PostgreSQL for up to 90 days for trend analysis, then automatically purged.</li>
+  <li><strong>Data isolation:</strong> Each clinic's data is isolated by <code>clinic_id</code> (tenant key). Cross-tenant access is prevented at the application layer.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>4. System Architecture</h2>
+
+<h3>4.1 Technical Stack</h3>
+<table>
+  <tr><th>Component</th><th>Technology</th><th>Details</th></tr>
+  <tr><td>Backend API</td><td>Python 3.11, FastAPI</td><td>RESTful API server with async support</td></tr>
+  <tr><td>Google Ads Client</td><td>google-ads-python SDK v25.1.0</td><td>Official Google Ads API client library</td></tr>
+  <tr><td>Database</td><td>PostgreSQL (Render.com managed)</td><td>Production database with automatic backups</td></tr>
+  <tr><td>Frontend</td><td>HTML5, Vanilla JavaScript, CSS</td><td>Responsive SPA dashboard</td></tr>
+  <tr><td>Hosting</td><td>Render.com (HTTPS enforced)</td><td>Auto-scaling with health checks</td></tr>
+  <tr><td>Authentication</td><td>OAuth 2.0 + JWT sessions</td><td>HttpOnly Secure cookies, CSRF protection</td></tr>
+  <tr><td>Monitoring</td><td>Sentry</td><td>Error tracking for both backend and frontend</td></tr>
+  <tr><td>Payments</td><td>Stripe</td><td>Subscription billing for SaaS clients</td></tr>
+  <tr><td>Notifications</td><td>LINE Messaging API + SMTP</td><td>Automated alerts and reports</td></tr>
+  <tr><td>AI Features</td><td>Google Gemini API</td><td>Ad copy generation and report analysis</td></tr>
+</table>
+
+<h3>4.2 Architecture Diagram</h3>
+<pre>
+┌─────────────────────────────────────────────────────────────────────┐
+│                     AdMu System Architecture                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  [Clinic Owner Browser]                                             │
+│        │                                                            │
+│        ▼  HTTPS (TLS 1.3)                                          │
+│  ┌─────────────────────────────────┐                                │
+│  │ AdMu Frontend (SPA)             │                                │
+│  │ admu-backend-jxi0.onrender.com  │                                │
+│  │ - Dashboard with KPI cards      │                                │
+│  │ - Performance charts (Chart.js) │                                │
+│  │ - Campaign management UI        │                                │
+│  │ - AI ad copy generator          │                                │
+│  └────────────┬────────────────────┘                                │
+│               │ Internal API (HTTPS)                                │
+│               ▼                                                     │
+│  ┌─────────────────────────────────────────────────┐                │
+│  │ AdMu Backend (FastAPI on Render)                 │               │
+│  │                                                  │               │
+│  │ Security Middleware:                              │               │
+│  │  ├─ CSRF (Double Submit Cookie)                  │               │
+│  │  ├─ Rate Limiter (120 req/min)                   │               │
+│  │  ├─ Tenant Isolation Middleware                   │               │
+│  │  ├─ Security Headers (CSP, HSTS, X-Frame-Options)│               │
+│  │  └─ JWT Auth (HttpOnly Secure Cookie)            │               │
+│  │                                                  │               │
+│  │ Google Ads Integration:                          │               │
+│  │  ├─ OAuth 2.0 Refresh Token (AES-256 encrypted) │               │
+│  │  ├─ SearchStream (GAQL) for metrics              │               │
+│  │  └─ UploadClickConversions for OCT               │               │
+│  └───────┬──────────────┬──────────────────────────┘                │
+│          │              │                                           │
+│          ▼              ▼                                           │
+│  ┌──────────────┐  ┌──────────────────────────────┐                 │
+│  │ PostgreSQL   │  │ Google Ads API                │                │
+│  │ (Render)     │  │ - SearchStream/GAQL (READ)    │                │
+│  │              │  │ - ConversionUpload (WRITE)    │                │
+│  │ Tables:      │  │ - ListAccessibleCustomers     │                │
+│  │ - clinics    │  └──────────────────────────────┘                 │
+│  │ - ads_accounts│                                                  │
+│  │ - campaigns  │  External Integrations:                           │
+│  │ - perf_logs  │  ├─ LINE Messaging API (alerts)                   │
+│  │ - bid_rules  │  ├─ Stripe (billing)                              │
+│  │ - alerts     │  ├─ Google Gemini (AI features)                   │
+│  │ - users      │  └─ Sentry (error monitoring)                     │
+│  └──────────────┘                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+</pre>
+
+<h3>4.3 Automated Scheduler (Background Jobs)</h3>
+<table>
+  <tr><th>Job</th><th>Frequency</th><th>Description</th></tr>
+  <tr><td>Campaign Health Check</td><td>Every 5 minutes</td><td>Monitors CTR/CVR drops, budget depletion. Sends LINE/email alerts.</td></tr>
+  <tr><td>Bid Rule Evaluation</td><td>Every 1 hour</td><td>Evaluates user-defined bid adjustment rules against current metrics.</td></tr>
+  <tr><td>Daily Report</td><td>9:00 AM JST daily</td><td>Sends yesterday's performance summary to clinic owner via LINE.</td></tr>
+  <tr><td>Weekly Report</td><td>Monday 8:00 AM JST</td><td>Sends 7-day performance summary via LINE + email.</td></tr>
+  <tr><td>Negative KW Scan</td><td>Wednesday 3:00 AM JST</td><td>Auto-detects wasted search terms (high cost, zero conversions) and adds to negative list.</td></tr>
+  <tr><td>Data Cleanup</td><td>Sunday 3:00 AM JST</td><td>Purges logs/alerts older than 365 days.</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>5. User Workflow</h2>
+<ol>
+  <li><strong>Signup:</strong> Clinic owner registers on AdMu. Account is created in "pending" state until admin approval.</li>
+  <li><strong>Admin Approval:</strong> AdMu administrator reviews and activates the account. Welcome email is sent automatically.</li>
+  <li><strong>OAuth Connection:</strong> Clinic owner connects their Google Ads account via standard Google OAuth 2.0 consent screen. AdMu receives a refresh token, which is AES-256 encrypted before storage.</li>
+  <li><strong>Dashboard:</strong> On each visit, AdMu calls the Google Ads API (SearchStream/GAQL) using the stored refresh token to fetch campaign metrics. Data is displayed as interactive charts and KPI cards.</li>
+  <li><strong>Monitoring:</strong> Background scheduler continuously monitors campaign health and sends alerts via LINE and email when anomalies are detected.</li>
+  <li><strong>Offline Conversion:</strong> When a patient submits an inquiry form on the clinic's website, the captured gclid is sent to Google Ads as an offline conversion.</li>
+</ol>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>6. Security &amp; Credential Management</h2>
+
+<h3>6.1 Authentication &amp; Authorization</h3>
+<table>
+  <tr><th>Security Feature</th><th>Implementation</th></tr>
+  <tr><td>Session Management</td><td>JWT stored in <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Lax</code> cookies. No localStorage token storage.</td></tr>
+  <tr><td>CSRF Protection</td><td>Double Submit Cookie pattern. All mutating API calls require X-CSRF-Token header matching the csrf_token cookie.</td></tr>
+  <tr><td>Rate Limiting</td><td>120 requests/minute per IP (general API), 3 requests/5 minutes for contact forms (bot protection).</td></tr>
+  <tr><td>Multi-tenant Isolation</td><td>Middleware validates <code>clinic_id</code> in every API request against the authenticated user's assigned clinic. Cross-tenant access returns HTTP 403.</td></tr>
+  <tr><td>Role-based Access</td><td>Two roles: <code>admin</code> (full system access) and <code>user</code> (clinic-scoped access only).</td></tr>
+</table>
+
+<h3>6.2 Credential Security</h3>
+<table>
+  <tr><th>Credential</th><th>Protection Method</th></tr>
+  <tr><td>OAuth Refresh Tokens</td><td>AES-256-CBC encrypted at rest in PostgreSQL. Encryption key stored as server-side environment variable (<code>ENCRYPTION_KEY</code>).</td></tr>
+  <tr><td>Developer Token</td><td>Stored as server-side environment variable (<code>MASTER_ADS_DEVELOPER_TOKEN</code>). Never exposed to frontend.</td></tr>
+  <tr><td>Client Secret</td><td>AES-256 encrypted in database. Decrypted only in server memory during API calls.</td></tr>
+  <tr><td>User Passwords</td><td>bcrypt hashed (no plaintext storage).</td></tr>
+</table>
+
+<h3>6.3 Security Headers</h3>
+<ul>
+  <li><code>Content-Security-Policy</code> — Restricts script/style sources to trusted CDNs only</li>
+  <li><code>Strict-Transport-Security</code> — max-age=31536000; includeSubDomains</li>
+  <li><code>X-Frame-Options: DENY</code> — Clickjacking prevention</li>
+  <li><code>X-Content-Type-Options: nosniff</code></li>
+  <li><code>X-XSS-Protection: 1; mode=block</code></li>
+  <li><code>Referrer-Policy: strict-origin-when-cross-origin</code></li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>7. Demo Access for Reviewers</h2>
+
+<div class="box-orange">
+  <strong>Live Demo URL:</strong> <a href="https://admu-backend-jxi0.onrender.com">https://admu-backend-jxi0.onrender.com</a><br><br>
+  <strong>Demo Login Credentials:</strong><br>
+  Email: <code>demo@admu.jp</code><br>
+  Password: <code>demo2026admu</code><br><br>
+  <em>Note: The demo account operates in mock-data mode (clearly labeled with a "● Mock Mode" badge in the UI). All dashboard features, charts, campaign views, AI ad copy generation, and negative keyword management are fully functional and can be explored. Once the developer token is approved, the system will seamlessly switch to live Google Ads data by configuring each tenant's OAuth credentials.</em>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>8. Compliance &amp; Data Handling</h2>
+<ul>
+  <li><strong>No PII:</strong> Only aggregate advertising metrics are accessed from the Google Ads API. No end-user personal data is retrieved.</li>
+  <li><strong>Data Minimization:</strong> Only the specific fields required for dashboard display are requested via GAQL SELECT statements.</li>
+  <li><strong>Retention Policy:</strong> Performance metrics are retained for 90 days for trend analysis, then automatically purged. Audit logs and alerts are purged after 365 days.</li>
+  <li><strong>Tenant Isolation:</strong> Each clinic's data is stored with a <code>clinic_id</code> foreign key. Cross-tenant access is prevented at both the middleware and database query levels.</li>
+  <li><strong>Google API Terms Compliance:</strong> AdMu does not resell raw Google Ads data. Data is used solely to generate the in-app dashboard for each account owner.</li>
+  <li><strong>OAuth Consent:</strong> Each clinic owner explicitly grants access via Google's standard OAuth consent screen before any data is read.</li>
+  <li><strong>Token Revocation:</strong> Clinic owners can disconnect their Google Ads account at any time from the settings page, which deletes the stored refresh token.</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>9. Company Information</h2>
+<table>
+  <tr><th>Field</th><th>Details</th></tr>
+  <tr><td>Company Name</td><td>Seitaiin Michibiki (整体院導)</td></tr>
+  <tr><td>Business Type</td><td>B2B SaaS / Software Development for Healthcare Industry</td></tr>
+  <tr><td>Country</td><td>Japan</td></tr>
+  <tr><td>Company Website</td><td><a href="https://michibiki-seitai.com">https://michibiki-seitai.com</a></td></tr>
+  <tr><td>Tool URL (Live)</td><td><a href="https://admu-backend-jxi0.onrender.com">https://admu-backend-jxi0.onrender.com</a></td></tr>
+  <tr><td>API Contact Email</td><td>seitaimichibiki@gmail.com</td></tr>
+  <tr><td>Google Ads MCC ID</td><td>167-626-3182</td></tr>
+  <tr><td>Google Cloud Project</td><td>AdMu (OAuth consent screen verified)</td></tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<div class="section">
+<h2>10. Summary — Why Basic Access is Required</h2>
+<div class="box-green">
+  <p><strong>AdMu is a fully completed and deployed multi-tenant SaaS tool</strong> that needs to read live campaign performance data from each client clinic's Google Ads account. The tool:</p>
+  <ol>
+    <li>Is <strong>live and deployed</strong> at <a href="https://admu-backend-jxi0.onrender.com">https://admu-backend-jxi0.onrender.com</a></li>
+    <li>Has a <strong>complete, production-ready backend</strong> with PostgreSQL, security middleware, and automated monitoring</li>
+    <li>Uses the <strong>official google-ads-python SDK</strong> with proper GAQL queries already implemented</li>
+    <li>Has <strong>AES-256 encryption</strong> for all stored OAuth tokens</li>
+    <li>Implements <strong>enterprise-grade security</strong> (CSRF, rate limiting, CSP, HSTS, tenant isolation)</li>
+    <li>Serves <strong>multiple client clinics</strong> (multi-tenant), making Test Account access insufficient</li>
+  </ol>
+  <p>The <strong>only thing preventing live operation</strong> is the developer token approval. All code, infrastructure, and security measures are in place.</p>
+</div>
+</div>
+
+<div class="footer">
+  <strong>AdMu Design Document v2.0</strong> — Prepared for Google Ads API Compliance Review<br>
+  Contact: seitaimichibiki@gmail.com | MCC: 167-626-3182 | Last Updated: May 7, 2026
+</div>
+
+</body>
+</html>

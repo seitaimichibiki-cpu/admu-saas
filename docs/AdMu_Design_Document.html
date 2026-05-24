@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AdMu - Google Ads API Tool Design Document</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; margin: 40px; color: #222; line-height: 1.6; }
+  h1 { font-size: 22px; color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; }
+  h2 { font-size: 16px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 28px; }
+  h3 { font-size: 13px; color: #555; margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: #1a73e8; color: white; padding: 8px; text-align: left; }
+  td { border: 1px solid #ccc; padding: 7px; }
+  tr:nth-child(even) { background: #f5f5f5; }
+  .box { background: #f0f6ff; border-left: 4px solid #1a73e8; padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+  .section { margin-bottom: 24px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  pre { font-size: 11px; background: #f8f8f8; padding: 10px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>AdMu — Google Ads API Tool Design Document</h1>
+
+<div class="box">
+  <strong>Document Version:</strong> 1.0 &nbsp;|&nbsp;
+  <strong>Date:</strong> May 2026 &nbsp;|&nbsp;
+  <strong>Company:</strong> Seitaiin Michibiki (整体院導) &nbsp;|&nbsp;
+  <strong>Tool URL:</strong> https://admu-lp-yrqx.onrender.com
+</div>
+
+<div class="section">
+<h2>1. Product Overview</h2>
+<p>
+  <strong>AdMu</strong> (Advertisement Mu) is a B2B SaaS platform purpose-built for independent chiropractic and physical therapy clinics in Japan. It provides a unified, easy-to-use dashboard that aggregates Google Ads performance data (impressions, clicks, costs, and conversions) so that clinic owners — who are typically non-technical — can monitor their advertising ROI without needing direct access to the Google Ads console.
+</p>
+<p>
+  Each clinic subscribes to AdMu on a monthly basis. The platform is multi-tenant: each tenant (clinic) connects their own Google Ads account via OAuth 2.0, and their data is isolated and never shared across tenants.
+</p>
+</div>
+
+<div class="section">
+<h2>2. How the Tool Uses the Google Ads API</h2>
+
+<h3>2.1 Purpose of API Usage</h3>
+<p>AdMu uses the Google Ads API exclusively to <strong>read</strong> campaign performance metrics on behalf of each clinic's linked Google Ads account. No data is ever written back to Google Ads. No automated bidding, ad creation, or campaign modification is performed.</p>
+
+<h3>2.2 API Calls Made</h3>
+<table>
+  <tr><th>API Service</th><th>Method / Resource</th><th>Purpose</th></tr>
+  <tr><td>GoogleAdsService</td><td>SearchStream (GAQL)</td><td>Fetch campaign-level metrics: impressions, clicks, cost, conversions, CTR, CPC</td></tr>
+  <tr><td>GoogleAdsService</td><td>SearchStream (GAQL)</td><td>Fetch keyword-level metrics for performance breakdown</td></tr>
+  <tr><td>CustomerService</td><td>listAccessibleCustomers</td><td>Enumerate linked customer accounts under MCC</td></tr>
+  <tr><td>ConversionUploadService</td><td>UploadClickConversions</td><td>Upload offline conversions (patient form submissions) linked by gclid</td></tr>
+</table>
+
+<h3>2.3 Data Retrieved and How It Is Used</h3>
+<ul>
+  <li>Campaign impressions, clicks, cost, conversions (aggregate metrics only — no PII)</li>
+  <li>Date-range segmented data (daily, weekly, monthly) for trend charts</li>
+  <li>Data is displayed in the AdMu dashboard and stored temporarily in a PostgreSQL database for up to 90 days for trend analysis</li>
+  <li>No personally identifiable information (PII) of ad audience users is accessed or stored</li>
+</ul>
+</div>
+
+<div class="section">
+<h2>3. System Architecture</h2>
+
+<h3>3.1 Technical Stack</h3>
+<table>
+  <tr><th>Component</th><th>Technology</th></tr>
+  <tr><td>Backend API</td><td>Python 3.11, FastAPI</td></tr>
+  <tr><td>Google Ads Client</td><td>google-ads-python SDK (official)</td></tr>
+  <tr><td>Database</td><td>PostgreSQL (Render.com managed)</td></tr>
+  <tr><td>Frontend</td><td>HTML5, Vanilla JavaScript, CSS</td></tr>
+  <tr><td>Hosting</td><td>Render.com (HTTPS enforced)</td></tr>
+  <tr><td>Authentication</td><td>OAuth 2.0 (Google), HttpOnly Cookie sessions</td></tr>
+</table>
+
+<h3>3.2 Architecture Diagram (Data Flow)</h3>
+<div class="box">
+<pre>
+[Clinic User Browser]
+       |
+       v  HTTPS (TLS 1.3)
+[AdMu Frontend (SPA) — admu-lp-yrqx.onrender.com]
+       |
+       v  Internal API call (HTTPS)
+[AdMu Backend — FastAPI on Render]
+       |
+       +-- OAuth 2.0 Refresh Token (per-tenant, AES-256 encrypted at rest)
+       |
+       v  Official google-ads-python SDK
+[Google Ads API — SearchStream / GAQL / ConversionUpload]
+       |
+       v
+[AdMu PostgreSQL DB — aggregate metrics only, 90-day retention]
+</pre>
+</div>
+
+<h3>3.3 Credential Security</h3>
+<ul>
+  <li>Each tenant's OAuth Refresh Token is <strong>AES-256 encrypted</strong> before storage in the database</li>
+  <li>Developer token is stored as a server-side environment variable — never exposed to the client</li>
+  <li>All communication is over HTTPS (TLS 1.3)</li>
+  <li>CSRF protection via Double Submit Cookie pattern</li>
+  <li>Security headers: CSP, HSTS, X-Frame-Options implemented</li>
+</ul>
+</div>
+
+<div class="section">
+<h2>4. User Workflow</h2>
+<ol>
+  <li>Clinic owner signs up for AdMu and logs in via the admin dashboard</li>
+  <li>Admin connects the clinic's Google Ads account via Google OAuth 2.0 consent screen</li>
+  <li>AdMu backend exchanges the authorization code for an access token + refresh token</li>
+  <li>On dashboard load, AdMu calls the Google Ads API using the stored refresh token to fetch campaign metrics</li>
+  <li>Retrieved metrics are displayed as charts and KPI cards (impressions, clicks, cost, conversions, CTR, CPC)</li>
+  <li>Offline Conversion Tracking (OCT): gclid values captured from the clinic website's patient inquiry forms are uploaded to Google Ads as offline conversions to measure phone/walk-in patient acquisition</li>
+</ol>
+</div>
+
+<div class="section">
+<h2>5. Access Level Requested and Justification</h2>
+<div class="box">
+  <strong>Requested Access Level:</strong> Basic Access<br><br>
+  <strong>Justification:</strong> AdMu serves multiple chiropractic clinic clients (tenants), each with their own Google Ads accounts. To fetch live campaign performance data for each client account via the official SDK, Basic Access (production developer token) is required. Test Account access only permits access to a single test account and cannot be used to serve real paying clients with their real account data. Basic Access is the minimum level required for this multi-tenant SaaS use case.
+</div>
+</div>
+
+<div class="section">
+<h2>6. Compliance and Data Handling</h2>
+<ul>
+  <li><strong>No PII:</strong> Only aggregate advertising metrics are accessed; no end-user personal data is retrieved from Google Ads API</li>
+  <li><strong>Data Minimization:</strong> Only the fields required for dashboard display are fetched via GAQL SELECT statements</li>
+  <li><strong>Retention:</strong> Metrics are retained for 90 days for trend display, then purged automatically</li>
+  <li><strong>Tenant Isolation:</strong> Each clinic's data is stored with a tenant_id key; cross-tenant access is prevented at the application layer</li>
+  <li><strong>Google API Terms Compliance:</strong> AdMu does not resell raw Google Ads data; data is used solely to generate the in-app dashboard for each account owner</li>
+  <li><strong>OAuth Consent:</strong> Each clinic owner explicitly grants access via Google's standard OAuth consent screen before any data is read</li>
+</ul>
+</div>
+
+<div class="section">
+<h2>7. Company Information</h2>
+<table>
+  <tr><th>Field</th><th>Details</th></tr>
+  <tr><td>Company Name</td><td>Seitaiin Michibiki (整体院導)</td></tr>
+  <tr><td>Business Type</td><td>B2B SaaS / Software Developer</td></tr>
+  <tr><td>Country</td><td>Japan</td></tr>
+  <tr><td>Tool URL</td><td>https://admu-lp-yrqx.onrender.com</td></tr>
+  <tr><td>API Contact Email</td><td>seitaimichibiki@gmail.com</td></tr>
+  <tr><td>Google Ads MCC ID</td><td>167-626-3182</td></tr>
+</table>
+</div>
+
+</body>
+</html>

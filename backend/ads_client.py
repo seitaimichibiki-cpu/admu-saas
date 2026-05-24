@@ -121,10 +121,10 @@ class AdsClient:
         if not self.mock_mode and GOOGLE_ADS_AVAILABLE:
             try:
                 cfg = {
-                    "developer_token": account_config.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", ""),
-                    "client_id":       account_config.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", ""),
-                    "client_secret":   account_config.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", ""),
-                    "refresh_token":   account_config.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", ""),
+                    "developer_token": account_config.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", "") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+                    "client_id":       account_config.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", "") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+                    "client_secret":   account_config.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", "") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+                    "refresh_token":   account_config.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
                     "use_proto_plus": True,
                 }
                 
@@ -262,13 +262,181 @@ class AdsClient:
             })
         return result
 
+    # ---- 検索語句レポート ② ----
+    def get_search_term_report(self, days: int = 30, min_cost_yen: int = 500, max_conversions: float = 0) -> list:
+        """
+        検索語句レポートを取得。
+        コスト高・コンバージョンゼロの「ムダ遣い語句」を自動特定する。
+
+        Args:
+            days:             集計期間（日数）
+            min_cost_yen:     この金額以上使っている語句のみ対象
+            max_conversions:  この数以下のコンバージョン数の語句を「ムダ」と判定
+
+        Returns:
+            list of { search_term, clicks, cost_yen, conversions, campaign_id, campaign_name, is_wasted }
+        """
+        if self.mock_mode:
+            import random
+            mock_terms = [
+                ("整体 安い", 45, 8100, 0.0),
+                ("腰痛 セルフケア", 38, 6800, 0.0),
+                ("整体師 求人", 22, 4400, 0.0),
+                ("肩こり 解消 自分で", 19, 3420, 0.0),
+                ("整体 無料", 31, 5580, 0.0),
+                ("腰痛 整体 渋谷", 55, 9900, 3.2),
+                ("産後 骨盤矯正", 48, 8640, 4.1),
+                ("整体 おすすめ", 62, 11160, 2.8),
+                ("整体院 予約", 71, 12780, 5.5),
+            ]
+            results = []
+            for term, clicks, cost_yen, conv in mock_terms:
+                is_wasted = (cost_yen >= min_cost_yen and conv <= max_conversions)
+                results.append({
+                    "search_term": term,
+                    "clicks": clicks,
+                    "cost_yen": cost_yen,
+                    "conversions": conv,
+                    "campaign_id": f"MOCK-{self.customer_id}-1001",
+                    "campaign_name": "地域一般 | 整体・腰痛",
+                    "is_wasted": is_wasted,
+                })
+            return sorted(results, key=lambda x: (-int(x["is_wasted"]), -x["cost_yen"]))
+
+        # 実API実装
+        ga_service = self._client.get_service("GoogleAdsService")
+        query = f"""
+            SELECT
+                search_term_view.search_term,
+                campaign.id, campaign.name,
+                metrics.clicks, metrics.cost_micros, metrics.conversions
+            FROM search_term_view
+            WHERE segments.date DURING LAST_{days}_DAYS
+              AND metrics.impressions > 0
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 500
+        """
+        resp = ga_service.search(customer_id=self.customer_id, query=query)
+        results = []
+        for row in resp:
+            cost_yen = int(row.metrics.cost_micros) / 1_000_000
+            conv     = row.metrics.conversions
+            is_wasted = (cost_yen >= min_cost_yen and conv <= max_conversions)
+            results.append({
+                "search_term":   row.search_term_view.search_term,
+                "clicks":        row.metrics.clicks,
+                "cost_yen":      round(cost_yen),
+                "conversions":   conv,
+                "campaign_id":   str(row.campaign.id),
+                "campaign_name": row.campaign.name,
+                "is_wasted":     is_wasted,
+            })
+        return sorted(results, key=lambda x: (-int(x["is_wasted"]), -x["cost_yen"]))
+
     # ---- 入札 ----
     def adjust_keyword_bid(self, ad_group_id: str, keyword_id: str, new_cpc_micros: int):
         if self.mock_mode:
             print(f"[MOCK] 入札調整: keyword={keyword_id} new_cpc={new_cpc_micros}")
             return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
-        # 実API実装省略（google-ads SDK での bid 更新）
-        return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
+
+        # --- 実API実装 ---
+        # new_cpc_microsが100未満（極端に低い）の場合は安全装置として拒否
+        if new_cpc_micros < 100:
+            print(f"[AdsClient] 入札単価が低すぎるため適用をスキップ: {new_cpc_micros} micros")
+            return {"adjusted": False, "reason": "bid_too_low"}
+
+        try:
+            ad_group_criterion_service = self._client.get_service("AdGroupCriterionService")
+            ga_service = self._client.get_service("GoogleAdsService")
+
+            # ad_group_id="*" はアカウント全キーワードを対象にする
+            if ad_group_id == "*":
+                query = f"""
+                    SELECT ad_group_criterion.resource_name,
+                           ad_group_criterion.cpc_bid_micros,
+                           ad_group.id
+                    FROM ad_group_criterion
+                    WHERE ad_group_criterion.type = 'KEYWORD'
+                      AND ad_group_criterion.status = 'ENABLED'
+                      AND ad_group.status = 'ENABLED'
+                    LIMIT 50
+                """
+                resp = ga_service.search(customer_id=self.customer_id, query=query)
+                operations = []
+                for row in resp:
+                    op = self._client.get_type("AdGroupCriterionOperation")
+                    criterion = op.update
+                    criterion.resource_name = row.ad_group_criterion.resource_name
+                    criterion.cpc_bid_micros = new_cpc_micros
+                    op.update_mask.paths.append("cpc_bid_micros")
+                    operations.append(op)
+
+                if operations:
+                    ad_group_criterion_service.mutate_ad_group_criteria(
+                        customer_id=self.customer_id, operations=operations
+                    )
+                    print(f"[AdsClient] 入札調整完了: {len(operations)}件のキーワードを更新")
+                    return {"adjusted": True, "new_cpc_micros": new_cpc_micros, "count": len(operations)}
+                return {"adjusted": False, "reason": "no_keywords_found"}
+            else:
+                # 特定キーワードIDを指定
+                resource_name = f"customers/{self.customer_id}/adGroupCriteria/{ad_group_id}~{keyword_id}"
+                op = self._client.get_type("AdGroupCriterionOperation")
+                criterion = op.update
+                criterion.resource_name = resource_name
+                criterion.cpc_bid_micros = new_cpc_micros
+                op.update_mask.paths.append("cpc_bid_micros")
+                ad_group_criterion_service.mutate_ad_group_criteria(
+                    customer_id=self.customer_id, operations=[op]
+                )
+                return {"adjusted": True, "new_cpc_micros": new_cpc_micros}
+        except Exception as e:
+            print(f"[AdsClient] 入札調整エラー: {e}")
+            return {"adjusted": False, "error": str(e)}
+
+    # ---- 時間帯別入札スケジュール適用 ⑤ ----
+    def apply_ad_schedule_bid_modifiers(self, campaign_id: str, schedule_modifiers: list) -> dict:
+        """
+        時間帯ヒートマップの分析結果をGoogle Adsのキャンペーンに実際に適用する。
+
+        Args:
+            campaign_id:        Google Adsキャンペーンリソース名またはID
+            schedule_modifiers: [
+                { "day_of_week": "MONDAY", "start_hour": 9, "end_hour": 10, "bid_modifier": 1.3 },
+                ...
+            ]
+        Returns:
+            dict: { "success": bool, "applied_count": int }
+        """
+        if self.mock_mode:
+            print(f"[MOCK] 入札スケジュール適用: campaign={campaign_id} 件数={len(schedule_modifiers)}")
+            return {"success": True, "applied_count": len(schedule_modifiers), "mock": True}
+
+        try:
+            campaign_criterion_service = self._client.get_service("CampaignCriterionService")
+            operations = []
+            for slot in schedule_modifiers:
+                op = self._client.get_type("CampaignCriterionOperation")
+                criterion = op.create
+                criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
+                criterion.bid_modifier = float(slot.get("bid_modifier", 1.0))
+
+                # 曜日マッピング
+                day_enum = self._client.enums.DayOfWeekEnum[slot["day_of_week"]]
+                criterion.ad_schedule.day_of_week = day_enum
+                criterion.ad_schedule.start_hour  = int(slot["start_hour"])
+                criterion.ad_schedule.end_hour    = int(slot["end_hour"])
+                criterion.ad_schedule.start_minute = self._client.enums.MinuteOfHourEnum.ZERO
+                criterion.ad_schedule.end_minute   = self._client.enums.MinuteOfHourEnum.ZERO
+                operations.append(op)
+
+            resp = campaign_criterion_service.mutate_campaign_criteria(
+                customer_id=self.customer_id, operations=operations
+            )
+            return {"success": True, "applied_count": len(resp.results), "mock": False}
+        except Exception as e:
+            print(f"[AdsClient] 入札スケジュール適用エラー: {e}")
+            return {"success": False, "error": str(e)}
 
     # ---- コンバージョン送信 (OCT) ----
     def upload_offline_conversion(self, gclid: str, conversion_name: str, conversion_value: float, conversion_time: str):
