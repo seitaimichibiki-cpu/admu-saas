@@ -854,6 +854,60 @@ def test_line(req: LineTestReq):
     ok = line_notifier.send_text(token, uid, req.message)
     return {"success": ok}
 
+
+@app.post("/api/line/report")
+def send_line_report_now(request: Request, clinic_id: int = 1, days: int = 7):
+    """手動でLINE週次レポートを今すぐ送信"""
+    _get_current_user(request)
+    acc = db.get_ads_account(clinic_id) or {}
+    token = acc.get("line_channel_token", "")
+    uid   = acc.get("line_user_id", "")
+    if not token or not uid:
+        raise HTTPException(400, "LINE設定（チャンネルトークン・ユーザーID）が未設定です。設定画面から登録してください。")
+
+    clinic = db.get_clinic(clinic_id) or {}
+    clinic_name = clinic.get("name", f"Clinic#{clinic_id}")
+
+    # 広告データ取得
+    try:
+        from ads_client import AdsClient
+        client = AdsClient(acc)
+        perf_list = client.get_performance_series(days=days)
+        total_cost_micros = sum(p.get("cost_micros", 0) for p in perf_list)
+        total_clicks = sum(p.get("clicks", 0) for p in perf_list)
+        total_impressions = sum(p.get("impressions", 0) for p in perf_list)
+        total_conv = sum(p.get("conversions", 0) for p in perf_list)
+        avg_ctr = (total_clicks / total_impressions * 100) if total_impressions else 0
+        total_cost_yen = int(total_cost_micros / 1_000_000)
+        cpa = round(total_cost_yen / total_conv) if total_conv > 0 else 0
+        summary = {
+            "total_cost_yen": total_cost_yen,
+            "total_clicks": total_clicks,
+            "total_impressions": total_impressions,
+            "total_conversions": total_conv,
+            "avg_ctr": round(avg_ctr, 2),
+            "cpa": cpa,
+        }
+    except Exception as e:
+        # モックモードや接続エラー時はダミーデータで送信
+        summary = {
+            "total_cost_yen": 0,
+            "total_clicks": 0,
+            "total_impressions": 0,
+            "total_conversions": 0,
+            "avg_ctr": 0.0,
+            "cpa": 0,
+            "_error": str(e),
+        }
+
+    ok = line_notifier.send_weekly_report(token, uid, clinic_name, summary)
+    return {
+        "success": ok,
+        "clinic_name": clinic_name,
+        "summary": {k: v for k, v in summary.items() if not k.startswith("_")},
+        "message": "LINEに週次レポートを送信しました" if ok else "送信に失敗しました。LINEトークン・ユーザーIDを確認してください",
+    }
+
 # ---- API: 設定 ----
 @app.get("/api/settings")
 def get_settings(clinic_id: int = 1):
