@@ -311,6 +311,76 @@ def _run_cleanup():
     except Exception as e:
         print(f"[Monitor] 自動クリーンアップ失敗: {e}")
 
+
+def _run_onboarding_followup_check():
+    """毎朝10:00: 登録から3日・7日後も未完了のクリニックに自動フォローアップメールを送信"""
+    try:
+        from datetime import timedelta
+        now = datetime.now()
+        today = now.date()
+
+        with db.get_conn() as conn:
+            rows = conn.execute("""
+                SELECT o.clinic_id, o.step_reached, o.completed,
+                       o.gemini_set, o.google_ads_set, o.persona_set,
+                       o.started_at, o.completed_at,
+                       c.name as clinic_name, u.email
+                FROM onboarding_progress o
+                JOIN clinics c ON o.clinic_id = c.id
+                LEFT JOIN users u ON u.clinic_id = c.id AND u.role = 'admin'
+                WHERE (o.completed = 0 OR o.gemini_set = 0)
+                  AND u.email IS NOT NULL
+            """).fetchall()
+
+        sent_count = 0
+        for r in rows:
+            email = r["email"]
+            if not email:
+                continue
+
+            # started_at から経過日数を計算
+            started_raw = r["started_at"]
+            if not started_raw:
+                continue
+            try:
+                # PostgreSQLはdatetime型、SQLiteは文字列
+                if isinstance(started_raw, str):
+                    from datetime import datetime as dt
+                    started = dt.fromisoformat(started_raw.replace("Z", "+00:00")).date()
+                else:
+                    started = started_raw.date() if hasattr(started_raw, 'date') else today
+            except Exception:
+                continue
+
+            elapsed_days = (today - started).days
+
+            # 送信条件: 3日後または7日後
+            if elapsed_days not in (3, 7):
+                continue
+
+            # 7日後は gemini未設定の院のみに絞る（Gemini設定済み院は除外）
+            if elapsed_days == 7 and r["gemini_set"]:
+                continue
+
+            missing = []
+            if not r["gemini_set"]:     missing.append("gemini")
+            if not r["google_ads_set"]: missing.append("google_ads")
+            if not r["persona_set"]:    missing.append("persona")
+
+            ok = email_notifier.send_onboarding_followup_email(
+                to=email,
+                clinic_name=r["clinic_name"],
+                step_reached=r["step_reached"] or 1,
+                missing=missing
+            )
+            if ok:
+                sent_count += 1
+                print(f"[Monitor] フォローアップメール送信: {r['clinic_name']} ({email}) 登録{elapsed_days}日後")
+
+        print(f"[Monitor] オンボーディング自動フォローアップ完了: {sent_count}件送信")
+    except Exception as e:
+        print(f"[Monitor] オンボーディング自動フォローアップエラー: {e}")
+
 def start_scheduler():
     """スケジューラを起動"""
     global _scheduler, _monitor_status
@@ -358,6 +428,13 @@ def start_scheduler():
     _scheduler.add_job(
         _run_cleanup, CronTrigger(day_of_week='sun', hour=3, minute=0),
         id="system_cleanup", replace_existing=True
+    )
+
+    # オンボーディング自動フォローアップ（毎朝10:00）
+    # 登録から3日後・7日後に未完了クリニックへ自動送信
+    _scheduler.add_job(
+        _run_onboarding_followup_check, CronTrigger(hour=10, minute=0),
+        id="onboarding_followup", replace_existing=True
     )
 
     _scheduler.start()

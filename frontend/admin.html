@@ -242,8 +242,24 @@
       <!-- フォローアップメール送信 -->
       <div class="card" style="margin-top:16px;border-color:rgba(59,130,246,0.3)">
         <div class="card-title">📩 フォローアップメール送信</div>
+
+        <!-- 自動スケジュール説明 -->
+        <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:8px">🤖 自動送信スケジュール（毎朝10:00に自動実行）</div>
+          <table style="width:100%;font-size:12px;color:var(--text-2)">
+            <tr>
+              <td style="padding:4px 0;width:100px"><strong style="color:var(--t1)">登録3日後</strong></td>
+              <td>未完了の全クリニックへ「設定を完了してください」メール送信</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 0"><strong style="color:var(--t1)">登録7日後</strong></td>
+              <td>Gemini未設定のクリニックへ「APIキーを設定してください」メール送信</td>
+            </tr>
+          </table>
+        </div>
+
         <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
-          オンボーディングが未完了、またはGemini・Google広告が未設定のクリニックへ、設定を促すメールを自動で送信します。
+          手動でも送信できます。まずプレビューで対象を確認してから実行することを推奨します。
         </p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
           <button class="btn" style="background:rgba(59,130,246,0.12);color:var(--accent);border:1px solid rgba(59,130,246,0.3);font-size:13px"
@@ -251,7 +267,7 @@
             🔍 送信対象を確認（プレビュー）
           </button>
           <button class="btn btn-primary" style="font-size:13px" onclick="sendFollowup(false)">
-            📨 未完了の全クリニックにメール送信
+            📨 今すぐ全クリニックに送信
           </button>
         </div>
         <div id="followupResult"></div>
