@@ -238,6 +238,24 @@
         <div class="card-title">👥 クリニック別詳細</div>
         <div id="obDetails"></div>
       </div>
+
+      <!-- フォローアップメール送信 -->
+      <div class="card" style="margin-top:16px;border-color:rgba(59,130,246,0.3)">
+        <div class="card-title">📩 フォローアップメール送信</div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">
+          オンボーディングが未完了、またはGemini・Google広告が未設定のクリニックへ、設定を促すメールを自動で送信します。
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn" style="background:rgba(59,130,246,0.12);color:var(--accent);border:1px solid rgba(59,130,246,0.3);font-size:13px"
+                  onclick="sendFollowup(true)">
+            🔍 送信対象を確認（プレビュー）
+          </button>
+          <button class="btn btn-primary" style="font-size:13px" onclick="sendFollowup(false)">
+            📨 未完了の全クリニックにメール送信
+          </button>
+        </div>
+        <div id="followupResult"></div>
+      </div>
     </div>
 
     <!-- システム設定 -->
@@ -566,6 +584,51 @@ async function loadOnboarding() {
         </tbody>
       </table>`;
   } catch(e) { toast('オンボーディングデータの取得に失敗: ' + e.message, 'error'); }
+}
+
+async function sendFollowup(dryRun) {
+  const resultEl = document.getElementById('followupResult');
+  resultEl.innerHTML = '<p style="font-size:13px;color:var(--text-2)">処理中...</p>';
+
+  if (!dryRun && !confirm('未完了の全クリニックにフォローアップメールを送信します。よろしいですか？')) {
+    resultEl.innerHTML = '';
+    return;
+  }
+
+  try {
+    const data = await api('/admin/onboarding-followup', {
+      method: 'POST',
+      body: JSON.stringify({ dry_run: dryRun })
+    });
+
+    const statusColor = { sent:'var(--green)', dry_run:'var(--accent)', skip:'var(--text-3)', failed:'var(--red)' };
+    const statusLabel = { sent:'✅ 送信完了', dry_run:'🔍 送信対象', skip:'─ スキップ', failed:'❌ 失敗' };
+    const missingMap  = { gemini:'Gemini未設定', google_ads:'Google広告未連携', persona:'ペルソナ未設定' };
+
+    const summaryHtml = dryRun
+      ? `<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:var(--text-2)">
+           🔍 <strong style="color:var(--t1)">プレビュー</strong>: ${data.total}件が送信対象です。実際には送信していません。
+         </div>`
+      : `<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:13px">
+           ✅ 送信完了: <strong>${data.sent}件</strong> / スキップ: ${data.skipped}件 / 失敗: ${data.failed}件
+         </div>`;
+
+    const rowsHtml = data.results.map(r => `
+      <tr>
+        <td><strong>${r.clinic_name}</strong></td>
+        <td style="font-size:11px;color:var(--text-3)">${r.email || '─'}</td>
+        <td>${(r.missing||[]).map(m => `<span style="font-size:11px;color:#f59e0b;margin-right:4px">${missingMap[m]||m}</span>`).join('') || '─'}</td>
+        <td><span style="color:${statusColor[r.status]};font-size:13px;font-weight:600">${statusLabel[r.status]||r.status}</span></td>
+      </tr>`).join('');
+
+    resultEl.innerHTML = summaryHtml + `
+      <table>
+        <thead><tr><th>クリニック</th><th>メール</th><th>未設定項目</th><th>ステータス</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+  } catch(e) {
+    resultEl.innerHTML = `<p style="color:var(--red);font-size:13px">エラー: ${e.message}</p>`;
+  }
 }
 
 /* ===== ユーザー管理 ===== */

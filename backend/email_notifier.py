@@ -342,3 +342,125 @@ def send_report_email(to: str, clinic_name: str, summary: dict) -> bool:
 </html>
 """
     return _send(to, subject, html)
+
+
+# ============================================================
+# オンボーディングフォローアップメール
+# ============================================================
+def send_onboarding_followup_email(to: str, clinic_name: str, step_reached: int,
+                                    missing: list) -> bool:
+    """離脱したオンボーディングステップに応じてフォローアップメールを送信"""
+    onboarding_url = f"{APP_BASE_URL}/onboarding.html?force=1"
+    help_url        = f"{APP_BASE_URL}/help.html"
+
+    step_labels = {
+        1: "ようこそ画面",
+        2: "クリニック情報",
+        3: "Gemini APIキー設定",
+        4: "Google広告連携",
+        5: "ペルソナ設定",
+    }
+
+    # 離脱ポイントのメッセージ
+    if step_reached <= 2:
+        reason_msg = "初期設定が<strong style='color:#f1f5f9'>まだ完了していません</strong>。約3分で完了します！"
+        cta_msg    = "設定を再開する"
+    elif step_reached == 3:
+        reason_msg = "Gemini APIキーの設定で止まっています。<strong style='color:#f1f5f9'>無料のAPIキーを取得するだけ</strong>でAI機能が全て使えるようになります。"
+        cta_msg    = "Gemini APIキーを設定する"
+    elif step_reached == 4:
+        reason_msg = "Google広告との連携があと少しです。顧客IDを入力するだけで実際の広告データと連携できます。"
+        cta_msg    = "Google広告を連携する"
+    else:
+        reason_msg = "ペルソナ設定を完了すると、AIがより精度の高い広告文を生成できます。"
+        cta_msg    = "ペルソナ設定を完了する"
+
+    # 未設定項目リスト
+    missing_html = ""
+    missing_labels = {
+        "gemini": ("🤖", "Gemini APIキー", "AI機能（広告文生成・レポート解説）が使えません"),
+        "google_ads": ("📊", "Google広告連携", "実際の広告データとの連携ができていません"),
+        "persona": ("👤", "ペルソナ設定", "AI広告文の精度が低くなります"),
+    }
+    for key in missing:
+        if key in missing_labels:
+            icon, label, impact = missing_labels[key]
+            missing_html += f"""
+            <tr>
+              <td style="padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05)">
+                <span style="font-size:18px;margin-right:8px">{icon}</span>
+                <strong style="color:#f1f5f9">{label}</strong>
+                <br><span style="color:#64748b;font-size:12px;padding-left:26px">⚠ {impact}</span>
+              </td>
+            </tr>"""
+
+    subject = f"【AdMu】{clinic_name} 様、初期設定を完了しませんか？"
+    html = f"""<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#0b0f1a;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0b0f1a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+        <tr>
+          <td style="background:#1e293b;border-radius:16px;padding:40px;border:1px solid rgba(255,255,255,0.08);">
+
+            <!-- ヘッダー -->
+            <div style="text-align:center;margin-bottom:28px;">
+              <span style="font-size:22px;font-weight:900;color:#3b82f6;letter-spacing:-0.5px;">AdMu</span>
+              <p style="color:#475569;font-size:11px;letter-spacing:2px;margin:4px 0 0;">無を、極める。</p>
+            </div>
+
+            <h2 style="color:#f1f5f9;font-size:20px;font-weight:700;margin:0 0 8px;text-align:center;">
+              ⚡ 初期設定を完了して<br>AI広告運用を始めましょう
+            </h2>
+            <p style="color:#94a3b8;font-size:14px;line-height:1.8;margin:16px 0 24px;text-align:center;">
+              {clinic_name} 様<br>{reason_msg}
+            </p>
+
+            <!-- 進捗インジケーター -->
+            <div style="background:#0f172a;border-radius:10px;padding:16px;margin-bottom:20px;">
+              <div style="color:#64748b;font-size:11px;margin-bottom:10px;letter-spacing:1px;">現在の進捗</div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                {''.join([
+                    f'<div style="flex:1;height:6px;border-radius:3px;background:{"#10b981" if i < step_reached else "rgba(51,65,85,0.8)"}"></div>'
+                    for i in range(1, 7)
+                ])}
+              </div>
+              <div style="color:#94a3b8;font-size:12px;margin-top:8px;">
+                STEP {step_reached} / 6 まで完了 — <strong style="color:#f59e0b">{6 - step_reached}ステップ残っています</strong>
+              </div>
+            </div>
+
+            <!-- 未設定項目 -->
+            {'<div style="background:#0f172a;border-radius:10px;margin-bottom:20px;overflow:hidden"><div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);color:#ef4444;font-size:13px;font-weight:700;">未設定の項目</div><table width="100%" cellpadding="0" cellspacing="0">' + missing_html + '</table></div>' if missing_html else ''}
+
+            <!-- CTAボタン -->
+            <div style="text-align:center;margin:28px 0;">
+              <a href="{onboarding_url}"
+                 style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;padding:14px 36px;border-radius:99px;text-decoration:none;font-weight:700;font-size:15px;display:inline-block;">
+                {cta_msg} →
+              </a>
+            </div>
+
+            <!-- サポートリンク -->
+            <div style="text-align:center;margin-top:16px;">
+              <a href="{help_url}" style="color:#3b82f6;font-size:13px;text-decoration:none;">
+                📖 使い方ガイドを見る
+              </a>
+            </div>
+
+            <p style="color:#475569;font-size:12px;margin:24px 0 0;text-align:center;">
+              ご不明な点は support@admu.jp までお気軽にどうぞ。
+            </p>
+          </td>
+        </tr>
+        <tr><td style="padding:16px;text-align:center;">
+          <p style="color:#334155;font-size:11px;margin:0;">© AdMu | {datetime.now().year}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+    return _send(to, subject, html)

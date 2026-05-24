@@ -1080,6 +1080,87 @@ def admin_onboarding_stats(request: Request, password: str = "", authorization: 
         "details": stats,
     }
 
+
+@app.post("/api/admin/onboarding-followup")
+def send_onboarding_followup(request: Request, body: dict,
+                              password: str = "", authorization: Optional[str] = Header(None)):
+    """未完了クリニックにフォローアップメールを送信（管理者専用）"""
+    _check_admin(password, authorization, request)
+    import email_notifier
+
+    clinic_ids = body.get("clinic_ids")  # Noneなら全未完了を対象
+    dry_run    = body.get("dry_run", False)  # Trueならメール送信せず対象リストを返すだけ
+
+    with db.get_conn() as conn:
+        if clinic_ids:
+            rows = conn.execute("""
+                SELECT o.clinic_id, o.step_reached, o.completed,
+                       o.gemini_set, o.google_ads_set, o.persona_set,
+                       c.name as clinic_name, u.email
+                FROM onboarding_progress o
+                JOIN clinics c ON o.clinic_id = c.id
+                LEFT JOIN users u ON u.clinic_id = c.id AND u.role = 'admin'
+                WHERE o.clinic_id IN ({})
+            """.format(",".join("?" * len(clinic_ids))), clinic_ids).fetchall()
+        else:
+            # 未完了かつ重要設定が1つ以上未設定の全クリニック
+            rows = conn.execute("""
+                SELECT o.clinic_id, o.step_reached, o.completed,
+                       o.gemini_set, o.google_ads_set, o.persona_set,
+                       c.name as clinic_name, u.email
+                FROM onboarding_progress o
+                JOIN clinics c ON o.clinic_id = c.id
+                LEFT JOIN users u ON u.clinic_id = c.id AND u.role = 'admin'
+                WHERE (o.completed = 0 OR o.gemini_set = 0 OR o.google_ads_set = 0)
+            """).fetchall()
+
+    results = []
+    for r in rows:
+        email = r["email"]
+        if not email:
+            results.append({"clinic_id": r["clinic_id"], "clinic_name": r["clinic_name"],
+                            "status": "skip", "reason": "メールアドレス未設定"})
+            continue
+
+        missing = []
+        if not r["gemini_set"]:     missing.append("gemini")
+        if not r["google_ads_set"]: missing.append("google_ads")
+        if not r["persona_set"]:    missing.append("persona")
+
+        if dry_run:
+            results.append({
+                "clinic_id": r["clinic_id"], "clinic_name": r["clinic_name"],
+                "email": email, "step_reached": r["step_reached"],
+                "missing": missing, "status": "dry_run"
+            })
+            continue
+
+        ok = email_notifier.send_onboarding_followup_email(
+            to=email,
+            clinic_name=r["clinic_name"],
+            step_reached=r["step_reached"] or 1,
+            missing=missing
+        )
+        results.append({
+            "clinic_id": r["clinic_id"], "clinic_name": r["clinic_name"],
+            "email": email, "status": "sent" if ok else "failed",
+            "missing": missing
+        })
+
+    sent_count  = sum(1 for r in results if r.get("status") == "sent")
+    skip_count  = sum(1 for r in results if r.get("status") == "skip")
+    fail_count  = sum(1 for r in results if r.get("status") == "failed")
+
+    return {
+        "success": True,
+        "dry_run": dry_run,
+        "total": len(results),
+        "sent": sent_count,
+        "skipped": skip_count,
+        "failed": fail_count,
+        "results": results,
+    }
+
 @app.post("/api/auth/login")
 def login(req: LoginReq, response: Response):
     """メール+パスワードでログインしSecure CookieにJWTをセットする"""
