@@ -1753,12 +1753,12 @@ async def receive_admu_cv(req: AdmuCvReq):
         f"LTV¥{ltv['ltv_value']:,}({ltv['ltv_grade']}) "
         f"GCLID={req.gclid[:8]}... (clinic_id={req.clinic_id})"
     )
-    db.add_performance_log(req.clinic_id, log_msg, "INFO")
+    db.add_audit_log(req.clinic_id, "system", log_msg, entity="ltv_conversion")
     print(log_msg)
 
     # Google Ads API への OCT 送信
     try:
-        acc = _require_account(req.clinic_id, platform="google")
+        acc = _require_account(req.clinic_id)
     except Exception as e:
         # アカウント未設定時はLTV計算結果だけ返す（サイレント）
         return {
@@ -1813,12 +1813,12 @@ async def receive_offline_conversion(req: OfflineConversionReq):
         f"¥{req.conversion_value:,.0f} "
         f"GCLID={req.gclid[:8]}... (clinic_id={req.clinic_id})"
     )
-    db.add_performance_log(req.clinic_id, log_msg, "INFO")
+    db.add_audit_log(req.clinic_id, "system", log_msg, entity="offline_conversion")
     print(log_msg)
     
     # Google Ads API への OCT 送信
     try:
-        acc = _require_account(req.clinic_id, platform="google")
+        acc = _require_account(req.clinic_id)
     except Exception as e:
         return {"success": False, "message": f"Ads account error: {e}", "stub": False}
         
@@ -2535,8 +2535,7 @@ def auto_score_ab(clinic_id: int = 1):
                 "suggestion": f"バリアントグループ '{vg}' で廃案推奨の広告文が見つかりました"
             })
             # アラートをDB登録
-            db.add_alert(clinic_id, "INFO",
-                f"[A/Bテスト] グループ '{vg}' の下位バリアント(ID:{loser['id']})は廃案推奨です")
+            db.create_alert(clinic_id, f"[A/Bテスト] グループ '{vg}' の下位バリアント(ID:{loser['id']})は廃案推奨です", level="INFO")
             retired_count += 1
 
     db.increment_ai_quota(clinic_id, feature_name="ab_score")
@@ -2801,7 +2800,7 @@ def admin_archive_ads(clinic_id: int, req: ArchiveAdsReq, request: Request, auth
     adgroups = [{"id": 201, "campaignId": 101, "name": "指名検索_標準", "cpc": 300}]
     ads = [{"id": 301, "adGroupId": 201, "headline": "地域No1の整体院", "description": "根本改善を目指します。"}]
     keywords = [{"id": 401, "adGroupId": 201, "text": "整体", "matchType": "EXACT"}]
-    performance = db.get_clinic_performance_summary(clinic_id, days=30)
+    performance = db.get_performance_summary(clinic_id, days=30)
     
     archive_id = db.archive_ad_strategy(
         clinic_id=clinic_id,

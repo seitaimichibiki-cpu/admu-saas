@@ -267,7 +267,7 @@ def _flex_kpi_box(label: str, value: str, color: str) -> dict:
 
 
 def _send_flex(channel_token: str, user_id: str, flex_content: dict) -> bool:
-    """Flex Messageを送信"""
+    """Flex Messageを送信。失敗時はaltTextでテキストフォールバック"""
     if not channel_token or not user_id:
         print("[LINE] token/user_id が未設定のためスキップ")
         return False
@@ -291,9 +291,16 @@ def _send_flex(channel_token: str, user_id: str, flex_content: dict) -> bool:
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         print(f"[LINE] Flex Message送信失敗 {e.code}: {body}")
-        # Flex Message非対応の場合はテキストにフォールバック
+        # Flex Message非対応の場合はaltTextでテキストフォールバック
+        alt_text = flex_content.get("altText", "")
+        if alt_text:
+            print("[LINE] テキストメッセージでフォールバック送信を試みます")
+            return send_text(channel_token, user_id, alt_text)
         return False
     except Exception as e:
         print(f"[LINE] Flex Message送信エラー: {e}")
+        # フォールバック
+        alt_text = flex_content.get("altText", "")
+        if alt_text:
+            return send_text(channel_token, user_id, alt_text)
         return False
-
