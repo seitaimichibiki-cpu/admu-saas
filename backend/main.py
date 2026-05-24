@@ -972,15 +972,112 @@ def register(req: RegisterReq):
         raise HTTPException(status_code=400, detail="このメールアドレスは既に登録されています。")
     if len(req.password) < 6:
         raise HTTPException(status_code=400, detail="パスワードは6文字以上で入力してください。")
-    
+
     password_hash = auth.hash_password(req.password)
     result = db.register_clinic_and_user(req.clinic_name, req.email, password_hash)
-    
-    # 承認待ちで作成されたことを返す
+
+    # オンボーディング進捗を初期化（登録直後に追跡開始）
+    try:
+        clinic_id = result.get("clinic_id")
+        if clinic_id:
+            with db.get_conn() as conn:
+                exists = conn.execute(
+                    "SELECT id FROM onboarding_progress WHERE clinic_id=?", (clinic_id,)
+                ).fetchone()
+                if not exists:
+                    conn.execute(
+                        "INSERT INTO onboarding_progress (clinic_id, step_reached) VALUES (?, 1)",
+                        (clinic_id,)
+                    )
+                    conn.commit()
+    except Exception as e:
+        print(f"[Onboarding] 進捗初期化エラー（続行）: {e}")
+
     return {
         "success": True,
         "message": "登録申請を受け付けました。管理者の承認をお待ちください。",
         "data": result
+    }
+
+
+@app.post("/api/onboarding/progress")
+def track_onboarding(request: Request, body: dict):
+    """各ステップ到達を記録（離脱分析用）"""
+    user = _get_current_user(request)
+    clinic_id = user.get("clinic_id", 1)
+    step = int(body.get("step", 1))
+    completed = bool(body.get("completed", False))
+    gemini_set = bool(body.get("gemini_set", False))
+    google_ads_set = bool(body.get("google_ads_set", False))
+    persona_set = bool(body.get("persona_set", False))
+
+    import datetime
+    now_str = datetime.datetime.now().isoformat()
+    with db.get_conn() as conn:
+        exists = conn.execute(
+            "SELECT id FROM onboarding_progress WHERE clinic_id=?", (clinic_id,)
+        ).fetchone()
+        if exists:
+            sets = [f"step{step}_done=1"]
+            if db.USE_PG:
+                sets.append(f"step_reached=GREATEST(step_reached,{step})")
+            else:
+                sets.append(f"step_reached=MAX(step_reached,{step})")
+            if gemini_set: sets.append("gemini_set=1")
+            if google_ads_set: sets.append("google_ads_set=1")
+            if persona_set: sets.append("persona_set=1")
+            if completed:
+                sets.append("completed=1")
+                sets.append(f"completed_at='{now_str}'")
+            conn.execute(
+                f"UPDATE onboarding_progress SET {','.join(sets)} WHERE clinic_id=?",
+                (clinic_id,)
+            )
+        else:
+            conn.execute(
+                """INSERT INTO onboarding_progress
+                   (clinic_id,step_reached,step1_done,completed,gemini_set,google_ads_set,persona_set,completed_at)
+                   VALUES (?,?,1,?,?,?,?,?)""",
+                (clinic_id, step, 1 if completed else 0,
+                 1 if gemini_set else 0, 1 if google_ads_set else 0,
+                 1 if persona_set else 0, now_str if completed else None)
+            )
+        conn.commit()
+    return {"success": True}
+
+
+@app.get("/api/admin/onboarding-stats")
+def admin_onboarding_stats(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
+    """オンボーディング離脱分析（管理者専用）"""
+    _check_admin(password, authorization, request)
+    with db.get_conn() as conn:
+        rows = conn.execute("""
+            SELECT o.*, c.name as clinic_name
+            FROM onboarding_progress o
+            JOIN clinics c ON o.clinic_id = c.id
+            ORDER BY o.started_at DESC
+        """).fetchall()
+    stats = [dict(r) for r in rows]
+    total = len(stats)
+    comp = sum(1 for s in stats if s.get("completed"))
+    step_rates = {
+        f"step{i}": round(sum(1 for s in stats if s.get(f"step{i}_done")) / max(total,1)*100, 1)
+        for i in range(1,7)
+    }
+    dropout = {}
+    for s in stats:
+        r = s.get("step_reached", 1)
+        dropout[r] = dropout.get(r, 0) + 1
+    return {
+        "total": total,
+        "completed": comp,
+        "completion_rate": round(comp/max(total,1)*100, 1),
+        "gemini_setup_rate": round(sum(1 for s in stats if s.get("gemini_set"))/max(total,1)*100, 1),
+        "google_ads_setup_rate": round(sum(1 for s in stats if s.get("google_ads_set"))/max(total,1)*100, 1),
+        "persona_setup_rate": round(sum(1 for s in stats if s.get("persona_set"))/max(total,1)*100, 1),
+        "step_rates": step_rates,
+        "dropout_distribution": dropout,
+        "details": stats,
     }
 
 @app.post("/api/auth/login")

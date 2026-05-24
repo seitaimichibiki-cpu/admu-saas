@@ -249,6 +249,22 @@ def init_db():
         f"""CREATE TABLE IF NOT EXISTS stripe_processed_events (
             event_id TEXT PRIMARY KEY,
             processed_at {TS})""",
+        # オンボーディング離脱分析用
+        f"""CREATE TABLE IF NOT EXISTS onboarding_progress (
+            id {PK}, clinic_id INTEGER NOT NULL,
+            step_reached INTEGER DEFAULT 1,
+            step1_done INTEGER DEFAULT 0,
+            step2_done INTEGER DEFAULT 0,
+            step3_done INTEGER DEFAULT 0,
+            step4_done INTEGER DEFAULT 0,
+            step5_done INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            gemini_set INTEGER DEFAULT 0,
+            google_ads_set INTEGER DEFAULT 0,
+            persona_set INTEGER DEFAULT 0,
+            started_at {TS},
+            completed_at TEXT,
+            FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -320,6 +336,10 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN gemini_api_key TEXT",
         # 月間AI呼び出し上限（0=AI機能無効, -1=無制限）
         "ALTER TABLE ads_accounts ADD COLUMN ai_monthly_limit INTEGER DEFAULT 0",
+        # オンボーディング進捗カラム追加（既存DBへの追加）
+        "ALTER TABLE onboarding_progress ADD COLUMN gemini_set INTEGER DEFAULT 0",
+        "ALTER TABLE onboarding_progress ADD COLUMN google_ads_set INTEGER DEFAULT 0",
+        "ALTER TABLE onboarding_progress ADD COLUMN persona_set INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:

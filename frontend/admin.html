@@ -150,6 +150,7 @@
     <button onclick="switchTab('contracts')">📋 契約管理</button>
     <button onclick="switchTab('viewer')">🔍 データ閲覧</button>
     <button onclick="switchTab('clinics')">🏥 クリニック管理</button>
+    <button onclick="switchTab('onboarding')">🎯 オンボーディング分析</button>
     <button onclick="switchTab('settings')">⚙️ システム設定</button>
   </div>
 
@@ -211,6 +212,32 @@
         <button class="btn btn-primary btn-sm" onclick="openClinicModal()">＋ 新規クリニック追加</button>
       </div>
       <div class="card"><div id="clinicsManageTable"></div></div>
+    </div>
+
+    <!-- オンボーディング分析 -->
+    <div id="tab-onboarding" class="section-tab">
+      <h2 style="font-size:16px;font-weight:700;margin-bottom:16px">🎯 オンボーディング離脱分析</h2>
+
+      <!-- KPI行 -->
+      <div class="kpi-row" id="obKPIs"></div>
+
+      <!-- ステップファネル -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">📊 ステップ到達率ファネル</div>
+        <div id="obFunnel"></div>
+      </div>
+
+      <!-- 設定率 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">⚙️ 重要設定の完了率</div>
+        <div id="obSetupRates"></div>
+      </div>
+
+      <!-- 詳細テーブル -->
+      <div class="card">
+        <div class="card-title">👥 クリニック別詳細</div>
+        <div id="obDetails"></div>
+      </div>
     </div>
 
     <!-- システム設定 -->
@@ -449,6 +476,96 @@ function switchTab(name) {
   if (name === 'clinics') loadClinicsManage();
   if (name === 'users') loadUsers();
   if (name === 'plan') loadPlanStatus();
+  if (name === 'onboarding') loadOnboarding();
+}
+
+/* ===== オンボーディング分析 ===== */
+async function loadOnboarding() {
+  try {
+    const data = await api('/admin/onboarding-stats');
+    const { total, completed, completion_rate, gemini_setup_rate, google_ads_setup_rate, persona_setup_rate, step_rates, dropout_distribution, details } = data;
+
+    // KPIs
+    document.getElementById('obKPIs').innerHTML = `
+      <div class="kpi-box"><div class="kpi-label">総登録数</div><div class="kpi-value">${total}</div></div>
+      <div class="kpi-box" style="border-color:${completion_rate>=70?'var(--green)':completion_rate>=40?'var(--warning)':'var(--red)'}">
+        <div class="kpi-label">完了率</div>
+        <div class="kpi-value" style="color:${completion_rate>=70?'var(--green)':completion_rate>=40?'var(--warning)':'var(--red)'}">${completion_rate}%</div>
+      </div>
+      <div class="kpi-box"><div class="kpi-label">Gemini設定率</div><div class="kpi-value" style="color:var(--accent)">${gemini_setup_rate}%</div></div>
+      <div class="kpi-box"><div class="kpi-label">Google広告連携率</div><div class="kpi-value" style="color:var(--accent)">${google_ads_setup_rate}%</div></div>
+    `;
+
+    // ファネル
+    const steps = [
+      {n:1,label:'ようこそ画面'},
+      {n:2,label:'クリニック情報'},
+      {n:3,label:'Gemini API設定'},
+      {n:4,label:'Google広告連携'},
+      {n:5,label:'ペルソナ設定'},
+      {n:6,label:'完了'},
+    ];
+    const funnelHtml = steps.map(s => {
+      const rate = s.n <= 5 ? (step_rates[`step${s.n}`] || 0) : completion_rate;
+      const color = rate >= 70 ? 'var(--green)' : rate >= 40 ? 'var(--warning)' : 'var(--red)';
+      const dropCount = dropout_distribution[s.n] || 0;
+      return `
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px">
+            <span style="color:var(--text-2)">STEP ${s.n}: ${s.label}</span>
+            <span style="font-weight:700;color:${color}">${rate}%${dropCount>0?` <span style="color:var(--red);font-size:10px">（離脱: ${dropCount}院）</span>`:''}</span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${rate}%;background:${color};border-radius:4px;transition:width .5s"></div>
+          </div>
+        </div>`;
+    }).join('');
+    document.getElementById('obFunnel').innerHTML = funnelHtml;
+
+    // 設定完了率
+    const setupItems = [
+      {label:'🤖 Gemini APIキー設定', rate: gemini_setup_rate, tip:'AI機能の利用可否に直結'},
+      {label:'📊 Google広告連携', rate: google_ads_setup_rate, tip:'実データとの連携に必要'},
+      {label:'👤 ペルソナ設定', rate: persona_setup_rate, tip:'AI広告文の精度に影響'},
+    ];
+    document.getElementById('obSetupRates').innerHTML = setupItems.map(item => {
+      const c = item.rate >= 70 ? 'var(--green)' : item.rate >= 40 ? 'var(--warning)' : 'var(--red)';
+      return `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
+            <span>${item.label} <span style="color:var(--text-3);font-size:11px">— ${item.tip}</span></span>
+            <span style="font-weight:700;color:${c}">${item.rate}%</span>
+          </div>
+          <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden">
+            <div style="height:100%;width:${item.rate}%;background:${c};border-radius:5px;transition:width .5s"></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    // 詳細テーブル
+    if (!details || details.length === 0) {
+      document.getElementById('obDetails').innerHTML = '<p style="color:var(--text-3);font-size:13px;text-align:center;padding:24px">データがありません</p>';
+      return;
+    }
+    document.getElementById('obDetails').innerHTML = `
+      <table>
+        <thead><tr>
+          <th>クリニック名</th><th>最大到達STEP</th><th>完了</th>
+          <th>Gemini</th><th>Google広告</th><th>ペルソナ</th><th>登録日</th>
+        </tr></thead>
+        <tbody>
+          ${details.map(d => `<tr>
+            <td><strong>${d.clinic_name}</strong></td>
+            <td><span style="font-size:13px;font-weight:700">${d.step_reached || 1} / 6</span></td>
+            <td>${d.completed ? '<span class="badge badge-active">完了</span>' : '<span class="badge badge-warning">途中</span>'}</td>
+            <td>${d.gemini_set ? '✅' : '<span style="color:var(--text-3)">─</span>'}</td>
+            <td>${d.google_ads_set ? '✅' : '<span style="color:var(--text-3)">─</span>'}</td>
+            <td>${d.persona_set ? '✅' : '<span style="color:var(--text-3)">─</span>'}</td>
+            <td style="font-size:11px;color:var(--text-3)">${(d.started_at||'').slice(0,10)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) { toast('オンボーディングデータの取得に失敗: ' + e.message, 'error'); }
 }
 
 /* ===== ユーザー管理 ===== */
