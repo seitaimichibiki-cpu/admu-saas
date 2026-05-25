@@ -2565,7 +2565,7 @@ async def weekly_actions(clinic_id: int = 1):
                 (clinic_id,)
             ).fetchall()
             unread_alerts = conn.execute(
-                "SELECT message,level FROM alerts WHERE clinic_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 5",
+                "SELECT message,level FROM alerts WHERE clinic_id=? AND notified=0 ORDER BY created_at DESC LIMIT 5",
                 (clinic_id,)
             ).fetchall()
 
