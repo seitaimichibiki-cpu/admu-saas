@@ -464,3 +464,62 @@ def send_onboarding_followup_email(to: str, clinic_name: str, step_reached: int,
 </body>
 </html>"""
     return _send(to, subject, html)
+
+
+def send_payment_failed_email(to: str, clinic_name: str, grace_until: str) -> bool:
+    """支払い失敗時の警告メール（7日間の猶予期間付き）"""
+    subject = "【AdMu】お支払いに失敗しました — 7日以内にカード情報をご確認ください"
+    html = f"""<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 16px">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#1e293b;border-radius:16px;overflow:hidden;max-width:100%">
+        <!-- ヘッダー -->
+        <tr><td style="background:linear-gradient(135deg,#b45309,#92400e);padding:32px 32px 24px;text-align:center">
+          <div style="font-size:32px;margin-bottom:8px">⚠️</div>
+          <h1 style="color:#fff;font-size:20px;font-weight:800;margin:0">お支払いエラーのお知らせ</h1>
+          <p style="color:#fde68a;font-size:13px;margin:8px 0 0">AdMu — 自動広告最適化プラットフォーム</p>
+        </td></tr>
+
+        <!-- 本文 -->
+        <tr><td style="padding:32px">
+          <p style="color:#e2e8f0;font-size:14px;line-height:1.8;margin:0 0 16px">
+            {clinic_name} ご担当者様
+          </p>
+          <p style="color:#e2e8f0;font-size:14px;line-height:1.8;margin:0 0 24px">
+            ご登録のクレジットカードへの請求が失敗しました。<br>
+            AdMuのサービスは現在引き続きご利用いただけますが、
+            <strong style="color:#fbbf24">{grace_until}（7日後）</strong>
+            までにお支払い情報を更新いただけない場合、自動でサービスが一時停止されます。
+          </p>
+
+          <!-- 注意ボックス -->
+          <div style="background:#0f172a;border:1px solid rgba(245,158,11,0.4);border-radius:12px;padding:20px;margin-bottom:24px">
+            <div style="font-size:13px;color:#fbbf24;font-weight:700;margin-bottom:8px">⏰ 対応期限</div>
+            <div style="font-size:22px;font-weight:800;color:#f59e0b">{grace_until}</div>
+            <div style="font-size:12px;color:#94a3b8;margin-top:4px">この日までに更新されない場合、AIによる自動最適化・広告監視が停止します</div>
+          </div>
+
+          <!-- CTA -->
+          <div style="text-align:center;margin-bottom:24px">
+            <a href="{APP_BASE_URL}/?action=billing"
+               style="display:inline-block;background:linear-gradient(135deg,#f59e0b,#b45309);color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
+              💳 カード情報を今すぐ更新する
+            </a>
+          </div>
+
+          <p style="color:#64748b;font-size:12px;text-align:center;margin:0">
+            更新手順: AdMuにログイン → 設定 → 「プランとご請求」 → 「支払い方法を変更」<br>
+            ご不明な点は support@admu.jp までご連絡ください。
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:16px;text-align:center;background:#0f172a">
+          <p style="color:#334155;font-size:11px;margin:0">© AdMu | {datetime.now().year}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>"""
+    return _send(to, subject, html)

@@ -921,8 +921,147 @@ def get_settings(clinic_id: int = 1):
 @app.post("/api/settings")
 def save_settings(req: SettingsReq):
     data = {k: v for k, v in req.model_dump().items() if v is not None and k != "clinic_id"}
+    acc_before = db.get_ads_account(req.clinic_id) or {}
     db.save_ads_account(req.clinic_id, data)
+
+    # 顧客IDが新たに設定された場合、Google Adsリンクリクエストを自動送信
+    new_cid = data.get("customer_id")
+    old_cid = acc_before.get("customer_id")
+    if new_cid and new_cid != old_cid:
+        try:
+            _send_google_ads_link_request(req.clinic_id, new_cid)
+        except Exception as e:
+            print(f"[GoogleAdsLink] リンクリクエスト送信エラー（設定保存は成功）: {e}")
+
     return {"success": True}
+
+
+def _send_google_ads_link_request(clinic_id: int, customer_id: str) -> dict:
+    """MCC → 顧客アカウントへのアクセス権リンクリクエストを送信"""
+    clean_id = customer_id.replace("-", "").strip()
+    acc = db.get_ads_account(clinic_id) or {}
+
+    # Google Ads APIクライアントで送信試行
+    try:
+        from ads_client import AdsClient
+        client = AdsClient(acc)
+
+        if client.mock_mode:
+            # モックモード: 擬似成功
+            db.save_ads_account(clinic_id, {
+                **acc,
+                "google_link_status": "mock_pending",
+                "google_link_requested_at": datetime.now().isoformat(),
+            })
+            print(f"[GoogleAdsLink] モックモード: リンクリクエスト擬似送信 customer_id={clean_id}")
+            return {"status": "mock_pending"}
+
+        # 本番: CustomerClientLinkServiceを使用
+        from google.ads.googleads.client import GoogleAdsClient as GadsClient
+        cfg = {
+            "developer_token": acc.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", ""),
+            "client_id": acc.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", ""),
+            "client_secret": acc.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", ""),
+            "refresh_token": acc.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", ""),
+            "login_customer_id": acc.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", ""),
+            "use_proto_plus": True,
+        }
+        if not all([cfg["developer_token"], cfg["client_id"], cfg["client_secret"], cfg["refresh_token"]]):
+            raise ValueError("Google Ads APIの認証情報が不完全です")
+
+        gads = GadsClient.load_from_dict(cfg)
+        service = gads.get_service("CustomerClientLinkService")
+        op = gads.get_type("CustomerClientLinkOperation")
+        link = op.create
+        link.client_customer = f"customers/{clean_id}"
+        link.status = gads.enums.ManagerLinkStatusEnum.PENDING
+
+        mcc_id = cfg["login_customer_id"].replace("-", "")
+        service.mutate_customer_client_link(customer_id=mcc_id, operation=op)
+
+        db.save_ads_account(clinic_id, {
+            **acc,
+            "google_link_status": "pending",
+            "google_link_requested_at": datetime.now().isoformat(),
+        })
+        print(f"[GoogleAdsLink] リンクリクエスト送信完了 customer_id={clean_id}")
+        return {"status": "pending"}
+
+    except Exception as e:
+        db.save_ads_account(clinic_id, {
+            **acc,
+            "google_link_status": f"error: {str(e)[:80]}",
+            "google_link_requested_at": datetime.now().isoformat(),
+        })
+        raise
+
+
+@app.post("/api/google/request-link")
+def request_google_link(request: Request, clinic_id: int = 1):
+    """Google Ads MCCリンクリクエストを手動送信"""
+    _get_current_user(request)
+    acc = db.get_ads_account(clinic_id) or {}
+    cid = acc.get("customer_id", "")
+    if not cid:
+        raise HTTPException(400, "顧客ID（customer_id）が設定されていません。設定画面から入力してください。")
+    try:
+        result = _send_google_ads_link_request(clinic_id, cid)
+        return {
+            "success": True,
+            "status": result.get("status"),
+            "customer_id": cid,
+            "message": "リンクリクエストを送信しました。Google広告の管理画面でAdMuからのリクエストを承認してください。",
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"リクエスト送信に失敗しました: {e}",
+            "customer_id": cid,
+        }
+
+
+@app.get("/api/google/link-status")
+def get_google_link_status(clinic_id: int = 1):
+    """Google Adsリンク状況を返す"""
+    acc = db.get_ads_account(clinic_id) or {}
+    status = acc.get("google_link_status")
+    requested_at = acc.get("google_link_requested_at")
+    customer_id = acc.get("customer_id", "")
+
+    # ステータス別の UI向けメッセージ
+    if not customer_id:
+        label = "未設定"
+        color = "gray"
+        description = "設定画面からGoogle広告の顧客IDを入力してください"
+    elif not status:
+        label = "未送信"
+        color = "yellow"
+        description = "リクエスト送信ボタンを押してMCCアカウントとの連携を開始してください"
+    elif "mock" in str(status):
+        label = "デモモード"
+        color = "blue"
+        description = "現在デモデータで動作中です。本番APIキーを設定すると実データに切り替わります"
+    elif status == "pending":
+        label = "承認待ち"
+        color = "yellow"
+        description = "Google広告の管理画面を開き、「アカウント管理」→「リクエスト」でAdMuからの招待を承認してください"
+    elif status == "active":
+        label = "連携済み"
+        color = "green"
+        description = "Google広告との連携が完了しています"
+    else:
+        label = "エラー"
+        color = "red"
+        description = status
+
+    return {
+        "customer_id": customer_id,
+        "status": status,
+        "label": label,
+        "color": color,
+        "description": description,
+        "requested_at": requested_at,
+    }
 
 # ---- API: クリニック一覧（SaaS管理） ----
 @app.get("/api/clinics")
@@ -1624,14 +1763,77 @@ async def stripe_webhook(request: Request):
             except Exception as e:
                 print(f"[Stripe] LINE通知エラー: {e}")
 
-    elif event["type"] in ["invoice.payment_failed", "customer.subscription.deleted"]:
-        # 決済失敗あるいはサブスクリプション終了
+    elif event["type"] == "invoice.payment_failed":
+        # 決済失敗: 即時停止せず7日間の猶予期間を設ける
         obj = event["data"]["object"]
-        clinic_id_str = obj.get("metadata", {}).get("clinic_id")
-        clinic_id = int(clinic_id_str) if clinic_id_str else 0
+        customer_id = obj.get("customer")
+        # stripe_customer_idからclinic_idを逆引き
+        clinic_id = 0
+        if customer_id:
+            for c in db.list_clinics():
+                contract = db.get_contract(c["id"]) or {}
+                if contract.get("stripe_customer_id") == customer_id:
+                    clinic_id = c["id"]
+                    break
+        if clinic_id:
+            from datetime import timedelta
+            grace_until = (datetime.now() + timedelta(days=7)).isoformat()
+            # 猶予期間を設定（まだ停止しない）
+            db.update_clinic_plan_status(clinic_id, "payment_grace")
+            # clinicsテーブルにgrace期限を記録
+            try:
+                with db.get_conn() as conn:
+                    conn.execute(
+                        "UPDATE clinics SET payment_failed_count = COALESCE(payment_failed_count,0)+1, payment_grace_until=? WHERE id=?",
+                        (grace_until, clinic_id)
+                    )
+                    conn.commit()
+            except Exception as e:
+                print(f"[Stripe] grace_until更新エラー: {e}")
+
+            db.add_audit_log(clinic_id, "stripe", "PAYMENT_FAILED_GRACE", "contract",
+                f"支払い失敗。猶予期間: {grace_until[:10]}まで")
+
+            # 顧客への警告メール
+            try:
+                clinic = db.get_clinic(clinic_id) or {}
+                users = db.list_users(clinic_id)
+                admin_emails = [u["email"] for u in users if u.get("role") in ("admin", "user")]
+                for email_addr in admin_emails[:2]:  # 最大2件
+                    email_notifier.send_payment_failed_email(
+                        to=email_addr,
+                        clinic_name=clinic.get("name", f"Clinic#{clinic_id}"),
+                        grace_until=grace_until[:10]
+                    )
+            except Exception as e:
+                print(f"[Stripe] 支払い失敗メール送信エラー: {e}")
+
+            # 管理者LINE通知
+            try:
+                admin_line = os.environ.get("LINE_DEFAULT_USER_ID", "")
+                channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+                if admin_line and channel_token:
+                    clinic = db.get_clinic(clinic_id) or {}
+                    line_notifier.send_alert(channel_token, admin_line, "WARNING",
+                        f"⚠️ 決済失敗\n院名: {clinic.get('name','不明')}\n猶予期限: {grace_until[:10]}")
+            except Exception as e:
+                print(f"[Stripe] LINE通知エラー: {e}")
+
+    elif event["type"] == "customer.subscription.deleted":
+        # サブスク完全終了: 停止
+        obj = event["data"]["object"]
+        customer_id = obj.get("customer")
+        clinic_id = 0
+        if customer_id:
+            for c in db.list_clinics():
+                contract = db.get_contract(c["id"]) or {}
+                if contract.get("stripe_customer_id") == customer_id:
+                    clinic_id = c["id"]
+                    break
         if clinic_id:
             db.update_clinic_plan_status(clinic_id, "suspended")
-            db.add_audit_log(clinic_id, "stripe", "PAYMENT_FAILED", "contract", f"Subscription suspended due to {event['type']}")
+            db.add_audit_log(clinic_id, "stripe", "SUBSCRIPTION_DELETED", "contract", "Subscription cancelled")
+            print(f"[Stripe] サブスク終了 clinic_id={clinic_id}")
 
     return {"status": "success"}
 

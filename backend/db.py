@@ -340,6 +340,15 @@ def init_db():
         "ALTER TABLE onboarding_progress ADD COLUMN gemini_set INTEGER DEFAULT 0",
         "ALTER TABLE onboarding_progress ADD COLUMN google_ads_set INTEGER DEFAULT 0",
         "ALTER TABLE onboarding_progress ADD COLUMN persona_set INTEGER DEFAULT 0",
+        # 利用規約同意ログ（外販対応・法的クレーム防止）
+        "ALTER TABLE users ADD COLUMN accepted_terms_at TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN terms_version TEXT DEFAULT NULL",
+        # 支払い失敗カウンター（猶予期間管理）
+        "ALTER TABLE clinics ADD COLUMN payment_failed_count INTEGER DEFAULT 0",
+        "ALTER TABLE clinics ADD COLUMN payment_grace_until TEXT DEFAULT NULL",
+        # Google Ads アクセス権リンクステータス
+        "ALTER TABLE ads_accounts ADD COLUMN google_link_status TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN google_link_requested_at TEXT DEFAULT NULL",
     ]
     for sql in migrations:
         try:
@@ -1040,13 +1049,24 @@ def get_admin_overview(start_date: str = None, end_date: str = None):
 # ユーザー認証 CRUD
 # ============================================================
 
-def create_user(clinic_id: int, email: str, password_hash: str, role: str = "user") -> int:
-    """ユーザーを作成して IDを返す"""
+CURRENT_TERMS_VERSION = "2026-05-25-v1"
+
+def create_user(clinic_id: int, email: str, password_hash: str, role: str = "user", accepted_terms: bool = False) -> int:
+    """ユーザーを作成してIDを返す。accepted_terms=Trueで利用規約同意を記録"""
+    now = datetime.now().isoformat()
+    terms_at = now if accepted_terms else None
+    terms_ver = CURRENT_TERMS_VERSION if accepted_terms else None
     with get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?,?,?,?)",
-            (clinic_id, email.lower().strip(), password_hash, role)
-        )
+        if USE_PG:
+            cur = conn.execute(
+                "INSERT INTO users (clinic_id, email, password_hash, role, accepted_terms_at, terms_version) VALUES (%s,%s,%s,%s,%s,%s)",
+                (clinic_id, email.lower().strip(), password_hash, role, terms_at, terms_ver)
+            )
+        else:
+            cur = conn.execute(
+                "INSERT INTO users (clinic_id, email, password_hash, role, accepted_terms_at, terms_version) VALUES (?,?,?,?,?,?)",
+                (clinic_id, email.lower().strip(), password_hash, role, terms_at, terms_ver)
+            )
         conn.commit()
         return cur.lastrowid
 
@@ -1062,12 +1082,19 @@ def register_clinic_and_user(clinic_name: str, email: str, password_hash: str) -
         )
         clinic_id = cur.lastrowid
         
-        conn.execute(
-            "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?,?,?,?)",
-            (clinic_id, email.lower().strip(), password_hash, "user")
-        )
+        now = datetime.now().isoformat()
+        if USE_PG:
+            conn.execute(
+                "INSERT INTO users (clinic_id, email, password_hash, role, accepted_terms_at, terms_version) VALUES (%s,%s,%s,%s,%s,%s)",
+                (clinic_id, email.lower().strip(), password_hash, "user", now, CURRENT_TERMS_VERSION)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO users (clinic_id, email, password_hash, role, accepted_terms_at, terms_version) VALUES (?,?,?,?,?,?)",
+                (clinic_id, email.lower().strip(), password_hash, "user", now, CURRENT_TERMS_VERSION)
+            )
         conn.commit()
-        return {"clinic_id": clinic_id, "email": email, "plan_status": "pending"}
+        return {"clinic_id": clinic_id, "email": email, "plan_status": "pending", "terms_accepted_at": now}
 
 
 def get_user_by_email(email: str) -> Optional[dict]:
