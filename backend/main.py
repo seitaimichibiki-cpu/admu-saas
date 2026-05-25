@@ -962,6 +962,7 @@ def save_settings(req: SettingsReq):
 
 def _send_google_ads_link_request(clinic_id: int, customer_id: str) -> dict:
     """MCC → 顧客アカウントへのアクセス権リンクリクエストを送信"""
+    from datetime import datetime
     clean_id = customer_id.replace("-", "").strip()
     acc = db.get_ads_account(clinic_id) or {}
 
