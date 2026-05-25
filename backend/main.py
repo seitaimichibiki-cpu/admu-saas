@@ -665,7 +665,7 @@ def _run_ai_budget_allocation(clinic_id: int, monthly_budget_yen: int, ads_clien
                 for a in allocations
             ])
             r = gc.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.0-flash',
                 contents=f"""整体院のGoogle広告AIが以下の配分を決定しました。院長向けに、なぜこの配分にしたか・期待される成果を3〜4文（140文字以内）で簡潔に説明してください。
 
 月間総予算: ¥{monthly_budget_yen:,}
@@ -2482,7 +2482,7 @@ LPコンテンツ（一部）:
 整体院業界の平均CVR（1.5〜3.5%）を参考に、最低5項目・最大8項目で返してください。"""
 
     try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json, re
         text = resp.text.strip()
         m = re.search(r"\[.*\]", text, re.DOTALL)
@@ -2535,7 +2535,7 @@ async def ai_chat(req: AiChatReq, request: Request):
 
 質問: {req.question}"""
     try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         db.increment_ai_usage(req.clinic_id)
         db.increment_ai_quota(req.clinic_id, feature_name="ai_chat")
         return {"success": True, "answer": resp.text.strip()}
@@ -2549,49 +2549,54 @@ async def ai_chat(req: AiChatReq, request: Request):
 @app.get("/api/dashboard/weekly-actions")
 async def weekly_actions(clinic_id: int = 1):
     """AIが今週すべき3アクションを生成"""
-    gemini_key = db.get_gemini_api_key(clinic_id)
+    try:
+        gemini_key = db.get_gemini_api_key(clinic_id)
 
-    with db.get_conn() as conn:
-        camps = conn.execute(
-            "SELECT name,impressions,clicks,conversions,cost_micros FROM campaigns WHERE clinic_id=? AND status='ENABLED' LIMIT 10",
-            (clinic_id,)
-        ).fetchall()
-        unread_alerts = conn.execute(
-            "SELECT message,level FROM alerts WHERE clinic_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 5",
-            (clinic_id,)
-        ).fetchall()
+        with db.get_conn() as conn:
+            camps = conn.execute(
+                "SELECT name,impressions,clicks,conversions,cost_micros FROM campaigns WHERE clinic_id=? AND status='ENABLED' LIMIT 10",
+                (clinic_id,)
+            ).fetchall()
+            unread_alerts = conn.execute(
+                "SELECT message,level FROM alerts WHERE clinic_id=? AND is_read=0 ORDER BY created_at DESC LIMIT 5",
+                (clinic_id,)
+            ).fetchall()
 
-    if not gemini_key or not camps:
-        return {"success": True, "generated_by": "static", "actions": [
-            {"priority":1,"icon":"🤖","title":"Gemini APIキーを設定","desc":"AIが広告を自動分析してアクションを提案します","urgency":"high"},
-            {"priority":2,"icon":"📊","title":"Google広告を連携","desc":"リアルタイムの広告成果データを監視できます","urgency":"medium"},
-            {"priority":3,"icon":"👤","title":"ペルソナを設定","desc":"AI広告文の精度が大幅に向上します","urgency":"low"},
-        ]}
+        if not gemini_key or not camps:
+            return {"success": True, "generated_by": "static", "actions": [
+                {"priority":1,"icon":"🤖","title":"Gemini APIキーを設定","desc":"AIが広告を自動分析してアクションを提案します","urgency":"high"},
+                {"priority":2,"icon":"📊","title":"Google広告を連携","desc":"リアルタイムの広告成果データを監視できます","urgency":"medium"},
+                {"priority":3,"icon":"👤","title":"ペルソナを設定","desc":"AI広告文の精度が大幅に向上します","urgency":"low"},
+            ]}
 
-    camp_summary = "\n".join([
-        f"- {c['name']}: 費用¥{(c['cost_micros'] or 0)//1_000_000:,} CTR{round((c['clicks'] or 0)/max(c['impressions'] or 1,1)*100,2)}% CV{c['conversions'] or 0}"
-        for c in camps
-    ])
-    alert_text = "\n".join([f"- [{a['level']}] {a['message']}" for a in unread_alerts]) or "なし"
+        camp_summary = "\n".join([
+            f"- {c['name']}: 費用¥{(c['cost_micros'] or 0)//1_000_000:,} CTR{round((c['clicks'] or 0)/max(c['impressions'] or 1,1)*100,2)}% CV{c['conversions'] or 0}"
+            for c in camps
+        ])
+        alert_text = "\n".join([f"- [{a['level']}] {a['message']}" for a in unread_alerts]) or "なし"
 
-    import google.genai as genai
-    client = genai.Client(api_key=gemini_key)
-    prompt = f"""整体院Google広告専門AIとして、以下のデータを元に今週すべき3アクションをJSONで返してください。
+        import google.genai as genai
+        client = genai.Client(api_key=gemini_key)
+        prompt = f"""整体院Google広告専門AIとして、以下のデータを元に今週すべき3アクションをJSONで返してください。
 
 【キャンペーン】\n{camp_summary}
 【未読アラート】\n{alert_text}
 
 JSON配列のみ返してください:
 [{{"priority":1,"icon":"絵文字","title":"アクション名(20字以内)","desc":"説明(60字以内)","urgency":"high/medium/low"}},...]"""
-    try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
-        import json, re as _re
-        m = _re.search(r"\[.*\]", resp.text.strip(), _re.DOTALL)
-        actions = json.loads(m.group(0))[:3] if m else []
-        db.increment_ai_usage(clinic_id)
-        return {"success": True, "generated_by": "ai", "actions": actions}
+        try:
+            resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+            import json, re as _re
+            m = _re.search(r"\[.*\]", resp.text.strip(), _re.DOTALL)
+            actions = json.loads(m.group(0))[:3] if m else []
+            db.increment_ai_usage(clinic_id)
+            return {"success": True, "generated_by": "ai", "actions": actions}
+        except Exception as e:
+            return {"success": True, "generated_by": "error", "actions": [], "error": str(e)}
     except Exception as e:
-        return {"success": True, "generated_by": "error", "actions": [], "error": str(e)}
+        return {"success": True, "generated_by": "error", "actions": [
+            {"priority":1,"icon":"⚠️","title":"データ取得エラー","desc":str(e)[:60],"urgency":"low"}
+        ], "error": str(e)}
 
 
 # ============================================================
@@ -2600,54 +2605,57 @@ JSON配列のみ返してください:
 @app.get("/api/benchmark")
 def get_benchmark(clinic_id: int = 1):
     """業界匿名平均と自クリニックを比較"""
-    with db.get_conn() as conn:
-        all_rows = conn.execute("""
-            SELECT clinic_id,
-                   AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
-                   AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
-                   AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
-            FROM campaigns WHERE status='ENABLED' AND impressions>0
-            GROUP BY clinic_id
-        """).fetchall()
-        my_row = conn.execute("""
-            SELECT AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
-                   AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
-                   AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
-            FROM campaigns WHERE clinic_id=? AND status='ENABLED' AND impressions>0
-        """, (clinic_id,)).fetchone()
+    try:
+        with db.get_conn() as conn:
+            all_rows = conn.execute("""
+                SELECT clinic_id,
+                       AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
+                       AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
+                       AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
+                FROM campaigns WHERE status='ENABLED' AND impressions>0
+                GROUP BY clinic_id
+            """).fetchall()
+            my_row = conn.execute("""
+                SELECT AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
+                       AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
+                       AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
+                FROM campaigns WHERE clinic_id=? AND status='ENABLED' AND impressions>0
+            """, (clinic_id,)).fetchone()
 
-    if len(all_rows) < 2:
-        return {"success": True, "available": False,
-                "message": "比較データが不足しています（複数テナントのデータが揃うと表示されます）"}
+        if len(all_rows) < 2:
+            return {"success": True, "available": False,
+                    "message": "比較データが不足しています（複数テナントのデータが揃うと表示されます）"}
 
-    import statistics
-    def safe_mean(lst): return round(statistics.mean([x for x in lst if x]), 4) if any(lst) else None
-    def pct_rank(val, lst):
-        lst = [x for x in lst if x]; return round(sum(1 for x in lst if x < val)/max(len(lst),1)*100) if val and lst else None
+        import statistics
+        def safe_mean(lst): return round(statistics.mean([x for x in lst if x]), 4) if any(lst) else None
+        def pct_rank(val, lst):
+            lst = [x for x in lst if x]; return round(sum(1 for x in lst if x < val)/max(len(lst),1)*100) if val and lst else None
 
-    ctrs = [r["ctr"] for r in all_rows]; cvrs = [r["cvr"] for r in all_rows]; cpas = [r["cpa"] for r in all_rows]
-    my_ctr = my_row["ctr"] if my_row else None
-    my_cvr = my_row["cvr"] if my_row else None
-    my_cpa = my_row["cpa"] if my_row else None
+        ctrs = [r["ctr"] for r in all_rows]; cvrs = [r["cvr"] for r in all_rows]; cpas = [r["cpa"] for r in all_rows]
+        my_ctr = my_row["ctr"] if my_row else None
+        my_cvr = my_row["cvr"] if my_row else None
+        my_cpa = my_row["cpa"] if my_row else None
 
-    return {
-        "success": True, "available": True, "tenant_count": len(all_rows),
-        "industry_avg": {
-            "ctr": round((safe_mean(ctrs) or 0)*100, 2),
-            "cvr": round((safe_mean(cvrs) or 0)*100, 2),
-            "cpa": round(safe_mean(cpas) or 0),
-        },
-        "my_stats": {
-            "ctr": round((my_ctr or 0)*100, 2),
-            "cvr": round((my_cvr or 0)*100, 2),
-            "cpa": round(my_cpa or 0),
-        },
-        "percentile": {
-            "ctr": pct_rank(my_ctr, ctrs),
-            "cvr": pct_rank(my_cvr, cvrs),
-            "cpa_inv": 100 - pct_rank(my_cpa, cpas) if pct_rank(my_cpa, cpas) is not None else None,
+        return {
+            "success": True, "available": True, "tenant_count": len(all_rows),
+            "industry_avg": {
+                "ctr": round((safe_mean(ctrs) or 0)*100, 2),
+                "cvr": round((safe_mean(cvrs) or 0)*100, 2),
+                "cpa": round(safe_mean(cpas) or 0),
+            },
+            "my_stats": {
+                "ctr": round((my_ctr or 0)*100, 2),
+                "cvr": round((my_cvr or 0)*100, 2),
+                "cpa": round(my_cpa or 0),
+            },
+            "percentile": {
+                "ctr": pct_rank(my_ctr, ctrs),
+                "cvr": pct_rank(my_cvr, cvrs),
+                "cpa_inv": 100 - pct_rank(my_cpa, cpas) if pct_rank(my_cpa, cpas) is not None else None,
+            }
         }
-    }
+    except Exception as e:
+        return {"success": True, "available": False, "message": f"ベンチマークデータの取得に失敗しました: {str(e)}"}
 
 
 # ============================================================
@@ -2820,7 +2828,7 @@ async def keyword_suggest(req: KwSuggestReq):
 除外KWと重複せず、上記フレームワーク各カテゴリを網羅しながら15〜20件提案してください。"""
 
     try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json, re
         text = resp.text.strip()
         m = re.search(r"\[.*\]", text, re.DOTALL)
@@ -2890,7 +2898,7 @@ async def competitor_analysis(req: CompetitorReq):
 }}"""
 
     try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json as _json, re
         text = resp.text.strip()
         m = re.search(r"\{.*\}", text, re.DOTALL)
@@ -3465,7 +3473,7 @@ Google RSA広告用に以下を生成してください。JSON形式で返して
 }}
 Markdown不要。純粋なJSONのみ返してください。
 """
-                resp = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+                resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
                 import json as _json
                 return _json.loads(resp.text)
             except Exception:
@@ -3652,7 +3660,7 @@ async def psych_score_ad_copy(req: PsychScoreReq):
 }}
 """
     try:
-        resp = client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json, re
         text = resp.text.strip()
         m = re.search(r"\{.*\}", text, re.DOTALL)
@@ -3782,7 +3790,7 @@ async def daily_intelligence_brief(clinic_id: int = 1):
 }}
 """
     try:
-        resp = genai_client.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = genai_client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json, re as _re
         text = resp.text.strip()
         m = _re.search(r"\{.*\}", text, _re.DOTALL)
@@ -3864,7 +3872,7 @@ async def ltv_simulator(req: LtvSimReq):
 患者LTV: ¥{ltv:,} / 適正CPA: ¥{optimal_cpa:,} / 現在予算: ¥{req.current_budget:,} / 目標CV: {req.target_monthly_cv}件
 標準シナリオROI: +{roi}% / 現在推定CV: {current_cv_estimate}件
 """
-            r = gc.models.generate_content(model='gemini-1.5-flash', contents=insight_prompt)
+            r = gc.models.generate_content(model='gemini-2.0-flash', contents=insight_prompt)
             ai_insight = r.text.strip()
         except:
             ai_insight = f"患者LTV¥{ltv:,}に対し適正CPA上限は¥{optimal_cpa:,}です。現在の予算設定はROI+{current_roi}%と推定されます。"
@@ -3898,8 +3906,8 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
     「数字の羅列」から「だから何？次は何？」まで含む。
     """
     if not db.check_ai_quota_available(clinic_id):
-        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
-        
+        return {"success": False, "error": "今月のAI利用回数の上限に達しました。"}
+
     gemini_key = db.get_gemini_api_key(clinic_id)
     if not gemini_key:
         return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
@@ -3974,7 +3982,7 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
 }}
 """
     try:
-        resp = gc.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+        resp = gc.models.generate_content(model='gemini-2.0-flash', contents=prompt)
         import json, re as _re
         text = resp.text.strip()
         m = _re.search(r"\{.*\}", text, _re.DOTALL)
@@ -4120,7 +4128,7 @@ Google広告見出し5本と説明文2本を生成してください。
 
 JSON形式のみで返答:
 {{"headlines": ["...", "...", "...", "...", "..."], "descriptions": ["...", "..."]}}"""
-                r = gc.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+                r = gc.models.generate_content(model='gemini-2.0-flash', contents=prompt)
                 import json, re
                 m = re.search(r"\{.*\}", r.text.strip(), re.DOTALL)
                 if m:
@@ -4197,7 +4205,7 @@ async def performance_heatmap(clinic_id: int = 1):
             import google.genai as genai
             gc = genai.Client(api_key=gemini_key)
             top_text = ", ".join([f"{_DOW_NAMES[d]}曜{h}時(CTR{c:.1f}%)" for d,h,c in top_slots[:3]])
-            r = gc.models.generate_content(model='gemini-1.5-flash', contents=f"""
+            r = gc.models.generate_content(model='gemini-2.0-flash', contents=f"""
 整体院のGoogle広告における時間帯パフォーマンスデータを分析し、
 院長向けの入札スケジュール最適化アドバイスを2〜3文（120文字以内）で述べてください。
 高パフォーマンス時間帯: {top_text}
@@ -4337,7 +4345,7 @@ async def negative_kw_ai_scan(clinic_id: int = 1):
 
 以下のJSON配列のみで返答（説明なし）:
 [{{"keyword":"...","reason":"除外する理由","category":"カテゴリ名","estimated_waste":"推定無駄コスト削減効果"}}]"""
-            r = gc.models.generate_content(model='gemini-1.5-flash', contents=prompt)
+            r = gc.models.generate_content(model='gemini-2.0-flash', contents=prompt)
             import json, re
             m = re.search(r"\[.*\]", r.text.strip(), re.DOTALL)
             if m: ai_additional = json.loads(m.group(0))
