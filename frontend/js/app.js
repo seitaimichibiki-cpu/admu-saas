@@ -1409,6 +1409,9 @@ async function loadSettings() {
     const data = await api(`/settings?clinic_id=${currentClinicId}`);
     const s = data.settings || {};
     document.getElementById('settCustomerId').value = s.customer_id || '';
+    if (document.getElementById('settLoginCustomerId')) {
+      document.getElementById('settLoginCustomerId').value = s.login_customer_id || '';
+    }
     document.getElementById('settDevToken').value   = s.developer_token === '***設定済み***' ? '' : (s.developer_token||'');
     document.getElementById('settDevToken').placeholder = s.developer_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '（取得後に入力）';
     document.getElementById('settClientId').value     = s.client_id || '';
@@ -1475,6 +1478,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   const body = {
     clinic_id: currentClinicId,
     customer_id: document.getElementById('settCustomerId').value || null,
+    login_customer_id: document.getElementById('settLoginCustomerId')?.value?.replace(/\D/g, '') || null,
     client_id: document.getElementById('settClientId').value || null,
     mock_mode: parseInt(document.getElementById('settMockMode').value),
     line_user_id: document.getElementById('settLineUserId').value || null,
@@ -3230,19 +3234,7 @@ function renderNarrative(d) {
 // ★ 広告文生成後に自動で心理スコアを計算（既存フローに統合）
 // ============================================================
 const _origGenerateAdCopy = window.generateAdCopy;
-// ダッシュボードロード時にAIブリーフとナラティブを自動取得
-const _origLoadDashboard = window.loadDashboard;
-if (typeof loadDashboard === 'function') {
-  const _origLoad = loadDashboard;
-  window.loadDashboard = async function(...args) {
-    await _origLoad.apply(this, args);
-    // 非同期で並列取得（ダッシュボード表示を妨げない）
-    setTimeout(() => {
-      loadDailyBrief();
-      loadNarrativeReport();
-    }, 800);
-  };
-}
+// AI機能削除済み — ダッシュボードからAIブリーフ/ナラティブの自動取得を無効化
 
 // LTVシミュレーターページ初期表示
 document.addEventListener('DOMContentLoaded', () => {
@@ -3254,13 +3246,6 @@ document.addEventListener('click', (e) => {
   const navItem = e.target.closest('[data-page]');
   if (navItem?.dataset.page === 'simulator') {
     setTimeout(updateSimPreview, 100);
-  }
-  if (navItem?.dataset.page === 'dashboard') {
-    // ダッシュボードに戻った時にAIブリーフ表示
-    setTimeout(() => {
-      if (!_briefCache)    loadDailyBrief();
-      if (!_narrativeCache) loadNarrativeReport();
-    }, 300);
   }
 });
 
