@@ -1209,7 +1209,8 @@ def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: 
         "login_customer_id": os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", ""),
         "mock_mode":         0,
     }
-    missing = [k for k, v in data.items() if not v and k not in ["customer_id", "login_customer_id"]]
+    # mock_mode=0はfalsyなので除外対象から明示的に外す
+    missing = [k for k, v in data.items() if not str(v) and k not in ["customer_id", "login_customer_id", "mock_mode"]]
     if missing:
         return {"success": False, "missing_env_vars": missing}
 
