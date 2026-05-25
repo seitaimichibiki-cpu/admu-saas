@@ -2058,7 +2058,9 @@ def serve_js(file_path: str):
     full_path = os.path.join(FRONTEND_DIR, "js", file_path)
     if os.path.exists(full_path):
         from fastapi.responses import FileResponse as FR
-        return FR(full_path, media_type="application/javascript")
+        resp = FR(full_path, media_type="application/javascript")
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return resp
     raise HTTPException(404)
 
 @app.get("/apple-touch-icon.png", include_in_schema=False)
