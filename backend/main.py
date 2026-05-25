@@ -1164,7 +1164,16 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
 
     try:
         from ads_client import AdsClient
-        client = AdsClient(acc)
+        # _require_accountと同様のフォールバック（環境変数補完）を適用
+        acc_for_client = {
+            **acc,
+            "developer_token": acc.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", "") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+            "client_id":       acc.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", "") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+            "client_secret":   acc.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", "") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+            "refresh_token":   acc.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
+            "login_customer_id": acc.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", ""),
+        }
+        client = AdsClient(acc_for_client)
         actual_mock = client.mock_mode
     except Exception:
         actual_mock = True
