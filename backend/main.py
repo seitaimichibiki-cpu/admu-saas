@@ -68,7 +68,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def verify_tenant_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and path not in ["/api/csrf-token", "/api/config"]:
+    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and not path.startswith("/api/logiction/") and path not in ["/api/csrf-token", "/api/config"]:
         user = auth.get_current_user_from_request(request)
         if not user:
             return JSONResponse({"detail": "認証されていませんので再度ログインしてください"}, status_code=401)
@@ -127,7 +127,20 @@ async def security_middleware(request: Request, call_next):
     if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
         if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/stripe/webhook"):
             # exclude endpoints that don't need CSRF or are login endpoints
-            if request.url.path not in ["/api/auth/login", "/api/auth/dev-autologin", "/api/auth/reset-request", "/api/auth/reset-confirm", "/api/admin/init-credentials"]:
+            # exclude endpoints that don't need CSRF or are login endpoints
+            # ★ LOGICTION連携エンドポイントはサーバー間通信のためCSRF除外
+            CSRF_EXEMPT = [
+                "/api/auth/login",
+                "/api/auth/dev-autologin",
+                "/api/auth/reset-request",
+                "/api/auth/reset-confirm",
+                "/api/admin/init-credentials",
+                "/api/logiction/patient-sync",
+                "/api/logiction/test-connection",
+                "/api/logiction/generate-key",
+                "/api/logiction/save-settings",
+            ]
+            if request.url.path not in CSRF_EXEMPT:
                 token_in_header = request.headers.get("X-CSRF-Token")
                 token_in_cookie = request.cookies.get("csrf_token")
                 # Double submit cookie pattern
