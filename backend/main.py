@@ -1206,8 +1206,8 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
 def debug_google_ads_version():
     try:
         import google.ads.googleads.client as gads
-        import pkg_resources
-        version = pkg_resources.get_distribution("google-ads").version
+        import importlib.metadata
+        version = importlib.metadata.version("google-ads")
         return {
             "installed_version": version,
             "default_api_version": getattr(gads.GoogleAdsClient, "DEFAULT_VERSION", "unknown")
