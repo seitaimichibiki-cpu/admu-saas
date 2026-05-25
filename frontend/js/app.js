@@ -2,6 +2,21 @@
    app.js - Google広告自動運用システム メインJS
    ============================================================== */
 
+// ── 削除済みAI機能のスタブ（キャッシュ対策） ──────────────────
+window.loadWeeklyActions  = function() { return Promise.resolve(); };
+window.loadBenchmark      = function() { return Promise.resolve(); };
+window.loadDailyBrief     = function() {
+  const el = document.getElementById('dailyBriefContent');
+  if (el) el.innerHTML = '';
+  return Promise.resolve();
+};
+window.loadNarrativeReport = function() {
+  const el = document.getElementById('narrativeContent');
+  if (el) el.innerHTML = '';
+  return Promise.resolve();
+};
+// ──────────────────────────────────────────────────────────────
+
 const isFile = window.location.protocol === 'file:';
 const isDevServer = ['5500', '3000', '8080'].includes(window.location.port);
 const API = (isFile || isDevServer) 
