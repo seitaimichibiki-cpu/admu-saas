@@ -2313,9 +2313,17 @@ def integration_status():
 import logiction_integration as logiction_mod
 
 @app.get("/api/logiction/health")
-async def logiction_health():
-    """LOGICTIONからの疎通確認用。CORSミドルウェアで全オリジン許可済み。"""
-    return {"ok": True, "service": "admu", "status": "running"}
+@app.options("/api/logiction/health")
+async def logiction_health(request: Request):
+    """LOGICTIONからの疎通確認用。ALLOWED_ORIGINSに依存せず全オリジン許可。"""
+    from fastapi.responses import JSONResponse
+    origin = request.headers.get("origin", "*")
+    body = {"ok": True, "service": "admu", "status": "running"}
+    resp = JSONResponse(body)
+    resp.headers["Access-Control-Allow-Origin"] = origin
+    resp.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "*"
+    return resp
 
 @app.post("/api/logiction/patient-sync")
 async def logiction_patient_sync(
