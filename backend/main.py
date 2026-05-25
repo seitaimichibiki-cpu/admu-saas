@@ -2312,6 +2312,11 @@ def integration_status():
 # ============================================================
 import logiction_integration as logiction_mod
 
+@app.get("/api/logiction/health")
+async def logiction_health():
+    """LOGICTIONからの疎通確認用。CORSミドルウェアで全オリジン許可済み。"""
+    return {"ok": True, "service": "admu", "status": "running"}
+
 @app.post("/api/logiction/patient-sync")
 async def logiction_patient_sync(
     req: logiction_mod.LogictionSyncReq,
