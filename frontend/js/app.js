@@ -675,11 +675,13 @@ async function loadDashboard() {
     // アラートバッジ
     const badge = document.getElementById('alertBadge');
     const alertCount = (data.recent_alerts||[]).filter(a=>!a.notified).length;
-    if(alertCount > 0) {
-      badge.textContent = alertCount;
-      badge.style.display = 'flex';
-    } else {
-      badge.style.display = 'none';
+    if(badge) {
+      if(alertCount > 0) {
+        badge.textContent = alertCount;
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
     }
 
     // 成果予測カードを読み込み
@@ -688,9 +690,10 @@ async function loadDashboard() {
     // AIクオータ更新
     if (data.ai_quota) {
       const qb = document.getElementById('aiQuotaBadge');
-      if (qb) {
+      const qt = document.getElementById('aiQuotaText');
+      if (qb && qt) {
         qb.style.display = 'flex';
-        document.getElementById('aiQuotaText').textContent = `${data.ai_quota.used} / ${data.ai_quota.limit}`;
+        qt.textContent = `${data.ai_quota.used} / ${data.ai_quota.limit}`;
         if (data.ai_quota.used >= data.ai_quota.limit) {
           qb.style.color = '#ef4444';
           qb.style.borderColor = 'rgba(239,68,68,0.5)';
