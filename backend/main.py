@@ -1202,6 +1202,20 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
     }
 
 
+@app.get("/api/debug/google-ads-version")
+def debug_google_ads_version():
+    try:
+        import google.ads.googleads.client as gads
+        import pkg_resources
+        version = pkg_resources.get_distribution("google-ads").version
+        return {
+            "installed_version": version,
+            "default_api_version": getattr(gads.GoogleAdsClient, "DEFAULT_VERSION", "unknown")
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/api/admin/init-credentials")
 def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: str = ""):
     """Render環境変数からads_accountsへ認証情報を一括書き込み"""
