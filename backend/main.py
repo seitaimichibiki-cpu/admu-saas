@@ -2615,18 +2615,19 @@ def get_benchmark(clinic_id: int = 1):
     try:
         with db.get_conn() as conn:
             all_rows = conn.execute("""
-                SELECT clinic_id,
-                       AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
-                       AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
-                       AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
-                FROM campaigns WHERE status='ENABLED' AND impressions>0
-                GROUP BY clinic_id
+                SELECT p.clinic_id,
+                       AVG(CAST(p.clicks AS FLOAT)/NULLIF(p.impressions,0)) as ctr,
+                       AVG(CAST(p.conversions AS FLOAT)/NULLIF(p.clicks,0)) as cvr,
+                       AVG(CAST(p.cost_micros AS FLOAT)/NULLIF(p.conversions,0)/1000000) as cpa
+                FROM performance_logs p
+                WHERE p.impressions>0
+                GROUP BY p.clinic_id
             """).fetchall()
             my_row = conn.execute("""
                 SELECT AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
                        AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
                        AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
-                FROM campaigns WHERE clinic_id=? AND status='ENABLED' AND impressions>0
+                FROM performance_logs WHERE clinic_id=? AND impressions>0
             """, (clinic_id,)).fetchone()
 
         if len(all_rows) < 2:
