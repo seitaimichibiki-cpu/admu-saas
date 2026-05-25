@@ -2554,7 +2554,14 @@ async def weekly_actions(clinic_id: int = 1):
 
         with db.get_conn() as conn:
             camps = conn.execute(
-                "SELECT name,impressions,clicks,conversions,cost_micros FROM campaigns WHERE clinic_id=? AND status='ENABLED' LIMIT 10",
+                """SELECT c.name, COALESCE(SUM(p.impressions),0) as impressions,
+                          COALESCE(SUM(p.clicks),0) as clicks,
+                          COALESCE(SUM(p.conversions),0) as conversions,
+                          COALESCE(SUM(p.cost_micros),0) as cost_micros
+                   FROM campaigns c
+                   LEFT JOIN performance_logs p ON c.id = p.campaign_id AND c.clinic_id = p.clinic_id
+                   WHERE c.clinic_id=? AND c.status='ENABLED'
+                   GROUP BY c.id LIMIT 10""",
                 (clinic_id,)
             ).fetchall()
             unread_alerts = conn.execute(
@@ -3915,41 +3922,46 @@ async def narrative_report(clinic_id: int = 1, days: int = 7):
     from ads_client import AdsClient
     import datetime
 
-    acc = db.get_ads_account(clinic_id) or {}
-    clinic = db.get_clinic(clinic_id) or {}
-    clinic_name = clinic.get("name", f"Clinic#{clinic_id}")
+    try:
+        acc = db.get_ads_account(clinic_id) or {}
+        clinic = db.get_clinic(clinic_id) or {}
+        clinic_name = clinic.get("name", f"Clinic#{clinic_id}")
 
-    client_ads = AdsClient(acc)
-    perf_cur = client_ads.get_performance_series(days=days)
-    perf_prv = client_ads.get_performance_series(days=days * 2)
-    prv_only = perf_prv[:days]
+        client_ads = AdsClient(acc)
+        perf_cur = client_ads.get_performance_series(days=days)
+        perf_prv = client_ads.get_performance_series(days=days * 2)
+        prv_only = perf_prv[:days]
 
-    def sum_key(lst, key): return sum(p.get(key, 0) for p in lst)
+        def sum_key(lst, key): return sum(p.get(key, 0) for p in lst)
 
-    s = {
-        "cost":  sum_key(perf_cur, "cost_micros") / 1_000_000,
-        "clicks": sum_key(perf_cur, "clicks"),
-        "imps":  sum_key(perf_cur, "impressions"),
-        "cv":    sum_key(perf_cur, "conversions"),
-    }
-    p = {
-        "cost":  sum_key(prv_only, "cost_micros") / 1_000_000,
-        "clicks": sum_key(prv_only, "clicks"),
-        "cv":    sum_key(prv_only, "conversions"),
-    }
-    s["ctr"] = round(s["clicks"] / s["imps"] * 100, 2) if s["imps"] else 0
-    s["cpa"] = round(s["cost"] / s["cv"]) if s["cv"] > 0 else 0
-    p["cpa"] = round(p["cost"] / p["cv"]) if p["cv"] > 0 else 0
+        s = {
+            "cost":  sum_key(perf_cur, "cost_micros") / 1_000_000,
+            "clicks": sum_key(perf_cur, "clicks"),
+            "imps":  sum_key(perf_cur, "impressions"),
+            "cv":    sum_key(perf_cur, "conversions"),
+        }
+        p = {
+            "cost":  sum_key(prv_only, "cost_micros") / 1_000_000,
+            "clicks": sum_key(prv_only, "clicks"),
+            "cv":    sum_key(prv_only, "conversions"),
+        }
+        s["ctr"] = round(s["clicks"] / s["imps"] * 100, 2) if s["imps"] else 0
+        s["cpa"] = round(s["cost"] / s["cv"]) if s["cv"] > 0 else 0
+        p["cpa"] = round(p["cost"] / p["cv"]) if p["cv"] > 0 else 0
 
-    def pct(a, b): return round((a - b) / b * 100, 1) if b else 0
+        def pct(a, b): return round((a - b) / b * 100, 1) if b else 0
 
-    cv_chg  = pct(s["cv"], p["cv"])
-    cpa_chg = pct(s["cpa"], p["cpa"])
-    ctr_chg = pct(s["ctr"], round(sum_key(prv_only,"clicks")/max(sum_key(prv_only,"impressions"),1)*100, 2))
+        cv_chg  = pct(s["cv"], p["cv"])
+        cpa_chg = pct(s["cpa"], p["cpa"])
+        ctr_chg = pct(s["ctr"], round(sum_key(prv_only,"clicks")/max(sum_key(prv_only,"impressions"),1)*100, 2))
 
-    campaigns = client_ads.list_campaigns()
-    best_camp = max(campaigns, key=lambda c: float(c.get("cvr", 0))) if campaigns else {}
-    worst_ctr = min([c for c in campaigns if c.get("status") == "ENABLED"], key=lambda c: float(c.get("ctr", 0))) if campaigns else {}
+        campaigns = client_ads.list_campaigns()
+        best_camp = max(campaigns, key=lambda c: float(c.get("cvr", 0))) if campaigns else {}
+        enabled_camps = [c for c in campaigns if c.get("status") == "ENABLED"]
+        worst_ctr = min(enabled_camps, key=lambda c: float(c.get("ctr", 0))) if enabled_camps else {}
+
+    except Exception as data_err:
+        return {"success": False, "error": "ナラティブレポートのデータ収集に失敗しました: " + str(data_err)}
 
     import google.genai as genai
     gc = genai.Client(api_key=gemini_key)
