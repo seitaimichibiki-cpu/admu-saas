@@ -939,6 +939,7 @@ async function loadCampaigns() {
           ${c.status==='ENABLED'
             ? `<button class="btn btn-secondary" onclick="toggleCampaign('${c.id}','PAUSED')">一時停止</button>`
             : `<button class="btn btn-success" onclick="toggleCampaign('${c.id}','ENABLED')">再開</button>`}
+          <button class="btn btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteCampaign(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑 削除</button>
         </div>
         <div class="campaign-stats">
           <div class="campaign-stat"><div class="campaign-stat-label">表示回数</div><div class="campaign-stat-value">${fmtNum(c.impressions)}</div></div>
@@ -964,6 +965,19 @@ async function toggleCampaign(id, status) {
   }
 }
 window.toggleCampaign = toggleCampaign;
+
+async function deleteCampaign(id, name) {
+  if (!confirm(`キャンペーン「${name}」を削除しますか？\n\nこの操作は元に戻せません。Google Ads上のキャンペーンも削除（REMOVED）されます。`)) return;
+  try {
+    const res = await api(`/campaigns/${id}?clinic_id=${currentClinicId}&platform=${currentPlatform}`, { method:'DELETE', body:'{}' });
+    if (res.warning) toast('⚠️ ' + res.warning, 'warning', 6000);
+    else toast(`キャンペーン「${name}」を削除しました`, 'success');
+    loadCampaigns();
+  } catch(e) {
+    toast('削除失敗: ' + e.message, 'error');
+  }
+}
+window.deleteCampaign = deleteCampaign;
 
 document.getElementById('newCampaignBtn').addEventListener('click', () => {
   const categories = ['腰痛', '肩こり', '産後骨盤', '姿勢矯正', 'スポーツ'];

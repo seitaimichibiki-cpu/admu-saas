@@ -489,6 +489,36 @@ def update_campaign_status(campaign_id: int, status: str, clinic_id: int = 1, pl
     db.upsert_campaign(clinic_id, {**campaign, "status": status})
     return {"success": True}
 
+@app.delete("/api/campaigns/{campaign_id}")
+def delete_campaign(campaign_id: int, clinic_id: int = 1, platform: str = "google"):
+    """AdMuで作成したキャンペーンを削除する。Google Ads API側もREMOVEを試みる。"""
+    campaign = db.get_campaign(campaign_id)
+    if not campaign:
+        raise HTTPException(404, "キャンペーンが見つかりません")
+    if campaign.get("clinic_id") != clinic_id:
+        raise HTTPException(403, "アクセス権限がありません")
+
+    api_warning = None
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc, platform)
+        g_id = campaign.get("google_campaign_id", "")
+        if g_id:
+            client.update_campaign_status(g_id, "REMOVED")
+    except Exception as e:
+        api_warning = f"Google Ads APIでの削除に失敗しました（ローカルDBからは削除済み）: {str(e)}"
+
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (campaign_id, clinic_id))
+        conn.execute("DELETE FROM performance_logs WHERE campaign_id=?", (campaign_id,))
+
+    result = {"success": True, "campaign_id": campaign_id}
+    if api_warning:
+        result["warning"] = api_warning
+    return result
+
+
+
 # ---- API: 月間予算ターゲット設定（具体パスを先に定義）----
 class MonthlyBudgetReq(BaseModel):
     clinic_id: int = 1
@@ -1581,7 +1611,7 @@ def login(req: LoginReq, response: Response):
         httponly=True,
         secure=is_prod,
         samesite="lax",
-        max_age=604800  # 7 days
+        max_age=2592000  # 30 days
     )
     
     return {
@@ -1642,7 +1672,7 @@ def dev_autologin(request: Request, response: Response):
         httponly=True,
         secure=is_prod,
         samesite="lax",
-        max_age=604800
+        max_age=2592000  # 30 days
     )
     
     return {

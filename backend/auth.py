@@ -16,7 +16,7 @@ if not JWT_SECRET:
     warnings.warn("⚠️ JWT_SECRET が未設定です。本番では必ず環境変数を設定してください。", stacklevel=2)
     JWT_SECRET = "dev-only-insecure-" + os.urandom(16).hex()  # 開発時のみ自動生成
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 24 * 7  # 7日間
+JWT_EXPIRE_HOURS = 24 * 30  # 30日間
 
 
 # ============================================================
