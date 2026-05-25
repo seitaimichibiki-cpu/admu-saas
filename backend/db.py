@@ -301,57 +301,13 @@ def init_db():
     conn.commit()
 
     # ── カラム追加マイグレーション（既存DB対応）──
-    # 新カラムが存在しない場合のみ追加（ALTER TABLE IF NOT EXISTS は非標準なのでtry/except）
-    migration_alters = [
+    # 全マイグレーションをSAVEPOINTで保護して実行（PostgreSQLでトランザクションが壊れない）
+    migrations = [
+        # --- 早期追加分（以前は別ブロックで実行していたがSAVEPOINT保護ブロックに統合）---
         "ALTER TABLE ads_accounts ADD COLUMN logiction_integration_key TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN logiction_base_url TEXT",
         "ALTER TABLE logiction_patients ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ DEFAULT NOW()",
-    ]
-    for alter in migration_alters:
-        try:
-            conn.execute(alter)
-            conn.commit()
-        except Exception:
-            pass  # 既に存在する場合はスキップ
-
-    # 初期データが存在しなければ作成（ID:1となる）
-    has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
-    if not has_clinics:
-        conn.execute("INSERT INTO clinics (name, license_key, plan_status) VALUES ('システム管理者', 'DEMO-0000-0000-0000', 'active')")
-        conn.commit()
-        demo = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
-        clinic_id = demo["id"]
-        conn.execute("INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, 'DEMO-CUSTOMER-ID', 1)", (clinic_id,))
-        conn.commit()
-
-    # 管理者ユーザーが存在しなければ作成
-    has_admin = conn.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone()
-    if not has_admin:
-        import auth
-        # ユーザー指定の初期管理者パスワード
-        admin_pass_hash = auth.hash_password("gai1124714")
-        demo = conn.execute("SELECT id FROM clinics ORDER BY id ASC LIMIT 1").fetchone()
-        if demo:
-            clinic_id = demo[0] if isinstance(demo, tuple) else demo["id"]
-            # 既に別のアカウントで登録されている場合は削除して作り直すか、存在しない場合のみ作成
-            has_user = conn.execute("SELECT id FROM users WHERE email='seitaimichibiki@gmail.com'").fetchone()
-            if not has_user:
-                conn.execute(
-                    "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
-                    (clinic_id, "seitaimichibiki@gmail.com", admin_pass_hash)
-                )
-            else:
-                conn.execute(
-                    "UPDATE users SET role='admin', password_hash=?, clinic_id=? WHERE email='seitaimichibiki@gmail.com'",
-                    (admin_pass_hash, clinic_id)
-                )
-            conn.commit()
-            # adminの所属クリニックを必ずactiveにする
-            conn.execute("UPDATE clinics SET plan_status='active' WHERE id=?", (clinic_id,))
-            conn.commit()
-
-    # マイグレーション（既存DBへのカラム追加）
-    migrations = [
+        # --- 既存マイグレーション ---
         "ALTER TABLE ads_accounts ADD COLUMN target_age_gender TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN target_job_lifestyle TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN target_pain_point TEXT",
@@ -405,6 +361,39 @@ def init_db():
             if USE_PG:
                 conn.execute("ROLLBACK TO SAVEPOINT migration_sp")
     conn.commit()
+
+    # 初期データが存在しなければ作成（ID:1となる）
+    has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
+    if not has_clinics:
+        conn.execute("INSERT INTO clinics (name, license_key, plan_status) VALUES ('システム管理者', 'DEMO-0000-0000-0000', 'active')")
+        conn.commit()
+        demo = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
+        clinic_id = demo["id"]
+        conn.execute("INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, 'DEMO-CUSTOMER-ID', 1)", (clinic_id,))
+        conn.commit()
+
+    # 管理者ユーザーが存在しなければ作成
+    has_admin = conn.execute("SELECT id FROM users WHERE role='admin' LIMIT 1").fetchone()
+    if not has_admin:
+        import auth
+        admin_pass_hash = auth.hash_password("gai1124714")
+        demo = conn.execute("SELECT id FROM clinics ORDER BY id ASC LIMIT 1").fetchone()
+        if demo:
+            clinic_id = demo[0] if isinstance(demo, tuple) else demo["id"]
+            has_user = conn.execute("SELECT id FROM users WHERE email='seitaimichibiki@gmail.com'").fetchone()
+            if not has_user:
+                conn.execute(
+                    "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
+                    (clinic_id, "seitaimichibiki@gmail.com", admin_pass_hash)
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET role='admin', password_hash=?, clinic_id=? WHERE email='seitaimichibiki@gmail.com'",
+                    (admin_pass_hash, clinic_id)
+                )
+            conn.commit()
+            conn.execute("UPDATE clinics SET plan_status='active' WHERE id=?", (clinic_id,))
+            conn.commit()
 
     # デフォルト入札ルールの投入（空の場合のみ）
     _insert_default_bid_rules(conn)
