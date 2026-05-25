@@ -127,7 +127,7 @@ async def security_middleware(request: Request, call_next):
     if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
         if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/stripe/webhook"):
             # exclude endpoints that don't need CSRF or are login endpoints
-            if request.url.path not in ["/api/auth/login", "/api/auth/dev-autologin", "/api/auth/reset-request", "/api/auth/reset-confirm"]:
+            if request.url.path not in ["/api/auth/login", "/api/auth/dev-autologin", "/api/auth/reset-request", "/api/auth/reset-confirm", "/api/admin/init-credentials"]:
                 token_in_header = request.headers.get("X-CSRF-Token")
                 token_in_cookie = request.cookies.get("csrf_token")
                 # Double submit cookie pattern
