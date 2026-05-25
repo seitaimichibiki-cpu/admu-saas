@@ -140,7 +140,7 @@ class AdsClient:
                     print(f"[AdsClient] → 設定画面から各認証情報を入力して保存してください。モックモードで動作継続します。")
                     self.mock_mode = True
                 else:
-                    self._client = GoogleAdsClient.load_from_dict(cfg, version="v18")
+                    self._client = GoogleAdsClient.load_from_dict(cfg)
                     print(f"[AdsClient] ✅ 本番APIモードで初期化成功 (Customer: {self.customer_id})")
             except Exception as e:
                 print(f"[AdsClient] API初期化失敗、モックモードに切替: {e}")

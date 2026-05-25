@@ -3868,9 +3868,9 @@ function _renderPlanBadge(planName, planType, yahooEnabled) {
     ? `📋 ${planName} (Google専用)`
     : `⭐ ${planName} (Google+Yahoo)`;
 
-  // ログアウトボタンの直前に挿入
+  // ログアウトボタンの直前に挿入（logoutBtnがsidebarの子でない場合はappend）
   const logoutBtn = document.getElementById('logoutBtn');
-  if (logoutBtn) {
+  if (logoutBtn && logoutBtn.parentNode === sidebar) {
     sidebar.insertBefore(badge, logoutBtn);
   } else {
     sidebar.appendChild(badge);
