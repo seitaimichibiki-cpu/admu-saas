@@ -486,6 +486,12 @@ def get_ads_account(clinic_id: int):
 def save_ads_account(clinic_id: int, data: dict):
     import crypto_utils
     secure_data = dict(data)
+
+    # IDフィールドのハイフン・スペースを除去して数字のみに正規化
+    for id_field in ["customer_id", "login_customer_id"]:
+        if id_field in secure_data and secure_data[id_field]:
+            secure_data[id_field] = str(secure_data[id_field]).replace("-", "").replace(" ", "").strip()
+
     SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key"]
     for field in SECRET_FIELDS:
         if field in secure_data and secure_data[field]:
