@@ -1210,7 +1210,8 @@ def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: 
         raise HTTPException(403, "管理者パスワードが正しくありません")
 
     data = {
-        "customer_id":       os.environ.get("GOOGLE_ADS_DEFAULT_CUSTOMER_ID") or "1417381421",
+        # GOOGLE_ADS_DEFAULT_CUSTOMER_IDが未設定なら有効な顧客IDをデフォルトとする
+        "customer_id":       os.environ.get("GOOGLE_ADS_DEFAULT_CUSTOMER_ID") or "8110558709",
         "developer_token":   os.environ.get("MASTER_ADS_DEVELOPER_TOKEN") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
         "client_id":         os.environ.get("MASTER_ADS_CLIENT_ID") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
         "client_secret":     os.environ.get("MASTER_ADS_CLIENT_SECRET") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
@@ -1228,7 +1229,16 @@ def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: 
     try:
         from ads_client import AdsClient
         acc = db.get_ads_account(clinic_id) or {}
-        client = AdsClient(acc)
+        # 暗号化失敗時のフォールバックに対応し、環境変数を返常に補完
+        acc_for_check = {
+            **acc,
+            "developer_token": acc.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", "") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+            "client_id":       acc.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", "") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+            "client_secret":   acc.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", "") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+            "refresh_token":   acc.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
+            "login_customer_id": acc.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", ""),
+        }
+        client = AdsClient(acc_for_check)
         actual_mock = client.mock_mode
     except Exception:
         actual_mock = True
