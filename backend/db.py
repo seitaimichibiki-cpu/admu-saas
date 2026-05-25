@@ -166,6 +166,8 @@ def init_db():
             yahoo_account_id TEXT, yahoo_client_id TEXT,
             yahoo_client_secret TEXT, yahoo_refresh_token TEXT,
             yahoo_mock_mode INTEGER DEFAULT 1,
+            logiction_integration_key TEXT,
+            logiction_base_url TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -297,6 +299,20 @@ def init_db():
     for ddl in tables:
         conn.execute(ddl)
     conn.commit()
+
+    # ── カラム追加マイグレーション（既存DB対応）──
+    # 新カラムが存在しない場合のみ追加（ALTER TABLE IF NOT EXISTS は非標準なのでtry/except）
+    migration_alters = [
+        "ALTER TABLE ads_accounts ADD COLUMN logiction_integration_key TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN logiction_base_url TEXT",
+        "ALTER TABLE logiction_patients ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ DEFAULT NOW()",
+    ]
+    for alter in migration_alters:
+        try:
+            conn.execute(alter)
+            conn.commit()
+        except Exception:
+            pass  # 既に存在する場合はスキップ
 
     # 初期データが存在しなければ作成（ID:1となる）
     has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
@@ -534,7 +550,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "monthly_budget_yen", "yahoo_account_id", "yahoo_client_id", "yahoo_client_secret",
                   "yahoo_refresh_token", "yahoo_mock_mode",
                   "gemini_api_key", "ai_monthly_limit",
-                  "google_link_status", "google_link_requested_at"]
+                  "google_link_status", "google_link_requested_at",
+                  "logiction_integration_key", "logiction_base_url"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]

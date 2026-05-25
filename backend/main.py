@@ -2337,6 +2337,158 @@ def logiction_list_patients(clinic_id: int = 1, limit: int = 100, offset: int = 
     return {"total": total, "patients": [dict(r) for r in rows]}
 
 
+# ============================================================
+# ---- LOGICTION 連携 セルフサーブ設定API ----
+# 顧客が開発者なしで自分でLOGICTION連携を設定できる仕組み
+# ============================================================
+
+@app.get("/api/logiction/integration-info")
+def get_logiction_integration_info(clinic_id: int = 1, request: Request = None):
+    """
+    顧客向け: LOGICTION連携の現在の設定状態・接続情報を返す。
+    Webhook URLと連携キーをUIに表示するために使用。
+    """
+    acc = db.get_ads_account(clinic_id)
+    if not acc:
+        raise HTTPException(404, "アカウントが見つかりません")
+
+    key = acc.get("logiction_integration_key") or ""
+    logiction_url = acc.get("logiction_base_url") or ""
+
+    # AdMuのベースURL（フロントから問い合わせた際のrequestHostを優先）
+    app_url = os.environ.get("APP_BASE_URL", "https://admu-backend-jxi0.onrender.com")
+    webhook_url = f"{app_url}/api/logiction/patient-sync"
+
+    return {
+        "webhook_url": webhook_url,
+        "clinic_id": clinic_id,
+        "has_key": bool(key),
+        "key_preview": (key[:8] + "..." + key[-4:]) if len(key) > 12 else ("*" * len(key) if key else ""),
+        "logiction_url": logiction_url,
+        "is_configured": bool(key and logiction_url),
+        "setup_steps": [
+            {
+                "step": 1,
+                "label": "AdMuで連携キーを生成",
+                "done": bool(key),
+                "description": "下の「連携キーを生成」ボタンをクリックしてください"
+            },
+            {
+                "step": 2,
+                "label": "LOGICTIONにWebhook URLとキーを貼り付け",
+                "done": False,
+                "description": f"LOGICTION設定 → AdMu連携 → Webhook URL: {webhook_url}"
+            },
+            {
+                "step": 3,
+                "label": "LOGICTIONのURLを入力",
+                "done": bool(logiction_url),
+                "description": "あなたのLOGICTIONサーバーURL（例: https://logiction-system.onrender.com）"
+            },
+        ]
+    }
+
+
+@app.post("/api/logiction/generate-key")
+async def generate_logiction_integration_key(clinic_id: int = 1):
+    """
+    顧客向け: LOGICTION連携用のランダムな秘密キーを自動生成してDBに保存する。
+    既存のキーがある場合は上書き（ローテーション）される。
+    """
+    import secrets
+    # 32バイトのランダム文字列（URL-safe）
+    new_key = secrets.token_urlsafe(32)
+
+    acc = db.get_ads_account(clinic_id)
+    if not acc:
+        raise HTTPException(404, "アカウントが見つかりません")
+
+    db.save_ads_account(clinic_id, {**acc, "logiction_integration_key": new_key})
+    db.add_audit_log(clinic_id, "user", "LOGICTION連携キーを生成", entity="logiction_integration")
+
+    return {
+        "success": True,
+        "key": new_key,  # このタイミングのみ全文を返す
+        "message": "連携キーを生成しました。LOGICTIONの設定画面に貼り付けてください。"
+    }
+
+
+class LogictionSettingsReq(BaseModel):
+    clinic_id: int = 1
+    logiction_base_url: Optional[str] = None
+
+@app.post("/api/logiction/save-settings")
+async def save_logiction_settings(req: LogictionSettingsReq):
+    """顧客向け: LOGICTIONのサーバーURLをAdMuに保存する"""
+    acc = db.get_ads_account(req.clinic_id)
+    if not acc:
+        raise HTTPException(404, "アカウントが見つかりません")
+
+    updates = {}
+    if req.logiction_base_url is not None:
+        url = req.logiction_base_url.rstrip("/")
+        updates["logiction_base_url"] = url
+
+    if updates:
+        db.save_ads_account(req.clinic_id, {**acc, **updates})
+        db.add_audit_log(req.clinic_id, "user", "LOGICTION連携URL保存", entity="logiction_integration")
+
+    return {"success": True, "message": "LOGICTIONの接続設定を保存しました"}
+
+
+@app.post("/api/logiction/test-connection")
+async def test_logiction_connection(clinic_id: int = 1):
+    """
+    顧客向け: AdMuからLOGICTIONに疎通確認リクエストを送り、
+    設定が正しいかをリアルタイムに検証する。
+    """
+    import httpx
+
+    acc = db.get_ads_account(clinic_id)
+    if not acc:
+        raise HTTPException(404, "アカウントが見つかりません")
+
+    key = acc.get("logiction_integration_key") or os.environ.get("INTEGRATION_SECRET_KEY", "")
+    logiction_url = acc.get("logiction_base_url") or os.environ.get("LOGICTION_BASE_URL", "")
+
+    if not key:
+        return {"success": False, "error": "連携キーが設定されていません。まずキーを生成してください。"}
+    if not logiction_url:
+        return {"success": False, "error": "LOGICTIONのURLが設定されていません。"}
+
+    # LOGICTIONの疎通確認エンドポイントに ping
+    ping_url = f"{logiction_url}/api/admu/ping"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                ping_url,
+                headers={"X-AdMu-Secret": key}
+            )
+        if resp.status_code == 200:
+            data = resp.json()
+            return {
+                "success": True,
+                "message": "LOGICTIONとの接続に成功しました！",
+                "logiction_response": data
+            }
+        elif resp.status_code == 403:
+            return {"success": False, "error": "認証エラー: LOGICTIONのAdMu連携キーが一致しません"}
+        elif resp.status_code == 404:
+            return {
+                "success": False,
+                "error": "LOGICTIONにAdMu連携エンドポイントがまだ設定されていません。",
+                "hint": "LOGICTION側でAdMu連携機能を有効化してください"
+            }
+        else:
+            return {"success": False, "error": f"LOGICTIONがHTTP {resp.status_code}を返しました"}
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"接続失敗: {str(e)}",
+            "hint": "URLが正しいか確認してください"
+        }
+
+
 
 class LtvPreviewReq(BaseModel):
     clinic_id: int = 1

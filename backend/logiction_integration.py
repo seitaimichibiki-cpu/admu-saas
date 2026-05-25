@@ -115,8 +115,12 @@ def _auto_update_persona_from_patients(clinic_id: int, db):
 # ============================================================
 async def handle_patient_sync(req: LogictionSyncReq, request: Request, db, integration_bridge):
     """LOGICTION → AdMu 患者データ同期"""
-    expected_key = os.environ.get("INTEGRATION_SECRET_KEY", "")
+    # 認証: DB優先（clinic_idごとのキー）→ 環境変数フォールバック
     provided_key = req.secret_key or request.headers.get("X-Integration-Secret", "")
+    acc_for_auth = db.get_ads_account(req.clinic_id)
+    db_key = (acc_for_auth or {}).get("logiction_integration_key") or ""
+    env_key = os.environ.get("INTEGRATION_SECRET_KEY", "")
+    expected_key = db_key or env_key  # DB設定を優先
     if expected_key and provided_key != expected_key:
         raise HTTPException(403, "Invalid integration secret key")
 

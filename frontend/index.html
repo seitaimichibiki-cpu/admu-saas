@@ -1226,91 +1226,125 @@
 
         <!-- ===== LOGICTION連携 ===== -->
         <div class="card" style="margin-top:24px;border:1px solid rgba(99,102,241,0.3);background:linear-gradient(135deg,rgba(99,102,241,0.06),rgba(168,85,247,0.04))" id="logictionCard">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-            <div style="width:40px;height:40px;background:linear-gradient(135deg,#6366f1,#a855f7);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🔗</div>
+
+          <!-- ヘッダー -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+            <div style="width:44px;height:44px;background:linear-gradient(135deg,#6366f1,#a855f7);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🔗</div>
             <div>
               <h3 class="card-title" style="margin:0 0 2px">LOGICTION 患者データ連携</h3>
-              <p style="font-size:12px;color:var(--text-3);margin:0">来院者の属性・症状・LTVデータを分析し、Google Adsのペルソナと入札を自動最適化</p>
+              <p style="font-size:12px;color:var(--text-3);margin:0">来院者データを広告ターゲティングに自動反映。設定は画面だけで完結します</p>
             </div>
-            <button class="btn btn-secondary" style="margin-left:auto;font-size:12px;padding:6px 14px;white-space:nowrap" onclick="loadLogictionAnalysis()">
-              🔄 分析を更新
-            </button>
-          </div>
-
-          <!-- 同期状態 -->
-          <div id="logictionSyncStatus" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:16px;font-size:13px">
-            <div class="spinner" style="width:14px;height:14px;border-width:2px"></div>
-            <span style="color:var(--text-3)">データを確認中...</span>
-          </div>
-
-          <!-- インサイトパネル（データあり時に表示） -->
-          <div id="logictionInsights" style="display:none">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" id="logictionInsightGrid">
-              <!-- JS で動的描画 -->
-            </div>
-            <!-- 来院媒体別効果 -->
-            <div style="margin-bottom:16px">
-              <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:8px;letter-spacing:0.5px">📡 来院媒体別 平均LTV</div>
-              <div id="logictionChannelBars"></div>
-            </div>
-            <!-- 症状別 -->
-            <div style="margin-bottom:16px">
-              <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:8px;letter-spacing:0.5px">🩺 症状別 平均LTV（上位5）</div>
-              <div id="logictionSymptomBars"></div>
-            </div>
-            <!-- Adsに適用 -->
-            <button class="btn btn-primary btn-full" onclick="applyLogictionToAds()" id="logictionApplyBtn"
-              style="background:linear-gradient(135deg,#6366f1,#a855f7);border:none;margin-top:4px">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              Google Adsに入札調整を反映（LTVベース）
-            </button>
-            <p style="font-size:11px;color:var(--text-3);margin-top:8px;text-align:center">
-              高LTV性別・年齢層のbid adjustmentを±20%の範囲で自動設定します
-            </p>
-          </div>
-
-          <!-- データなし時 -->
-          <div id="logictionNoData" style="display:none;text-align:center;padding:20px;color:var(--text-3);font-size:13px">
-            <div style="font-size:32px;margin-bottom:8px">📭</div>
-            <div>LOGICTIONからの患者データがまだありません。</div>
-            <div style="margin-top:8px;font-size:12px">
-              LOGICTION側で患者を登録・来院記録を追加すると自動的にデータが連携されます。<br>
-              連携APIエンドポイント: <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px">/api/logiction/patient-sync</code>
+            <div id="logictionBadge" style="margin-left:auto;font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.06);color:var(--text-3)">
+              確認中...
             </div>
           </div>
 
-          <!-- API接続ガイド -->
-          <details style="margin-top:16px">
-            <summary style="font-size:12px;color:var(--text-3);cursor:pointer;user-select:none">⚙️ LOGICTION連携の設定方法</summary>
-            <div style="margin-top:12px;font-size:12px;color:var(--text-2);line-height:1.8;background:rgba(0,0,0,0.2);padding:12px;border-radius:8px">
-              <strong>1. 環境変数の設定（Render）</strong><br>
-              &nbsp;&nbsp;• <code>INTEGRATION_SECRET_KEY</code>: 任意のランダム文字列（例: <code>admu-logiction-2026</code>）<br>
-              &nbsp;&nbsp;• <code>LOGICTION_BASE_URL</code>: あなたのLOGICTIONサーバーURL<br><br>
-              <strong>2. LOGICTIONから送信するリクエスト例</strong><br>
-              患者来院時にLOGICTION側から以下を送信します:<br>
-              <pre style="background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;overflow-x:auto;margin-top:4px">POST /api/logiction/patient-sync
-X-Integration-Secret: [INTEGRATION_SECRET_KEY]
-{
-  "clinic_id": 1,
-  "patients": [{
-    "patient_id": "pat_xxxx",
-    "gender": "female",
-    "age": 38,
-    "address_pref": "東京都",
-    "symptoms": ["腰痛","肩こり"],
-    "visit_count": 6,
-    "total_revenue": 60000,
-    "acquisition_channel": "Google広告"
-  }]
-}</pre>
+          <!-- ========== STEP 1: 連携キーを生成 ========== -->
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <div id="step1Icon" style="width:24px;height:24px;border-radius:50%;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">1</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-1)">AdMuで連携キーを生成する</div>
             </div>
-          </details>
+            <div id="logictionKeyArea">
+              <p style="font-size:12px;color:var(--text-3);margin:0 0 12px">ボタンをクリックするとランダムな秘密キーが自動生成されます</p>
+              <button class="btn btn-secondary" id="generateKeyBtn" onclick="generateLogictionKey()"
+                style="font-size:12px;padding:8px 16px">
+                🔑 連携キーを生成
+              </button>
+            </div>
+            <!-- キー生成済み表示 -->
+            <div id="logictionKeyGenerated" style="display:none">
+              <div style="font-size:12px;color:var(--text-3);margin-bottom:6px">生成済みの連携キー（LOGICTIONに貼り付けてください）</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <code id="logictionKeyDisplay" style="flex:1;background:rgba(0,0,0,0.3);padding:8px 12px;border-radius:6px;font-size:12px;word-break:break-all;color:#a5b4fc;border:1px solid rgba(99,102,241,0.3)"></code>
+                <button class="btn btn-secondary" onclick="copyLogictionKey()" style="padding:8px 12px;font-size:12px;white-space:nowrap;flex-shrink:0">📋 コピー</button>
+              </div>
+              <p style="font-size:11px;color:var(--text-3);margin-top:6px">⚠️ このキーは一度しか表示されません。必ずコピーしてください。</p>
+              <button class="btn btn-secondary" onclick="generateLogictionKey()" style="font-size:11px;padding:4px 10px;margin-top:6px;opacity:0.7">🔄 キーを再生成（現在のキーは無効になります）</button>
+            </div>
+          </div>
+
+          <!-- ========== STEP 2: WebhookURLをLOGICTIONに設定 ========== -->
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <div id="step2Icon" style="width:24px;height:24px;border-radius:50%;background:rgba(99,102,241,0.1);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;color:var(--text-3)">2</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-1)">WebhookURLとキーをLOGICTIONに貼り付ける</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">このURLをLOGICTION設定の「AdMu連携 → Webhook URL」に貼り付けてください</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <code id="logictionWebhookUrl" style="flex:1;background:rgba(0,0,0,0.3);padding:8px 12px;border-radius:6px;font-size:11px;word-break:break-all;color:var(--text-2);border:1px solid rgba(255,255,255,0.08)">読み込み中...</code>
+              <button class="btn btn-secondary" onclick="copyWebhookUrl()" style="padding:8px 12px;font-size:12px;white-space:nowrap;flex-shrink:0">📋 コピー</button>
+            </div>
+            <div style="margin-top:10px;font-size:12px;color:var(--text-3)">
+              LOGICTION設定ページ → 「AdMu連携」タブ → Webhook URLとキーを入力 → 保存
+            </div>
+          </div>
+
+          <!-- ========== STEP 3: LOGICTIONのURLを入力 + テスト ========== -->
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:16px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <div id="step3Icon" style="width:24px;height:24px;border-radius:50%;background:rgba(99,102,241,0.1);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;color:var(--text-3)">3</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-1)">LOGICTIONのURLを入力して接続テスト</div>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label style="font-size:12px">あなたのLOGICTIONサーバーURL</label>
+              <input type="url" id="logictionBaseUrl" class="form-input" style="font-size:13px"
+                placeholder="https://logiction-system.onrender.com">
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary" onclick="saveLogictionUrl()" style="flex:1;font-size:12px">
+                💾 URLを保存
+              </button>
+              <button class="btn btn-primary" onclick="testLogictionConnection()" id="testConnectionBtn"
+                style="flex:1;font-size:12px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none">
+                ⚡ 接続テスト
+              </button>
+            </div>
+            <div id="testConnectionResult" style="display:none;margin-top:10px;padding:10px;border-radius:8px;font-size:12px"></div>
+          </div>
+
+          <!-- ========== 患者データ分析（設定完了後に表示） ========== -->
+          <div id="logictionAnalysisSection" style="display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:600;color:var(--text-1)">📊 来院者データ分析</div>
+              <button class="btn btn-secondary" onclick="loadLogictionAnalysis()" style="font-size:11px;padding:4px 10px">🔄 更新</button>
+            </div>
+            <div id="logictionSyncStatus" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:12px;font-size:13px">
+              <div class="spinner" style="width:14px;height:14px;border-width:2px"></div>
+              <span style="color:var(--text-3)">データを確認中...</span>
+            </div>
+            <div id="logictionInsights" style="display:none">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px" id="logictionInsightGrid"></div>
+              <div style="margin-bottom:16px">
+                <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:8px">📡 来院媒体別 平均LTV</div>
+                <div id="logictionChannelBars"></div>
+              </div>
+              <div style="margin-bottom:16px">
+                <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:8px">🩺 症状別 平均LTV（上位5）</div>
+                <div id="logictionSymptomBars"></div>
+              </div>
+              <button class="btn btn-primary btn-full" onclick="applyLogictionToAds()" id="logictionApplyBtn"
+                style="background:linear-gradient(135deg,#6366f1,#a855f7);border:none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                Google Adsに入札調整を反映（LTVベース）
+              </button>
+            </div>
+            <div id="logictionNoData" style="display:none;text-align:center;padding:16px;color:var(--text-3);font-size:12px">
+              <div style="font-size:28px;margin-bottom:6px">📭</div>
+              LOGICTIONからの患者データがまだありません。<br>来院記録があると自動的に同期されます。
+            </div>
+          </div>
+
         </div>
 
       </section>
 
 
 
+
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <div style="width:40px;height:40px;background:linear-gradient(135deg,#6366f1,#a855f7);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🔗</div>
+            <div>
 
       <!-- ===== Admin Page ===== -->
       <section id="page-admin" class="page hidden">

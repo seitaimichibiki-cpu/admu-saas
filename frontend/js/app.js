@@ -584,7 +584,7 @@ function switchPage(page) {
     'kw-suggest': loadKwSuggest,
     competitor: loadCompetitor,
     alerts: loadAlerts,
-    settings: () => { loadSettings(); loadLogictionAnalysis(); },
+    settings: () => { loadSettings(); loadLogictionIntegrationInfo(); },
     admin: loadAdminPage,
   };
   if(loaders[page]) loaders[page]();
@@ -1556,8 +1556,169 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
 });
 
 // ============================================================
-// ---- LOGICTION 患者データ連携 ----
+// ---- LOGICTION 連携 セルフサーブ設定 ----
 // ============================================================
+
+let _logictionWebhookUrlCache = '';
+let _logictionKeyCache = '';
+
+async function loadLogictionIntegrationInfo() {
+  try {
+    const data = await api(`/logiction/integration-info?clinic_id=${currentClinicId}`);
+
+    // Webhook URL 表示
+    const wuEl = document.getElementById('logictionWebhookUrl');
+    if (wuEl) { wuEl.textContent = data.webhook_url; _logictionWebhookUrlCache = data.webhook_url; }
+
+    // LOGICTIONのURL入力欄に既存値
+    const urlEl = document.getElementById('logictionBaseUrl');
+    if (urlEl && data.logiction_url) urlEl.value = data.logiction_url;
+
+    // キーの状態
+    if (data.has_key) {
+      const keyArea = document.getElementById('logictionKeyArea');
+      const keyGen = document.getElementById('logictionKeyGenerated');
+      const keyDisp = document.getElementById('logictionKeyDisplay');
+      if (keyArea) keyArea.style.display = 'none';
+      if (keyGen) keyGen.style.display = 'block';
+      if (keyDisp) keyDisp.textContent = data.key_preview + ' （生成済み）';
+      _markStep1Done();
+    }
+    if (data.logiction_url) _markStep3Done();
+
+    // バッジ更新
+    const badge = document.getElementById('logictionBadge');
+    if (badge) {
+      if (data.is_configured) {
+        badge.textContent = '✅ 連携設定済み';
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#10b981';
+        // 設定済みなら分析セクションも表示
+        const analysisSec = document.getElementById('logictionAnalysisSection');
+        if (analysisSec) analysisSec.style.display = 'block';
+        loadLogictionAnalysis();
+      } else {
+        badge.textContent = '⚙️ 設定中';
+        badge.style.background = 'rgba(245,158,11,0.1)';
+        badge.style.color = '#f59e0b';
+      }
+    }
+  } catch(e) {
+    console.warn('[LOGICTION] integration info load failed:', e.message);
+  }
+}
+
+function _markStep1Done() {
+  const el = document.getElementById('step1Icon');
+  if (el) { el.textContent = '✓'; el.style.background = 'rgba(16,185,129,0.2)'; el.style.borderColor = 'rgba(16,185,129,0.5)'; el.style.color = '#10b981'; }
+}
+function _markStep3Done() {
+  const el = document.getElementById('step3Icon');
+  if (el) { el.textContent = '✓'; el.style.background = 'rgba(16,185,129,0.2)'; el.style.borderColor = 'rgba(16,185,129,0.5)'; el.style.color = '#10b981'; }
+}
+
+async function generateLogictionKey() {
+  const btn = document.getElementById('generateKeyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '生成中...'; }
+  try {
+    const res = await api(`/logiction/generate-key?clinic_id=${currentClinicId}`, { method: 'POST', body: '{}' });
+    if (!res.success) throw new Error(res.message || '失敗');
+
+    _logictionKeyCache = res.key;
+
+    // キー生成済み表示
+    const keyArea = document.getElementById('logictionKeyArea');
+    const keyGen = document.getElementById('logictionKeyGenerated');
+    const keyDisp = document.getElementById('logictionKeyDisplay');
+    if (keyArea) keyArea.style.display = 'none';
+    if (keyGen) keyGen.style.display = 'block';
+    if (keyDisp) keyDisp.textContent = res.key;
+    _markStep1Done();
+
+    // 自動コピー
+    try {
+      await navigator.clipboard.writeText(res.key);
+      toast('🔑 連携キーを生成・コピーしました！LOGICTIONの設定画面に貼り付けてください', 'success', 6000);
+    } catch {
+      toast('🔑 連携キーを生成しました。コピーボタンでコピーしてください', 'success', 5000);
+    }
+  } catch(e) {
+    toast('キー生成失敗: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔑 連携キーを生成'; }
+  }
+}
+
+function copyLogictionKey() {
+  const text = _logictionKeyCache || document.getElementById('logictionKeyDisplay')?.textContent || '';
+  if (!text || text.includes('（生成済み）')) {
+    toast('キーの全文を表示するにはキーを再生成してください', 'warning'); return;
+  }
+  navigator.clipboard.writeText(text).then(() => toast('連携キーをコピーしました', 'success')).catch(() => toast('コピーできませんでした', 'error'));
+}
+
+function copyWebhookUrl() {
+  const text = _logictionWebhookUrlCache || document.getElementById('logictionWebhookUrl')?.textContent || '';
+  if (!text || text === '読み込み中...') { toast('URLを読み込み中です', 'warning'); return; }
+  navigator.clipboard.writeText(text).then(() => toast('Webhook URLをコピーしました', 'success')).catch(() => toast('コピーできませんでした', 'error'));
+}
+
+async function saveLogictionUrl() {
+  const url = document.getElementById('logictionBaseUrl')?.value?.trim();
+  if (!url) { toast('LOGICTIONのURLを入力してください', 'warning'); return; }
+  try {
+    const res = await api(`/logiction/save-settings`, {
+      method: 'POST',
+      body: JSON.stringify({ clinic_id: currentClinicId, logiction_base_url: url })
+    });
+    if (!res.success) throw new Error(res.message);
+    _markStep3Done();
+    toast('✅ LOGICTIONのURL設定を保存しました', 'success');
+    await loadLogictionIntegrationInfo();
+  } catch(e) {
+    toast('保存失敗: ' + e.message, 'error');
+  }
+}
+
+async function testLogictionConnection() {
+  const btn = document.getElementById('testConnectionBtn');
+  const result = document.getElementById('testConnectionResult');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ テスト中...'; }
+  if (result) result.style.display = 'none';
+  try {
+    const res = await api(`/logiction/test-connection?clinic_id=${currentClinicId}`, { method: 'POST', body: '{}' });
+    if (result) {
+      result.style.display = 'block';
+      if (res.success) {
+        result.style.background = 'rgba(16,185,129,0.1)';
+        result.style.border = '1px solid rgba(16,185,129,0.3)';
+        result.innerHTML = `<span style="color:#10b981">✅ ${res.message}</span>`;
+        toast('✅ LOGICTIONとの接続テスト成功！', 'success', 4000);
+        // 接続成功 → 分析セクションを表示
+        const analysisSec = document.getElementById('logictionAnalysisSection');
+        if (analysisSec) analysisSec.style.display = 'block';
+        loadLogictionAnalysis();
+      } else {
+        result.style.background = 'rgba(239,68,68,0.1)';
+        result.style.border = '1px solid rgba(239,68,68,0.3)';
+        result.innerHTML = `<span style="color:#ef4444">❌ ${res.error}</span>${res.hint ? `<br><span style="color:var(--text-3)">${res.hint}</span>` : ''}`;
+      }
+    }
+  } catch(e) {
+    if (result) {
+      result.style.display = 'block';
+      result.style.background = 'rgba(239,68,68,0.08)';
+      result.innerHTML = `<span style="color:#ef4444">❌ 接続失敗: ${e.message}</span>`;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ 接続テスト'; }
+  }
+}
+window.generateLogictionKey = generateLogictionKey;
+window.copyLogictionKey = copyLogictionKey;
+window.copyWebhookUrl = copyWebhookUrl;
+window.saveLogictionUrl = saveLogictionUrl;
+window.testLogictionConnection = testLogictionConnection;
+
 async function loadLogictionAnalysis() {
   const statusEl = document.getElementById('logictionSyncStatus');
   const insightsEl = document.getElementById('logictionInsights');
@@ -1695,6 +1856,7 @@ async function applyLogictionToAds() {
 }
 window.loadLogictionAnalysis = loadLogictionAnalysis;
 window.applyLogictionToAds = applyLogictionToAds;
+window.loadLogictionIntegrationInfo = loadLogictionIntegrationInfo;
 
 // ---- モード状態確認（本番切り替え診断） ----
 
