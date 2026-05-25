@@ -4791,7 +4791,11 @@ def serve_spa(path: str = ""):
     # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
     index = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index):
-        return FileResponse(index)
+        from fastapi.responses import FileResponse as FR
+        resp = FR(index)
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
     return {"message": "Google広告自動運用システム API サーバー稼働中", "docs": "/docs"}
 
 if __name__ == "__main__":
