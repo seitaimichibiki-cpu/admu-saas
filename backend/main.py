@@ -1135,7 +1135,7 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
     }
 
 
-@app.post("/api/admin/init-credentials")
+@app.get("/api/admin/init-credentials")
 def init_credentials_from_env(request: Request, clinic_id: int = 1):
     """Render環境変数からads_accountsへ認証情報を一括書き込み"""
     admin_pw = request.headers.get("X-Admin-Password", "")
