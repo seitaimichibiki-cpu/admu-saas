@@ -945,6 +945,10 @@ def get_settings(clinic_id: int = 1):
 @app.post("/api/settings")
 def save_settings(req: SettingsReq):
     data = {k: v for k, v in req.model_dump().items() if v is not None and k != "clinic_id"}
+    # フロントが「***設定済み***」のマスク値をそのまま送ってきた場合は除外（上書き防止）
+    MASKED_PLACEHOLDER = "***設定済み***"
+    data = {k: v for k, v in data.items() if v != MASKED_PLACEHOLDER}
+
     acc_before = db.get_ads_account(req.clinic_id) or {}
     db.save_ads_account(req.clinic_id, data)
 

@@ -504,12 +504,20 @@ def save_ads_account(clinic_id: int, data: dict):
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]
-            conn.execute(f"UPDATE ads_accounts SET {sets} WHERE clinic_id=?", vals)
+            if sets:
+                conn.execute(f"UPDATE ads_accounts SET {sets} WHERE clinic_id=?", vals)
         else:
+            # 新規レコードを作成してから全フィールドをUPDATE
             conn.execute(
-                "INSERT INTO ads_accounts (clinic_id,customer_id,mock_mode) VALUES (?,?,?)",
+                "INSERT INTO ads_accounts (clinic_id, customer_id, mock_mode) VALUES (?, ?, ?)",
                 (clinic_id, secure_data.get("customer_id", ""), secure_data.get("mock_mode", 1))
             )
+            # INSERT直後に残りの全フィールドもUPDATE
+            remaining_fields = [f for f in fields if f in secure_data and f not in ("customer_id", "mock_mode")]
+            if remaining_fields:
+                sets = ", ".join(f"{f}=?" for f in remaining_fields)
+                vals = [secure_data[f] for f in remaining_fields] + [clinic_id]
+                conn.execute(f"UPDATE ads_accounts SET {sets} WHERE clinic_id=?", vals)
         conn.commit()
 
 def get_gemini_api_key(clinic_id: int) -> str:
