@@ -4791,11 +4791,38 @@ def serve_spa(path: str = ""):
     # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
     index = os.path.join(FRONTEND_DIR, "index.html")
     if os.path.exists(index):
-        from fastapi.responses import FileResponse as FR
-        resp = FR(index)
-        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        resp.headers["Pragma"] = "no-cache"
-        return resp
+        from fastapi.responses import HTMLResponse
+        import re
+        with open(index, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # ―― ダミー要素の動的注入 ――――――――――――――――――――――――――――――――
+        # 削除したUI要素に依存する旧キャッシュJSがnullクラッシュしないよう安全策
+        DUMMY = (
+            '<!-- [backend-injected] -->\n'
+            '<div id="weeklyActionsContent" style="display:none"></div>\n'
+            '<div id="benchmarkContent" style="display:none"></div>\n'
+            '<div id="dailyBriefContent" style="display:none"></div>\n'
+            '<div id="narrativeContent" style="display:none"></div>\n'
+            '<div id="briefGeneratedAt" style="display:none"></div>\n'
+            '<div id="narrativeGeneratedAt" style="display:none"></div>\n'
+            '<span id="alertBadge" style="display:none"></span>\n'
+            '<span id="aiQuotaBadge" style="display:none"><span id="aiQuotaText"></span></span>\n'
+            '<!-- [/backend-injected] -->\n'
+        )
+        if '[backend-injected]' not in html:
+            html = html.replace('</body>', DUMMY + '</body>', 1)
+
+        # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260525-stable', html)
+
+        return HTMLResponse(
+            content=html,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            }
+        )
     return {"message": "Google広告自動運用システム API サーバー稼働中", "docs": "/docs"}
 
 if __name__ == "__main__":
