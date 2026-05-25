@@ -2294,7 +2294,50 @@ def integration_status():
     }
 
 
-# ---- API: LTV計算プレビュー ① ----
+# ============================================================
+# ---- LOGICTION 患者データ連携 API ----
+# ============================================================
+import logiction_integration as logiction_mod
+
+@app.post("/api/logiction/patient-sync")
+async def logiction_patient_sync(
+    req: logiction_mod.LogictionSyncReq,
+    request: Request
+):
+    """LOGICTIONからの患者プロファイルを受信・蓄積し、ペルソナを自動更新する"""
+    import integration_bridge as ib
+    return await logiction_mod.handle_patient_sync(req, request, db, ib)
+
+@app.get("/api/logiction/persona-analysis")
+def logiction_persona_analysis(clinic_id: int = 1):
+    """蓄積患者データをセグメント別に分析してペルソナインサイトを返す"""
+    return logiction_mod.handle_persona_analysis(clinic_id, db)
+
+@app.post("/api/logiction/apply-to-ads")
+async def logiction_apply_to_ads(clinic_id: int = 1, platform: str = "google"):
+    """患者データ分析結果をGoogle Adsの入札調整に反映する"""
+    return await logiction_mod.handle_apply_to_ads(
+        clinic_id, platform, db, _require_account, _get_ads_client
+    )
+
+@app.get("/api/logiction/patients")
+def logiction_list_patients(clinic_id: int = 1, limit: int = 100, offset: int = 0):
+    """同期済み患者一覧を返す"""
+    with db.get_conn() as conn:
+        rows = conn.execute("""
+            SELECT patient_id, gender, age, age_group, address_pref,
+                   symptoms, visit_count, ltv_yen, acquisition_channel, synced_at
+            FROM logiction_patients WHERE clinic_id=?
+            ORDER BY ltv_yen DESC LIMIT ? OFFSET ?
+        """, (clinic_id, limit, offset)).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) as c FROM logiction_patients WHERE clinic_id=?",
+            (clinic_id,)
+        ).fetchone()["c"]
+    return {"total": total, "patients": [dict(r) for r in rows]}
+
+
+
 class LtvPreviewReq(BaseModel):
     clinic_id: int = 1
     visit_count: int = 1

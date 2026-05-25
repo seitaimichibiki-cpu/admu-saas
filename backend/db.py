@@ -265,6 +265,34 @@ def init_db():
             started_at {TS},
             completed_at TEXT,
             FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
+        # LOGICTION患者データ連携テーブル
+        f"""CREATE TABLE IF NOT EXISTS logiction_patients (
+            id {PK},
+            clinic_id INTEGER NOT NULL,
+            patient_id TEXT NOT NULL,
+            gender TEXT,
+            age INTEGER,
+            age_group TEXT,
+            address_pref TEXT,
+            address_city TEXT,
+            symptoms TEXT,
+            visit_count INTEGER DEFAULT 0,
+            total_revenue INTEGER DEFAULT 0,
+            ltv_yen INTEGER DEFAULT 0,
+            acquisition_channel TEXT,
+            gclid TEXT,
+            first_visit_date TEXT,
+            synced_at {TS},
+            FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+            UNIQUE(clinic_id, patient_id))""",
+        f"""CREATE TABLE IF NOT EXISTS logiction_sync_log (
+            id {PK},
+            clinic_id INTEGER NOT NULL,
+            synced_count INTEGER DEFAULT 0,
+            updated_count INTEGER DEFAULT 0,
+            sync_source TEXT DEFAULT 'api',
+            synced_at {TS},
+            FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
     ]
     for ddl in tables:
         conn.execute(ddl)

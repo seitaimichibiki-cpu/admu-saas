@@ -584,7 +584,7 @@ function switchPage(page) {
     'kw-suggest': loadKwSuggest,
     competitor: loadCompetitor,
     alerts: loadAlerts,
-    settings: loadSettings,
+    settings: () => { loadSettings(); loadLogictionAnalysis(); },
     admin: loadAdminPage,
   };
   if(loaders[page]) loaders[page]();
@@ -1555,7 +1555,149 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   }
 });
 
+// ============================================================
+// ---- LOGICTION 患者データ連携 ----
+// ============================================================
+async function loadLogictionAnalysis() {
+  const statusEl = document.getElementById('logictionSyncStatus');
+  const insightsEl = document.getElementById('logictionInsights');
+  const noDataEl = document.getElementById('logictionNoData');
+  if (!statusEl) return;
+
+  // ローディング
+  statusEl.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px"></div><span style="color:var(--text-3)">データを確認中...</span>`;
+  statusEl.style.display = 'flex';
+  if (insightsEl) insightsEl.style.display = 'none';
+  if (noDataEl) noDataEl.style.display = 'none';
+
+  try {
+    const data = await api(`/logiction/persona-analysis?clinic_id=${currentClinicId}`);
+
+    if (!data.success || data.total_patients === 0) {
+      statusEl.style.display = 'none';
+      if (noDataEl) noDataEl.style.display = 'block';
+      return;
+    }
+
+    const ins = data.insights;
+    const total = data.total_patients;
+    const lastSync = data.last_sync;
+
+    // 同期ステータスバー
+    statusEl.innerHTML = `
+      <span style="color:#10b981;font-size:16px">✅</span>
+      <span style="color:var(--text-1);font-weight:600">${total}名の来院者データを連携中</span>
+      ${lastSync ? `<span style="color:var(--text-3);font-size:11px;margin-left:auto">最終同期: ${lastSync.synced_at?.slice(0,16) || '-'}</span>` : ''}
+    `;
+
+    // インサイトグリッド（性別・年齢）
+    const grid = document.getElementById('logictionInsightGrid');
+    if (grid) {
+      const topGender = ins.by_gender?.[0];
+      const topAge = ins.by_age_group?.[0];
+      grid.innerHTML = `
+        <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px;border:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-weight:600">👤 高LTV性別</div>
+          ${(ins.by_gender || []).map(g => {
+            const label = g.gender === 'female' ? '女性' : g.gender === 'male' ? '男性' : g.gender;
+            const maxLtv = Math.max(...(ins.by_gender || []).map(x => x.avg_ltv || 0), 1);
+            const pct = Math.round((g.avg_ltv / maxLtv) * 100);
+            return `<div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+                <span style="color:${g === topGender ? '#6366f1' : 'var(--text-2)'};font-weight:${g === topGender ? 700 : 400}">${label} ${g === topGender ? '★' : ''}</span>
+                <span style="color:var(--text-1)">¥${Math.round(g.avg_ltv).toLocaleString()}</span>
+              </div>
+              <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px">
+                <div style="height:100%;width:${pct}%;background:${g === topGender ? '#6366f1' : '#475569'};border-radius:2px;transition:width 0.5s"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:14px;border:1px solid rgba(255,255,255,0.06)">
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px;font-weight:600">🎂 高LTV年齢層</div>
+          ${(ins.by_age_group || []).slice(0, 4).map((g, i) => {
+            const maxLtv = Math.max(...(ins.by_age_group || []).map(x => x.avg_ltv || 0), 1);
+            const pct = Math.round((g.avg_ltv / maxLtv) * 100);
+            return `<div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+                <span style="color:${i === 0 ? '#a855f7' : 'var(--text-2)'};font-weight:${i === 0 ? 700 : 400}">${g.age_group} ${i === 0 ? '★' : ''}</span>
+                <span style="color:var(--text-1)">¥${Math.round(g.avg_ltv).toLocaleString()}</span>
+              </div>
+              <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px">
+                <div style="height:100%;width:${pct}%;background:${i === 0 ? '#a855f7' : '#475569'};border-radius:2px;transition:width 0.5s"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // 媒体別バー
+    _renderLtvBars('logictionChannelBars', ins.by_channel || [], 'acquisition_channel', '#10b981');
+
+    // 症状別バー（上位5）
+    _renderLtvBars('logictionSymptomBars', (ins.by_symptom || []).slice(0, 5), 'symptom', '#f59e0b');
+
+    if (insightsEl) insightsEl.style.display = 'block';
+
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--error)">⚠️ 読み込み失敗: ${e.message}</span>`;
+  }
+}
+
+function _renderLtvBars(containerId, data, labelKey, color) {
+  const el = document.getElementById(containerId);
+  if (!el || !data.length) {
+    if (el) el.innerHTML = `<div style="font-size:12px;color:var(--text-3);padding:8px">データなし</div>`;
+    return;
+  }
+  const maxLtv = Math.max(...data.map(d => d.avg_ltv || 0), 1);
+  el.innerHTML = data.map(d => {
+    const pct = Math.round(((d.avg_ltv || 0) / maxLtv) * 100);
+    const label = d[labelKey] || '不明';
+    return `
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="color:var(--text-2)">${label} <span style="color:var(--text-3);font-size:11px">(${d.cnt}名)</span></span>
+          <span style="color:var(--text-1);font-weight:600">¥${Math.round(d.avg_ltv || 0).toLocaleString()}</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.07);border-radius:3px">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.6s ease"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function applyLogictionToAds() {
+  const btn = document.getElementById('logictionApplyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '適用中...'; }
+  try {
+    const res = await api(`/logiction/apply-to-ads?clinic_id=${currentClinicId}&platform=${currentPlatform}`, {
+      method: 'POST', body: '{}'
+    });
+    if (res.adjustments_count === 0) {
+      toast('入札調整の適用対象がありません（キャンペーンが0件またはデータ不足）', 'warning');
+    } else {
+      toast(`✅ ${res.adjustments_count}件の入札調整をGoogle Adsに反映しました`, 'success', 5000);
+    }
+    if (res.warnings?.length) {
+      res.warnings.forEach(w => toast('⚠️ ' + w, 'warning', 6000));
+    }
+    // ペルソナ更新をSettingsのフィールドに反映
+    await loadSettings();
+    toast('ペルソナ設定も自動更新されました', 'info');
+  } catch(e) {
+    toast('適用失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Google Adsに入札調整を反映（LTVベース）`; }
+  }
+}
+window.loadLogictionAnalysis = loadLogictionAnalysis;
+window.applyLogictionToAds = applyLogictionToAds;
+
 // ---- モード状態確認（本番切り替え診断） ----
+
 async function loadModeCheck() {
   const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
   try {
