@@ -405,15 +405,31 @@ def delete_announcement_api(aid: int, request: Request):
 def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7", start_date: Optional[str] = None, end_date: Optional[str] = None):
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
-    campaigns = client.list_campaigns()
-    perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
+
+    api_error = None
+    campaigns = []
+    perf_series = []
+
+    try:
+        campaigns = client.list_campaigns()
+    except Exception as e:
+        api_error = str(e)[:200]
+        print(f"[Dashboard] list_campaigns error: {e}")
+
+    try:
+        perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
+    except Exception as e:
+        api_error = api_error or str(e)[:200]
+        print(f"[Dashboard] get_performance_series error: {e}")
+
     alerts = db.list_alerts(clinic_id, limit=10)
     total_cost = sum(p.get("cost_micros", 0) for p in perf_series)
     total_clicks = sum(p.get("clicks", 0) for p in perf_series)
     total_impressions = sum(p.get("impressions", 0) for p in perf_series)
     total_conv = sum(p.get("conversions", 0) for p in perf_series)
     avg_ctr = sum(p.get("ctr", 0) for p in perf_series) / len(perf_series) if perf_series else 0
-    return {
+
+    result = {
         "summary": {
             "total_cost_micros": total_cost,
             "total_clicks": total_clicks,
@@ -436,6 +452,16 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
             "limit": db.get_ai_quota_limit(clinic_id)
         }
     }
+    if api_error:
+        result["api_error"] = api_error
+        # CUSTOMER_NOT_ENABLED はアカウントが停止/無効な場合の典型エラー
+        if "CUSTOMER_NOT_ENABLED" in api_error:
+            result["api_error_hint"] = "Google広告アカウントが無効または停止しています。顧客IDが正しいか、アカウントが有効かを確認してください。"
+        elif "PERMISSION_DENIED" in api_error or "not have permission" in api_error:
+            result["api_error_hint"] = "Google Ads APIへのアクセス権限がありません。MCCリンクと開発者トークンの承認状態を確認してください。"
+        elif "invalid_grant" in api_error or "refresh_token" in api_error.lower():
+            result["api_error_hint"] = "OAuthトークンが失効しています。設定画面からリフレッシュトークンを再取得してください。"
+    return result
 
 # ---- API: キャンペーン ----
 @app.get("/api/campaigns")
