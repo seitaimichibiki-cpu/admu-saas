@@ -1109,11 +1109,22 @@
             </div>
             <div class="form-group">
               <label>モックモード</label>
-              <select id="settMockMode" class="form-input">
+              <select id="settMockMode" class="form-input" onchange="scheduleLoadModeCheck()">
                 <option value="1">ON（テスト・デモ用）</option>
                 <option value="0">OFF（本番API使用）</option>
               </select>
+              <div style="font-size:11px;color:var(--text-3);margin-top:4px">
+                ※ OFFに切り替えるには下記すべての認証情報が入力・保存されている必要があります
+              </div>
             </div>
+
+            <!-- モード診断パネル（自動更新） -->
+            <div id="modeCheckPanel" style="padding:12px 14px;border-radius:10px;margin-bottom:12px;background:rgba(100,116,139,0.1);border:1px solid rgba(100,116,139,0.2);font-size:12px;color:var(--text-3)">
+              確認中...
+            </div>
+            <button class="btn btn-secondary btn-full" onclick="loadModeCheck()" style="margin-bottom:12px;font-size:12px">
+              🔍 本番モード切り替え状態を今すぐ確認
+            </button>
 
             <!-- MCCリンクリクエスト送信ボタン -->
             <button class="btn btn-primary btn-full" id="googleLinkReqBtn" onclick="requestGoogleLink()" style="margin-bottom:8px">
@@ -2210,6 +2221,12 @@
     }
   }
 
+  let _modeCheckTimer = null;
+  function scheduleLoadModeCheck() {
+    clearTimeout(_modeCheckTimer);
+    _modeCheckTimer = setTimeout(loadModeCheck, 300);
+  }
+
   function showCancelConfirm() {
     const box = document.getElementById('cancelConfirmBox');
     if (box) { box.style.display = box.style.display === 'none' ? 'block' : 'none'; }
@@ -2218,7 +2235,10 @@
   // 設定ページを開いたときにGoogle連携ステータスを自動取得
   document.addEventListener('click', function(e) {
     const link = e.target.closest('[data-page="settings"], [onclick*="settings"]');
-    if (link) { setTimeout(loadGoogleLinkStatus, 500); }
+    if (link) {
+      setTimeout(loadGoogleLinkStatus, 500);
+      setTimeout(loadModeCheck, 700);
+    }
   });
 
   // action=billingで開いたときに請求カードを表示

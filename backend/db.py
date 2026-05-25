@@ -499,7 +499,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "notification_email", "smtp_user", "smtp_pass", "ga4_property_id", "ga4_api_secret",
                   "monthly_budget_yen", "yahoo_account_id", "yahoo_client_id", "yahoo_client_secret",
                   "yahoo_refresh_token", "yahoo_mock_mode",
-                  "gemini_api_key", "ai_monthly_limit"]
+                  "gemini_api_key", "ai_monthly_limit",
+                  "google_link_status", "google_link_requested_at"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]

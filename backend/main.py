@@ -1075,6 +1075,66 @@ def list_clinics(request: Request):
         return {"clinics": [c for c in all_clinics if c["id"] == user_cid]}
 
 
+# ---- API: モード状態確認 ----
+@app.get("/api/mode-check")
+def check_mode_readiness(request: Request, clinic_id: int = 1):
+    """
+    本番モード切替の準備状況を確認。
+    DBのmock_mode設定と実際の認証情報の充足状況を返す。
+    """
+    _get_current_user(request)
+    acc = db.get_ads_account(clinic_id) or {}
+    db_mock_mode = acc.get("mock_mode", 1)
+
+    required = {
+        "developer_token": acc.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", "") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+        "client_id":       acc.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", "") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+        "client_secret":   acc.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", "") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+        "refresh_token":   acc.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
+        "customer_id":     acc.get("customer_id", ""),
+    }
+    label_map = {
+        "developer_token": "開発者トークン",
+        "client_id":       "OAuthクライアントID",
+        "client_secret":   "OAuthクライアントシークレット",
+        "refresh_token":   "リフレッシュトークン",
+        "customer_id":     "顧客ID",
+    }
+    actually_missing = [label_map[k] for k, v in required.items() if not v]
+
+    try:
+        from ads_client import GOOGLE_ADS_AVAILABLE
+    except Exception:
+        GOOGLE_ADS_AVAILABLE = False
+
+    try:
+        from ads_client import AdsClient
+        client = AdsClient(acc)
+        actual_mock = client.mock_mode
+    except Exception:
+        actual_mock = True
+
+    if not actual_mock:
+        msg = "✅ 本番APIモードで動作中です"
+    elif not GOOGLE_ADS_AVAILABLE:
+        msg = "⚠️ google-adsライブラリが未インストールです。requirements.txtにgoogle-adsを追加してデプロイしてください"
+    elif actually_missing:
+        msg = f"⚠️ 以下の認証情報が未設定のためモックモードで動作中: {', '.join(actually_missing)}"
+    elif int(db_mock_mode) == 1:
+        msg = "⚠️ モックモードがONになっています。設定画面でモックモードをOFFにして保存してください"
+    else:
+        msg = "⚠️ 認証情報は設定済みですが本番に切り替わっていません。Renderのログを確認してください"
+
+    return {
+        "db_mock_mode": int(db_mock_mode),
+        "actual_mock_mode": actual_mock,
+        "google_ads_library_installed": GOOGLE_ADS_AVAILABLE,
+        "missing_fields": actually_missing,
+        "is_ready_for_production": not actual_mock,
+        "message": msg,
+    }
+
+
 # ============================================================
 # API: 認証 / ユーザー管理
 # ============================================================

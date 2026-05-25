@@ -1509,10 +1509,47 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   try {
     await api('/settings', { method:'POST', body: JSON.stringify(body) });
     toast('設定を保存しました ✅', 'success');
+    // ★ 保存後にモードバッジ・状態確認を即時更新
+    setTimeout(async () => {
+      await loadDashboard();
+      await loadModeCheck();
+    }, 600);
   } catch(e) {
     toast('保存失敗: ' + e.message, 'error');
   }
 });
+
+// ---- モード状態確認（本番切り替え診断） ----
+async function loadModeCheck() {
+  const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
+  try {
+    const d = await fetch(`${window.API_BASE || ''}/api/mode-check?clinic_id=${cid}`, {
+      credentials: 'include'
+    }).then(r => r.json());
+
+    const panel = document.getElementById('modeCheckPanel');
+    if (!panel) return;
+
+    const isReady = d.is_ready_for_production;
+    const missing = d.missing_fields || [];
+
+    panel.style.cssText = isReady
+      ? 'padding:12px 14px;border-radius:10px;margin-top:12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2)'
+      : 'padding:12px 14px;border-radius:10px;margin-top:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2)';
+
+    panel.innerHTML = `
+      <div style="font-weight:700;color:${isReady ? '#22c55e' : '#f59e0b'};margin-bottom:6px;font-size:13px">
+        ${isReady ? '✅ 本番APIモードで動作中' : '⚠️ 現在モックモード（デモデータ）で動作中'}
+      </div>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.7">${d.message}</div>
+      ${!d.google_ads_library_installed ? '<div style="font-size:11px;color:#ef4444;margin-top:4px">⚠️ google-adsライブラリが未インストールです</div>' : ''}
+      ${missing.length ? `<div style="font-size:11px;color:#f59e0b;margin-top:6px">未設定項目: ${missing.join(' / ')}</div>` : ''}
+    `;
+
+    // バッジも即時更新
+    updateMockBadge(d.actual_mock_mode);
+  } catch(e) {}
+}
 
 // ---- パスワード変更 ----
 window.doChangePassword = async function() {

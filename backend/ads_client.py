@@ -133,16 +133,21 @@ class AdsClient:
                 if login_id:
                     cfg["login_customer_id"] = str(login_id).replace("-", "")
 
-                # 認証情報が一つでも欠ければモックにフォールバック
-                if not all([cfg["developer_token"], cfg["client_id"],
-                            cfg["client_secret"], cfg["refresh_token"]]):
-                    print(f"[AdsClient] Ads認資情報が不完全のためモックモードで動作します (Customer: {self.customer_id})")
+                # 認証情報が一つでも欠ければモックにフォールバック（どのキーが欠けているか詳細ログ）
+                missing_keys = [k for k in ["developer_token", "client_id", "client_secret", "refresh_token"] if not cfg[k]]
+                if missing_keys:
+                    print(f"[AdsClient] 本番モードに切替できません。以下の認証情報が未設定です: {', '.join(missing_keys)} (Customer: {self.customer_id})")
+                    print(f"[AdsClient] → 設定画面から各認証情報を入力して保存してください。モックモードで動作継続します。")
                     self.mock_mode = True
                 else:
                     self._client = GoogleAdsClient.load_from_dict(cfg)
+                    print(f"[AdsClient] ✅ 本番APIモードで初期化成功 (Customer: {self.customer_id})")
             except Exception as e:
                 print(f"[AdsClient] API初期化失敗、モックモードに切替: {e}")
                 self.mock_mode = True
+        elif not self.mock_mode and not GOOGLE_ADS_AVAILABLE:
+            print(f"[AdsClient] google-ads ライブラリが未インストールのためモックモードで動作します。`pip install google-ads` を実行してください。")
+            self.mock_mode = True
 
     # ---- キャンペーン ----
     def list_campaigns(self):
