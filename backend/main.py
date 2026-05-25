@@ -313,15 +313,39 @@ if not ADMIN_PASSWORD:
     print("⚠️  [SECURITY] ADMIN_PASSWORD が未設定です。本番では必ず環境変数を設定してください。")
 
 def _require_account(clinic_id: int) -> dict:
-    """広告設定を取得。未設定の場合もデモ設定（モックモード）で代替して500エラーを防ぐ。"""
+    """広告設定を取得。未設定の場合も環境変数の認証情報を使ってフォールバック。"""
     acc = db.get_ads_account(clinic_id)
     if not acc:
-        return {"clinic_id": clinic_id, "mock_mode": 1, "customer_id": "DEMO", "yahoo_mock_mode": 1}
+        # DBにレコードがない場合は環境変数から自動生成（MASTER_ADS_*優先）
+        master_token   = os.environ.get("MASTER_ADS_DEVELOPER_TOKEN") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+        master_cid     = os.environ.get("MASTER_ADS_CLIENT_ID") or os.environ.get("GOOGLE_ADS_CLIENT_ID", "")
+        master_secret  = os.environ.get("MASTER_ADS_CLIENT_SECRET") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", "")
+        master_refresh = os.environ.get("MASTER_ADS_REFRESH_TOKEN") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", "")
+        master_login   = os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", "")
+        customer_id    = os.environ.get("GOOGLE_ADS_DEFAULT_CUSTOMER_ID", "DEMO")
+        # 全認証情報が揃っていれば本番モード、そうでなければモック
+        has_creds = all([master_token, master_cid, master_secret, master_refresh])
+        acc = {
+            "clinic_id": clinic_id,
+            "mock_mode": 0 if has_creds else 1,
+            "customer_id": customer_id,
+            "yahoo_mock_mode": 1,
+            "developer_token":   master_token,
+            "client_id":         master_cid,
+            "client_secret":     master_secret,
+            "refresh_token":     master_refresh,
+            "login_customer_id": master_login,
+        }
+        if has_creds:
+            print(f"[_require_account] DBレコードなし→環境変数から本番設定を自動生成 (clinic_id={clinic_id})")
+        else:
+            print(f"[_require_account] DBレコードなし・環境変数不足→モックモードで代替 (clinic_id={clinic_id})")
     if acc.get("mock_mode") is None:
         acc["mock_mode"] = 1
     if acc.get("yahoo_mock_mode") is None:
         acc["yahoo_mock_mode"] = 1
     return acc
+
 
 def _get_ads_client(acc: dict, platform: str = "google"):
     if platform == "yahoo":
