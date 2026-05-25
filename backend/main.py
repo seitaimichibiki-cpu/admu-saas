@@ -1175,8 +1175,10 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
         }
         client = AdsClient(acc_for_client)
         actual_mock = client.mock_mode
-    except Exception:
+        init_error = getattr(client, "_init_error", None)
+    except Exception as e:
         actual_mock = True
+        init_error = str(e)
 
     if not actual_mock:
         msg = "✅ 本番APIモードで動作中です"
@@ -1196,6 +1198,7 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
         "missing_fields": actually_missing,
         "is_ready_for_production": not actual_mock,
         "message": msg,
+        "init_error": init_error,
     }
 
 
@@ -1240,8 +1243,10 @@ def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: 
         }
         client = AdsClient(acc_for_check)
         actual_mock = client.mock_mode
-    except Exception:
+        init_error = getattr(client, "_init_error", None)
+    except Exception as e:
         actual_mock = True
+        init_error = str(e)
 
     return {
         "success": True,
@@ -1250,6 +1255,7 @@ def init_credentials_from_env(request: Request, clinic_id: int = 1, secret_key: 
         "actual_mock_mode": actual_mock,
         "is_production": not actual_mock,
         "message": "✅ 本番APIモードに切り替えました" if not actual_mock else "⚠️ 環境変数を確認してください",
+        "init_error": init_error,
     }
 
 

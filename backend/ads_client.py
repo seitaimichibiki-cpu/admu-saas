@@ -144,6 +144,7 @@ class AdsClient:
                     print(f"[AdsClient] ✅ 本番APIモードで初期化成功 (Customer: {self.customer_id})")
             except Exception as e:
                 print(f"[AdsClient] API初期化失敗、モックモードに切替: {e}")
+                self._init_error = str(e)
                 self.mock_mode = True
         elif not self.mock_mode and not GOOGLE_ADS_AVAILABLE:
             print(f"[AdsClient] google-ads ライブラリが未インストールのためモックモードで動作します。`pip install google-ads` を実行してください。")
