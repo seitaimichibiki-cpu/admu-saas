@@ -68,7 +68,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def verify_tenant_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and not path == "/api/csrf-token":
+    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and path not in ["/api/csrf-token", "/api/config"]:
         user = auth.get_current_user_from_request(request)
         if not user:
             return JSONResponse({"detail": "認証されていませんので再度ログインしてください"}, status_code=401)
