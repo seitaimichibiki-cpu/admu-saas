@@ -1135,6 +1135,46 @@ def check_mode_readiness(request: Request, clinic_id: int = 1):
     }
 
 
+@app.post("/api/admin/init-credentials")
+def init_credentials_from_env(request: Request, clinic_id: int = 1):
+    """Render環境変数からads_accountsへ認証情報を一括書き込み"""
+    admin_pw = request.headers.get("X-Admin-Password", "")
+    if admin_pw != os.environ.get("ADMIN_PASSWORD", "admu2024"):
+        raise HTTPException(403, "管理者パスワードが正しくありません")
+
+    data = {
+        "customer_id":       os.environ.get("GOOGLE_ADS_DEFAULT_CUSTOMER_ID") or "1417381421",
+        "developer_token":   os.environ.get("MASTER_ADS_DEVELOPER_TOKEN") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+        "client_id":         os.environ.get("MASTER_ADS_CLIENT_ID") or os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+        "client_secret":     os.environ.get("MASTER_ADS_CLIENT_SECRET") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+        "refresh_token":     os.environ.get("MASTER_ADS_REFRESH_TOKEN") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
+        "login_customer_id": os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", ""),
+        "mock_mode":         0,
+    }
+    missing = [k for k, v in data.items() if not v and k not in ["customer_id", "login_customer_id"]]
+    if missing:
+        return {"success": False, "missing_env_vars": missing}
+
+    db.save_ads_account(clinic_id, data)
+
+    try:
+        from ads_client import AdsClient
+        acc = db.get_ads_account(clinic_id) or {}
+        client = AdsClient(acc)
+        actual_mock = client.mock_mode
+    except Exception:
+        actual_mock = True
+
+    return {
+        "success": True,
+        "clinic_id": clinic_id,
+        "customer_id": data["customer_id"],
+        "actual_mock_mode": actual_mock,
+        "is_production": not actual_mock,
+        "message": "✅ 本番APIモードに切り替えました" if not actual_mock else "⚠️ 環境変数を確認してください",
+    }
+
+
 # ============================================================
 # API: 認証 / ユーザー管理
 # ============================================================
