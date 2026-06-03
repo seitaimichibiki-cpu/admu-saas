@@ -1021,10 +1021,13 @@ def save_settings(req: SettingsReq):
     acc_before = db.get_ads_account(req.clinic_id) or {}
     db.save_ads_account(req.clinic_id, data)
 
-    # 顧客IDが新たに設定された場合、Google Adsリンクリクエストを自動送信
+    # 顧客IDが新たに設定されたか、現在エラー状態の場合、Google Adsリンクリクエストを送信
     new_cid = data.get("customer_id")
     old_cid = acc_before.get("customer_id")
-    if new_cid and new_cid != old_cid:
+    current_status = acc_before.get("google_link_status") or ""
+    is_error = current_status.startswith("error:")
+
+    if new_cid and (new_cid != old_cid or is_error):
         try:
             _send_google_ads_link_request(req.clinic_id, new_cid)
         except Exception as e:
