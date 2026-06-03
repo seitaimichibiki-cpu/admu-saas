@@ -51,8 +51,21 @@ function authHeaders() {
 function showLoginScreen() {
   document.getElementById('loginScreen').classList.add('active');
   document.getElementById('loginBtn').disabled = false;
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPassword').value = '';
+  
+  const savedEmail = localStorage.getItem('admu_saved_email');
+  const savedPassword = localStorage.getItem('admu_saved_password');
+  if (savedEmail && savedPassword) {
+    document.getElementById('loginEmail').value = savedEmail;
+    document.getElementById('loginPassword').value = savedPassword;
+    setTimeout(() => {
+      if (document.getElementById('loginScreen').classList.contains('active')) {
+        doLogin();
+      }
+    }, 100);
+  } else {
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+  }
   document.getElementById('loginError').classList.remove('show');
 }
 
@@ -116,6 +129,11 @@ window.doLogin = async function doLogin() {
       plan_name:     data.plan_name     || 'スタンダード',
       yahoo_enabled: data.yahoo_enabled !== false,
     }));
+    
+    // 資格情報を自動保存
+    localStorage.setItem('admu_saved_email', email);
+    localStorage.setItem('admu_saved_password', password);
+
     if (data.clinic_id) currentClinicId = data.clinic_id;
     showDashboard(data);
     btn.textContent = 'ログイン';
@@ -195,6 +213,8 @@ window.doLogout = async function doLogout() {
     await fetch(`${API}/auth/logout`, { method: 'POST', headers: authHeaders(), credentials: 'include' }).catch(e=>e);
   } catch(e) {}
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem('admu_saved_email');
+  localStorage.removeItem('admu_saved_password');
   const userEl  = document.getElementById('loggedInUser');
   const logoutEl = document.getElementById('logoutBtn');
   if (userEl)   userEl.style.display = 'none';
