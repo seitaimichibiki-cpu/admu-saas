@@ -1089,12 +1089,35 @@ def _send_google_ads_link_request(clinic_id: int, customer_id: str) -> dict:
         return {"status": "pending"}
 
     except Exception as e:
-        db.save_ads_account(clinic_id, {
-            **acc,
-            "google_link_status": f"error: {str(e)[:80]}",
-            "google_link_requested_at": datetime.now().isoformat(),
-        })
-        raise
+        is_already_managed = False
+        try:
+            from google.ads.googleads.errors import GoogleAdsException
+            if isinstance(e, GoogleAdsException):
+                for error in e.failure.errors:
+                    err_code = error.error_code
+                    if hasattr(err_code, "manager_link_error"):
+                        name = err_code.manager_link_error.name
+                        if name in ("ALREADY_MANAGED_IN_HIERARCHY", "ALREADY_MANAGED_BY_THIS_MANAGER", "ALREADY_ASSOCIATED_IN_HIERARCHY"):
+                            is_already_managed = True
+                            break
+        except Exception:
+            pass
+
+        if is_already_managed:
+            db.save_ads_account(clinic_id, {
+                **acc,
+                "google_link_status": "active",
+                "google_link_requested_at": datetime.now().isoformat(),
+            })
+            print(f"[GoogleAdsLink] すでに連携済みのためactiveに設定 customer_id={clean_id}")
+            return {"status": "active"}
+        else:
+            db.save_ads_account(clinic_id, {
+                **acc,
+                "google_link_status": f"error: {str(e)[:80]}",
+                "google_link_requested_at": datetime.now().isoformat(),
+            })
+            raise
 
 
 @app.post("/api/google/request-link")
