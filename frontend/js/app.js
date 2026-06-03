@@ -1520,8 +1520,8 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
 // ---- LOGICTION 連携 セルフサーブ設定 ----
 // ============================================================
 
-let _logictionWebhookUrlCache = '';
-let _logictionKeyCache = '';
+var _logictionWebhookUrlCache = '';
+var _logictionKeyCache = '';
 
 async function loadLogictionIntegrationInfo() {
   try {
