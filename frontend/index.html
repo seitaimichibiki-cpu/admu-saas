@@ -508,54 +508,7 @@
         <div id="bidRulesList"></div>
       </section>
 
-      <!-- Analyze Past Data -->
-      <section id="page-analyze" class="page hidden">
-        <div class="card">
-          <h3 class="card-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            過去レポート解析＆AI最適化提案
-          </h3>
-          <p style="color:var(--text-2); margin-bottom:24px; font-size:14px;">Google広告のレポート（PDF等）をアップロードすると、Gemini AIが自動で「成果の良かったキーワード」や「無駄な出費」を分析し、次のキャンペーン構築への推奨設定を提案します。</p>
-          
-          <div class="upload-area" id="uploadArea">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <div style="font-weight:500; margin-bottom:4px;">レポートファイルをドラッグ＆ドロップ</div>
-            <div style="font-size:13px; color:var(--text-3);">またはクリックしてファイルを選択（.pdf, .csv 対応）</div>
-            <input type="file" id="reportFile" accept=".pdf,.csv,.xlsx,.xls,.txt" style="display:none;">
-          </div>
 
-          <div id="analyzeLoading" class="loading-state" style="display:none; margin-top:24px;">
-            <div class="spinner"></div>
-            <p style="margin-top:12px; color:var(--text-2);">Gemini AIがドキュメントを読み込み・解析中...（約10〜20秒かかります）</p>
-          </div>
-
-          <div id="analyzeResult" style="display:none; margin-top:24px;">
-            <div class="results-grid">
-              <div class="result-card good">
-                <h4>✅ 成果の良かったキーワード</h4>
-                <div class="tag-list" id="arGoodTags"></div>
-              </div>
-              <div class="result-card bad">
-                <h4>⚠️ 無駄な費用の発生源（除外推奨）</h4>
-                <p style="font-size:12px;color:var(--text-3);margin-bottom:8px">👁 クリックで除外リストに追加</p>
-                <div class="tag-list" id="arBadTags"></div>
-              </div>
-            </div>
-            <div class="result-card" style="margin-top:16px;">
-              <h4>📊 ユーザー傾向（地域・年齢層・デバイス等）</h4>
-              <p id="arTrends" style="color:var(--text-1); line-height:1.6; font-size:14px; white-space:pre-wrap;"></p>
-            </div>
-            <div class="result-card" style="margin-top:16px; border-left: 4px solid var(--primary);">
-              <h4>💡 次回キャンペーンへのAI推奨設定</h4>
-              <p id="arRec" style="color:var(--text-1); line-height:1.6; font-size:14px; white-space:pre-wrap;"></p>
-            </div>
-            <button class="btn btn-primary btn-full" id="applyAnalyzeBtn" style="margin-top:24px">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              この設定で新規キャンペーン作成へ進む
-            </button>
-          </div>
-        </div>
-      </section>
 
       <!-- Ad Copy -->
       <section id="page-ad-copy" class="page hidden">
@@ -563,83 +516,7 @@
           <div class="ad-copy-form-col">
             <div class="card">
               <h3 class="card-title">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 00-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
-                AI広告文生成
-              </h3>
-              <div class="form-group">
-                <label>クリニック名</label>
-                <input type="text" id="acClinicName" placeholder="〇〇整体院" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>地域</label>
-                <input type="text" id="acRegion" placeholder="渋谷区" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>訴求ポイント</label>
-                <input type="text" id="acAppealPoints" placeholder="国家資格保有・完全個室・当日予約OK" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>ターゲットの悩み</label>
-                <input type="text" id="acTargetIssues" placeholder="腰痛、肩こり、産後骨盤矯正" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>追加指示（任意）</label>
-                <textarea id="acExtra" placeholder="夜間診療もアピールして" class="form-input" rows="2"></textarea>
-              </div>
-              <button class="btn btn-primary btn-full" id="generateAdCopyBtn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Gemini AIで広告文を生成
-              </button>
-            </div>
-          </div>
-          <div class="ad-copy-preview-col">
-            <div class="card" id="adCopyResult" style="display:none">
-              <h3 class="card-title">生成結果</h3>
-              <div class="ad-preview-box" id="adPreviewBox"></div>
-              <button class="btn btn-success btn-full" id="applyAdCopyBtn" style="margin-top:16px">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                Google広告に反映
-              </button>
-              <!-- ★ 心理トリガースコア指標 -->
-              <div id="psychScorePanel" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                  <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
-                    🧠 心理トリガースコア
-                    <span id="psychGradeBadge" style="font-size:11px;padding:2px 8px;border-radius:99px;font-weight:800"></span>
-                  </div>
-                  <span id="psychTotalScore" style="font-size:20px;font-weight:900"></span>
-                </div>
-                <div id="psychScoreBars" style="display:flex;flex-direction:column;gap:6px"></div>
-                <div id="psychTopImprovement" style="margin-top:12px;padding:10px 14px;background:rgba(200,169,122,0.1);border:1px solid rgba(200,169,122,0.3);border-radius:8px;font-size:12px;display:none">
-                  <span style="color:#c8a97a;font-weight:700">★ TOP改善提案: </span>
-                  <span id="psychTopImprovementText" style="color:var(--text-2)"></span>
-                </div>
-              </div>
-            </div>
-            <div class="card" id="adCopyLoading" style="display:none">
-              <div class="loading-state">
-                <div class="spinner"></div>
-                <p>Gemini AIが広告文を生成中...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card" style="margin-top:24px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-            <h3 class="card-title" style="margin-bottom:0">生成履歴 (A/Bテスト)</h3>
-            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="runAutoAbScore(this)">
-              🤖 AI自動判定
-            </button>
-          </div>
-          <div id="adCopyHistory"></div>
-        </div>
-      </section>
-
-      <!-- ★ LTVシミュレーターページ -->
-      <section id="page-simulator" class="page hidden">
-        <div style="margin-bottom:20px">
-          <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">💰 LTV逆算 予算シミュレーター</h2>
-          <p style="font-size:13px;color:var(--text-3)">LTV（患者生涯価値）から逆算して、適正CPA上限・必要予算・ROIを算出。LTV-based biddingの概念を整体院向けに実装。</p>
+                <svg width="18" height="18" viewBox="0 0て、適正CPA上限・必要予算・ROIを算出。LTV-based biddingの概念を整体院向けに実装。</p>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" id="simLayout">
           <!-- 入力 -->
@@ -704,22 +581,7 @@
       </section>
 
 
-      <!-- ★ 季節性キャンペーンプランナー -->
-      <section id="page-calendar" class="page hidden">
-        <div style="margin-bottom:20px">
-          <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">📅 季節性キャンペーンプランナー</h2>
-          <p style="font-size:13px;color:var(--text-3)">12ヶ月×整体院特化の検索ニーズ・推奨キーワード・入札戦略を一覧表示。今月の季節広告文をワンクリック生成。</p>
-        </div>
-        <!-- 今月・来月 ハイライト -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px" id="calCurrentMonthCards"></div>
-        <!-- 12ヶ月一覧 -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px" id="calMonthGrid"></div>
-        <!-- AI生成エリア -->
-        <div class="card" style="margin-top:20px;display:none" id="calAiCopyCard">
-          <h3 class="card-title">✨ 今月の季節特化AI広告文</h3>
-          <div id="calAiCopyContent"></div>
-        </div>
-      </section>
+
 
       <!-- ★ 時間帯×曜日ヒートマップ -->
       <section id="page-heatmap" class="page hidden">
@@ -765,29 +627,7 @@
         </div>
       </section>
 
-      <!-- ★ 広告健全度スコアカード -->
-      <section id="page-scorecard" class="page hidden">
-        <div style="margin-bottom:20px">
-          <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">🏆 広告アカウント健全度スコアカード</h2>
-          <p style="font-size:13px;color:var(--text-3)">整体院専用10軸で診断。改善ロードマップ（Month1→2→3）付き。</p>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="loadScorecard()" id="scorecardBtn">📊 診断実行</button>
-          <div id="scorecardGeneratedAt" style="font-size:11px;color:var(--text-3)"></div>
-        </div>
-        <!-- スコア概要 -->
-        <div id="scorecardSummary" style="display:none">
-          <div style="display:grid;grid-template-columns:auto 1fr;gap:24px;margin-bottom:20px;align-items:center;flex-wrap:wrap">
-            <div style="text-align:center;background:var(--bg-card);border-radius:16px;padding:24px 32px;border:1px solid rgba(255,255,255,0.08)">
-              <div id="scorecardGrade" style="font-size:64px;font-weight:900;line-height:1"></div>
-              <div id="scorecardTotal" style="font-size:16px;font-weight:700;margin-top:4px"></div>
-            </div>
-            <div id="scorecardBars" style="display:flex;flex-direction:column;gap:8px"></div>
-          </div>
-          <!-- ロードマップ -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px" id="scorecardRoadmap"></div>
-        </div>
-      </section>
+
 
 
       <section id="page-alerts" class="page hidden">
@@ -902,35 +742,7 @@
         <div id="kwResults"></div>
       </section>
 
-      <!-- 競合分析 -->
-      <section id="page-competitor" class="page hidden">
-        <!-- オークションインサイト -->
-        <div class="card" style="margin-bottom:16px;border:1px solid rgba(180,83,9,0.3)">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-            <div style="width:36px;height:36px;background:linear-gradient(135deg,#b45309,#92400e);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">📡</div>
-            <div>
-              <div style="font-weight:800;font-size:14px">オークションインサイト</div>
-              <div style="font-size:11px;color:var(--text-3)">Google広告オークションでの競合シェア分析</div>
-            </div>
-          </div>
-          <div id="auctionInsightContent">
-            <div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center">
-              <div class="spinner" style="width:16px;height:16px"></div><span>競合データ読み込み中...</span>
-            </div>
-          </div>
-        </div>
 
-        <div class="card" style="margin-bottom:16px">
-          <h3 class="card-title">🕵️ 競合広告スパイ — 差別化分析</h3>
-          <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">エリアと業種を指定すると、競合広告のパターンをAIが分析して差別化ポイントと推奨見出しを提案します。</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px">
-            <input type="text" id="compArea" class="form-input" placeholder="エリア: 例) 渋谷区、表参道" />
-            <input type="text" id="compService" class="form-input" placeholder="業種: 例) 整体院" value="整体院" />
-            <button class="btn btn-primary" id="competitorBtn">分析する</button>
-          </div>
-        </div>
-        <div id="competitorResults"></div>
-      </section>
 
 
       <!-- Settings -->
@@ -2032,121 +1844,10 @@
     msgs.scrollTop = msgs.scrollHeight;
   }
 
-  // ⑤ 今週のアクション
-  async function loadWeeklyActions() {
-    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
-    const el = document.getElementById('weeklyActionsContent');
-    el.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:16px;color:var(--text-3);justify-content:center"><div class="spinner" style="width:16px;height:16px"></div><span>AIが分析中...</span></div>';
-    try {
-      const res = await fetch(`${window.API_BASE || ''}/api/dashboard/weekly-actions?clinic_id=${cid}`, {credentials:'include'});
-      const data = await res.json();
-      const urgencyColor = {high:'#ef4444', medium:'#f59e0b', low:'#10b981'};
-      const urgencyLabel = {high:'🔴 緊急', medium:'🟡 今週中', low:'🟢 余裕あり'};
-      if (!data.actions || data.actions.length === 0) {
-        el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-3);font-size:13px">データが不足しています。Google広告を連携するとAIがアクションを提案します。</div>';
-        return;
-      }
-      el.innerHTML = data.actions.map((a, i) => `
-        <div style="display:flex;align-items:flex-start;gap:12px;padding:12px;${i < data.actions.length-1 ? 'border-bottom:1px solid rgba(255,255,255,0.06)' : ''}">
-          <div style="width:36px;height:36px;background:rgba(255,255,255,0.05);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${a.icon}</div>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:13px;margin-bottom:3px">${a.title}</div>
-            <div style="font-size:12px;color:var(--text-2)">${a.desc}</div>
-          </div>
-          <span style="font-size:11px;font-weight:700;color:${urgencyColor[a.urgency]||'#64748b'};white-space:nowrap">${urgencyLabel[a.urgency]||a.urgency}</span>
-        </div>`).join('');
-    } catch(e) {
-      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗しました: ${e.message}</div>`;
-    }
-  }
-
-  // ⑦ ベンチマーク
-  async function loadBenchmark() {
-    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
-    const el = document.getElementById('benchmarkContent');
-    try {
-      const res = await fetch(`${window.API_BASE || ''}/api/benchmark?clinic_id=${cid}`, {credentials:'include'});
-      const data = await res.json();
-      if (!data.available) {
-        el.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-3);font-size:13px">📊 ${data.message}</div>`;
-        return;
-      }
-      const pct = data.percentile;
-      const my = data.my_stats;
-      const avg = data.industry_avg;
-      const badge = (v) => v === null ? '─' : v > 66 ? `<span style="color:#10b981;font-weight:700">上位${100-v}%</span>` : v > 33 ? `<span style="color:#f59e0b;font-weight:700">中位</span>` : `<span style="color:#ef4444;font-weight:700">下位${v}%</span>`;
-      el.innerHTML = `
-        <div style="margin-bottom:8px;font-size:11px;color:var(--text-3)">比較対象: ${data.tenant_count}院（匿名・同業）</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-          ${[
-            {label:'CTR', my:my.ctr+'%', avg:avg.ctr+'%', pct:pct.ctr, unit:'%'},
-            {label:'CVR', my:my.cvr+'%', avg:avg.cvr+'%', pct:pct.cvr, unit:'%'},
-            {label:'CPA', my:'¥'+my.cpa.toLocaleString(), avg:'¥'+avg.cpa.toLocaleString(), pct:pct.cpa_inv, unit:''},
-          ].map(m => `
-            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center">
-              <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">${m.label}</div>
-              <div style="font-size:18px;font-weight:800;color:#f1f5f9">${m.my}</div>
-              <div style="font-size:11px;color:var(--text-3)">業界平均 ${m.avg}</div>
-              <div style="margin-top:6px;font-size:12px">${badge(m.pct)}</div>
-            </div>`).join('')}
-        </div>`;
-    } catch(e) {
-      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗: ${e.message}</div>`;
-    }
-  }
-
-  // ⑨ 競合分析（オークションインサイト）
-  async function loadAuctionInsight() {
-    const cid = parseInt(document.getElementById('clinicSelect')?.value || '1');
-    const el = document.getElementById('auctionInsightContent');
-    if (!el) return;
-    try {
-      const res = await fetch(`${window.API_BASE || ''}/api/competitor-analysis?clinic_id=${cid}`, {credentials:'include'});
-      const data = await res.json();
-      const competitors = data.competitors || [];
-      const myShare = data.my_impression_share;
-      const mockNote = data.mock ? `<div style="margin-bottom:10px;padding:8px 12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:11px;color:#f59e0b">⚠ ${data.message || 'デモデータを表示しています'}</div>` : '';
-      el.innerHTML = mockNote + `
-        <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
-          <div style="font-size:13px;color:var(--text-2)">自院インプレッションシェア:</div>
-          <div style="font-size:20px;font-weight:800;color:#f1f5f9">${myShare !== null ? Math.round(myShare*100)+'%' : '─'}</div>
-        </div>
-        <table style="width:100%;font-size:12px;border-collapse:collapse">
-          <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.08);color:var(--text-3)">
-            <th style="text-align:left;padding:8px">競合</th>
-            <th style="text-align:right;padding:8px">IMP シェア</th>
-            <th style="text-align:right;padding:8px">重複率</th>
-            <th style="text-align:right;padding:8px">上位表示率</th>
-          </tr></thead>
-          <tbody>${competitors.map(c => `<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
-            <td style="padding:8px;color:#f1f5f9">${c.display_name}</td>
-            <td style="text-align:right;padding:8px;color:#f59e0b">${Math.round(c.impression_share*100)}%</td>
-            <td style="text-align:right;padding:8px;color:#94a3b8">${Math.round(c.overlap_rate*100)}%</td>
-            <td style="text-align:right;padding:8px;color:#ef4444">${Math.round(c.position_above_rate*100)}%</td>
-          </tr>`).join('')}</tbody>
-        </table>`;
-    } catch(e) {
-      el.innerHTML = `<div style="padding:12px;color:var(--text-3);font-size:13px">読み込みに失敗: ${e.message}</div>`;
-    }
-  }
-
   // ページ切替時に各機能をロード
   document.addEventListener('DOMContentLoaded', () => {
-    // ダッシュボード表示時に追加ウィジェットをロード
-    const origSwitchPage = window.switchPage;
-    if (origSwitchPage) {
-      window.switchPage = function(page) {
-        origSwitchPage(page);
-        if (page === 'dashboard') {
-          setTimeout(() => { loadWeeklyActions(); loadBenchmark(); }, 800);
-        }
-        if (page === 'competitor') {
-          setTimeout(() => loadAuctionInsight(), 300);
-        }
-      };
-    }
     // 初期ロード
-    setTimeout(() => { loadWeeklyActions(); loadBenchmark(); }, 2000);
+    // 週次アクション・ベンチマーク等は削除済みのため、ロード処理は行いません
   });
 
   // ── Google Ads 連携ステータス ──────────────────

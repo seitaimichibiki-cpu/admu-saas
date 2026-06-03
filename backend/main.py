@@ -795,45 +795,8 @@ def generate_ad_copy(req: AdCopyReq):
     return {"success": True, "id": copy_id, **result}
 
 @app.post("/api/analyze-report")
-async def analyze_report(file: UploadFile = File(...), clinic_id: int = 1):
-    ok, reason = db.check_ai_limit(clinic_id)
-    if not ok:
-        raise HTTPException(status_code=429, detail=reason)
-    gemini_key = db.get_gemini_api_key(clinic_id)
-    if not gemini_key:
-        # モックレスポンスを返す（デモ・テスト用）
-        db.increment_ai_quota(clinic_id, feature_name="lp_analysis")
-        return {"success": True, "analysis": {
-            "good_keywords": ["産後 骨盤矯正 渋谷", "腰痛 整体 治らない"],
-            "wasted_spend": ["肩こり セルフケア", "無料 マッサージ 腰痛"],
-            "demographic_trends": "30代〜40代の女性から特定の時間帯（10:00〜14:00）で高いコンバージョン率を確認しました。",
-            "recommendation": "・「産後骨盤矯正」キャンペーンの予算を+20%強化推奨\n・「セルフケア」「無料」などの検索語句の除外設定を推奨\n・地域：渋谷区・目黒区の入札強め設定をご提案します"
-        }}
-    
-    acc = db.get_ads_account(clinic_id) or {}
-    persona = {
-        "target_age_gender": acc.get("target_age_gender"),
-        "target_job_lifestyle": acc.get("target_job_lifestyle"),
-        "target_pain_point": acc.get("target_pain_point"),
-        "target_desired_outcome": acc.get("target_desired_outcome"),
-    }
-    
-    from report_analyzer import ReportAnalyzer
-    analyzer = ReportAnalyzer(api_key=gemini_key)
-    
-    try:
-        content = await file.read()
-        mime_type = file.content_type
-        if not mime_type:
-            mime_type = "application/pdf"
-            
-        result = analyzer.analyze_file(content, file.filename, mime_type, persona=persona)
-        db.increment_ai_quota(clinic_id, feature_name="lp_analysis")
-        return {"success": True, "analysis": result}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"レポート解析中にエラーが発生しました: {str(e)}")
+async def analyze_report(clinic_id: int = 1):
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 @app.get("/api/ad-copies")
 def list_ad_copies(clinic_id: int = 1, campaign_id: Optional[int] = None):
@@ -2827,62 +2790,7 @@ async def ai_chat(req: AiChatReq, request: Request):
 # ============================================================
 @app.get("/api/dashboard/weekly-actions")
 async def weekly_actions(clinic_id: int = 1):
-    """AIが今週すべき3アクションを生成"""
-    try:
-        gemini_key = db.get_gemini_api_key(clinic_id)
-
-        with db.get_conn() as conn:
-            camps = conn.execute(
-                """SELECT c.name, COALESCE(SUM(p.impressions),0) as impressions,
-                          COALESCE(SUM(p.clicks),0) as clicks,
-                          COALESCE(SUM(p.conversions),0) as conversions,
-                          COALESCE(SUM(p.cost_micros),0) as cost_micros
-                   FROM campaigns c
-                   LEFT JOIN performance_logs p ON c.id = p.campaign_id AND c.clinic_id = p.clinic_id
-                   WHERE c.clinic_id=? AND c.status='ENABLED'
-                   GROUP BY c.id LIMIT 10""",
-                (clinic_id,)
-            ).fetchall()
-            unread_alerts = conn.execute(
-                "SELECT message,level FROM alerts WHERE clinic_id=? AND notified=0 ORDER BY created_at DESC LIMIT 5",
-                (clinic_id,)
-            ).fetchall()
-
-        if not gemini_key or not camps:
-            return {"success": True, "generated_by": "static", "actions": [
-                {"priority":1,"icon":"🤖","title":"Gemini APIキーを設定","desc":"AIが広告を自動分析してアクションを提案します","urgency":"high"},
-                {"priority":2,"icon":"📊","title":"Google広告を連携","desc":"リアルタイムの広告成果データを監視できます","urgency":"medium"},
-                {"priority":3,"icon":"👤","title":"ペルソナを設定","desc":"AI広告文の精度が大幅に向上します","urgency":"low"},
-            ]}
-
-        camp_summary = "\n".join([
-            f"- {c['name']}: 費用¥{(c['cost_micros'] or 0)//1_000_000:,} CTR{round((c['clicks'] or 0)/max(c['impressions'] or 1,1)*100,2)}% CV{c['conversions'] or 0}"
-            for c in camps
-        ])
-        alert_text = "\n".join([f"- [{a['level']}] {a['message']}" for a in unread_alerts]) or "なし"
-
-        import google.genai as genai
-        client = genai.Client(api_key=gemini_key)
-        prompt = f"""整体院Google広告専門AIとして、以下のデータを元に今週すべき3アクションをJSONで返してください。
-
-【キャンペーン】\n{camp_summary}
-【未読アラート】\n{alert_text}
-
-JSON配列のみ返してください:
-[{{"priority":1,"icon":"絵文字","title":"アクション名(20字以内)","desc":"説明(60字以内)","urgency":"high/medium/low"}},...]"""
-        try:
-            resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-            import json, re as _re
-            m = _re.search(r"\[.*\]", resp.text.strip(), _re.DOTALL)
-            actions = json.loads(m.group(0))[:3] if m else []
-            db.increment_ai_usage(clinic_id)
-            return {"success": True, "generated_by": "ai", "actions": actions}
-        except Exception as e:
-            return {"success": True, "generated_by": "error", "actions": [], "error": str(e)}
-    except Exception as e:
-        return {"success": True, "generated_by": "error", "actions": [
-            {"priority":1,"icon":"⚠️","title":"データ取得エラー","desc":str(e)[:60],"urgency":"low"}
-        ], "error": str(e)}
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -2890,59 +2798,7 @@ JSON配列のみ返してください:
 # ============================================================
 @app.get("/api/benchmark")
 def get_benchmark(clinic_id: int = 1):
-    """業界匿名平均と自クリニックを比較"""
-    try:
-        with db.get_conn() as conn:
-            all_rows = conn.execute("""
-                SELECT p.clinic_id,
-                       AVG(CAST(p.clicks AS FLOAT)/NULLIF(p.impressions,0)) as ctr,
-                       AVG(CAST(p.conversions AS FLOAT)/NULLIF(p.clicks,0)) as cvr,
-                       AVG(CAST(p.cost_micros AS FLOAT)/NULLIF(p.conversions,0)/1000000) as cpa
-                FROM performance_logs p
-                WHERE p.impressions>0
-                GROUP BY p.clinic_id
-            """).fetchall()
-            my_row = conn.execute("""
-                SELECT AVG(CAST(clicks AS FLOAT)/NULLIF(impressions,0)) as ctr,
-                       AVG(CAST(conversions AS FLOAT)/NULLIF(clicks,0)) as cvr,
-                       AVG(CAST(cost_micros AS FLOAT)/NULLIF(conversions,0)/1000000) as cpa
-                FROM performance_logs WHERE clinic_id=? AND impressions>0
-            """, (clinic_id,)).fetchone()
-
-        if len(all_rows) < 2:
-            return {"success": True, "available": False,
-                    "message": "比較データが不足しています（複数テナントのデータが揃うと表示されます）"}
-
-        import statistics
-        def safe_mean(lst): return round(statistics.mean([x for x in lst if x]), 4) if any(lst) else None
-        def pct_rank(val, lst):
-            lst = [x for x in lst if x]; return round(sum(1 for x in lst if x < val)/max(len(lst),1)*100) if val and lst else None
-
-        ctrs = [r["ctr"] for r in all_rows]; cvrs = [r["cvr"] for r in all_rows]; cpas = [r["cpa"] for r in all_rows]
-        my_ctr = my_row["ctr"] if my_row else None
-        my_cvr = my_row["cvr"] if my_row else None
-        my_cpa = my_row["cpa"] if my_row else None
-
-        return {
-            "success": True, "available": True, "tenant_count": len(all_rows),
-            "industry_avg": {
-                "ctr": round((safe_mean(ctrs) or 0)*100, 2),
-                "cvr": round((safe_mean(cvrs) or 0)*100, 2),
-                "cpa": round(safe_mean(cpas) or 0),
-            },
-            "my_stats": {
-                "ctr": round((my_ctr or 0)*100, 2),
-                "cvr": round((my_cvr or 0)*100, 2),
-                "cpa": round(my_cpa or 0),
-            },
-            "percentile": {
-                "ctr": pct_rank(my_ctr, ctrs),
-                "cvr": pct_rank(my_cvr, cvrs),
-                "cpa_inv": 100 - pct_rank(my_cpa, cpas) if pct_rank(my_cpa, cpas) is not None else None,
-            }
-        }
-    except Exception as e:
-        return {"success": True, "available": False, "message": f"ベンチマークデータの取得に失敗しました: {str(e)}"}
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -3042,24 +2898,7 @@ def accept_invite(body: dict):
 # ============================================================
 @app.get("/api/competitor-analysis")
 def competitor_analysis(clinic_id: int = 1):
-    """オークションインサイトベースの競合分析（実データ or モック）"""
-    try:
-        acc = db.get_ads_account(clinic_id) or {}
-        if not acc.get("customer_id"):
-            return {"success": True, "mock": True,
-                "message": "Google広告の顧客IDを設定すると実際の競合データが表示されます",
-                "my_impression_share": 0.35,
-                "competitors": [
-                    {"display_name":"競合A（整体院）","impression_share":0.42,"overlap_rate":0.31,"position_above_rate":0.18},
-                    {"display_name":"競合B（カイロプラクティック）","impression_share":0.38,"overlap_rate":0.22,"position_above_rate":0.09},
-                    {"display_name":"競合C（鍼灸院）","impression_share":0.25,"overlap_rate":0.15,"position_above_rate":0.05},
-                ]}
-        from ads_client import AdsClient
-        client = AdsClient(acc)
-        data = client.get_auction_insights() if hasattr(AdsClient, 'get_auction_insights') else {}
-        return {"success": True, "mock": False, **data}
-    except Exception as e:
-        return {"success": True, "mock": True, "error": str(e), "competitors": [], "my_impression_share": None}
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -3135,64 +2974,7 @@ class CompetitorReq(BaseModel):
 
 @app.post("/api/competitor-analysis")
 async def competitor_analysis(req: CompetitorReq):
-    """競合院の広告文をAIで分析して差別化提案を生成"""
-    gemini_key = db.get_gemini_api_key(clinic_id)
-    if not gemini_key:
-        return {"success": False, "error": "GEMINI_API_KEYが設定されていません"}
-
-    # 自院のペルソナ・広告文を取得
-    personas = db.list_personas(req.clinic_id)
-    ad_copies = db.list_ad_copies(req.clinic_id)
-    my_headlines = []
-    for ac in ad_copies[:3]:
-        import json
-        try:
-            hs = json.loads(ac.get("headlines", "[]"))
-            my_headlines.extend(hs[:2])
-        except:
-            pass
-
-    import google.genai as genai
-    client = genai.Client(api_key=gemini_key)
-
-    prompt = f"""
-あなたは整体院・治療院のGoogle広告競合分析の最上位専門家です。
-整体院業界のGoogle広告における競合の典型的な訴求パターンとその弱点を把握しています。
-
-【分析エリア】{req.area}
-【サービス種別】{req.service_type}
-【自院の現在の広告文】
-{chr(10).join(my_headlines[:6]) if my_headlines else '（まだ広告文が生成されていません）'}
-
-【整体院業界の典型的な競合訴求パターン（参考）】
-- パターンA: 「初回限定○○円」「今なら○%OFF」→ 価格競争型（弱点: 割引終了後の離脱）
-- パターンB: 「駅徒歩○分」「完全予約制」→ 利便性訴求型（弱点: 差別化に乏しい）
-- パターンC: 「国家資格保有」「○○年の実績」→ 権威訴求型（弱点: 患者の具体的成果が見えない）
-- パターンD: 「腰痛専門院」「産後矯正専門」→ 専門特化型（弱点: ターゲット外顧客を完全に失う）
-- パターンE: 「口コミNo.1」「地域最安値」→ 実績/価格型（弱点: 証拠が弱い・価格競争になる）
-
-以下の形式でJSONのみ返してください：
-{{
-  "competitor_patterns": [
-    {{"pattern": "よく見られる競合の訴求パターン", "example": "実際の広告文例", "weakness": "この訴求の心理的・構造的弱点", "counter_strategy": "この競合に対して自院が取るべき対抗戦略"}}
-  ],
-  "differentiation_points": [
-    {{"point": "差別化ポイント", "how_to_use": "Google広告の見出し・説明文での具体的な活用方法（コピー例付き）"}}
-  ],
-  "recommended_headlines": ["競合に勝てる見出し例1（30文字以内）", "見出し例2", "見出し例3", "見出し例4", "見出し例5"],
-  "recommended_descriptions": ["説明文例1（90文字以内）", "説明文例2"],
-  "overall_strategy": "この地域・サービス種別における最適な広告戦略の総合提案"
-}}"""
-
-    try:
-        resp = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-        import json as _json, re
-        text = resp.text.strip()
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        result = _json.loads(m.group(0)) if m else {}
-        return {"success": True, "area": req.area, "analysis": result}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -4103,82 +3885,7 @@ class LtvSimReq(BaseModel):
 
 @app.post("/api/simulator/ltv")
 async def ltv_simulator(req: LtvSimReq):
-    """
-    患者LTV（生涯価値）から逆算して最適な広告予算・CPA上限を算出。
-    LTV-based biddingの概念を整体院向けに実装。
-    """
-    # --- LTV計算 ---
-    # 単純LTV（初回 + リピート）
-    initial_value = req.avg_unit_price * req.avg_visit_count
-    repeat_value  = initial_value * req.repeat_rate * 2  # リピーターはさらに2倍来院と仮定
-    ltv = round(initial_value + repeat_value)
-
-    # 適正CPA（LTV × 許容利益率）
-    optimal_cpa  = round(ltv * req.profit_margin)
-    max_safe_cpa = round(ltv * 0.50)  # 最大リスク許容CPA（LTVの50%）
-
-    # 必要予算
-    required_budget = round(optimal_cpa * req.target_monthly_cv)
-    current_cv_estimate = round(req.current_budget / optimal_cpa) if optimal_cpa > 0 else 0
-
-    # ROI計算
-    revenue = ltv * req.target_monthly_cv
-    roi = round((revenue - required_budget) / required_budget * 100) if required_budget > 0 else 0
-
-    current_roi = round((ltv * current_cv_estimate - req.current_budget) / req.current_budget * 100) if req.current_budget > 0 else 0
-
-    # 損益分岐点
-    breakeven_cv = round(req.current_budget / ltv) if ltv > 0 else 0
-    budget_safety = "safe" if current_cv_estimate > breakeven_cv * 1.5 else "warning" if current_cv_estimate > breakeven_cv else "danger"
-
-    # 予算シナリオ（3段階）
-    scenarios = []
-    for multiplier, label in [(0.75, "保守的"), (1.0, "標準"), (1.5, "積極的")]:
-        b = round(required_budget * multiplier)
-        cv = round(b / optimal_cpa) if optimal_cpa > 0 else 0
-        r = round((ltv * cv - b) / b * 100) if b > 0 else 0
-        scenarios.append({
-            "label": label,
-            "budget": b,
-            "expected_cv": cv,
-            "expected_roi": r,
-            "recommendation": "リスク最小" if multiplier < 1 else ("バランス型" if multiplier == 1 else "高成長狙い")
-        })
-
-    # AI解釈コメント生成
-    gemini_key = db.get_gemini_api_key(clinic_id)
-    ai_insight = ""
-    if gemini_key:
-        try:
-            import google.genai as genai
-            gc = genai.Client(api_key=gemini_key)
-            insight_prompt = f"""
-整体院のGoogle広告シミュレーション結果を踏まえ、院長向けの経営インサイトを1〜2文（100文字以内）で述べてください。
-数字を必ず含め、具体的なアドバイスにしてください。
-
-患者LTV: ¥{ltv:,} / 適正CPA: ¥{optimal_cpa:,} / 現在予算: ¥{req.current_budget:,} / 目標CV: {req.target_monthly_cv}件
-標準シナリオROI: +{roi}% / 現在推定CV: {current_cv_estimate}件
-"""
-            r = gc.models.generate_content(model='gemini-2.0-flash', contents=insight_prompt)
-            ai_insight = r.text.strip()
-        except:
-            ai_insight = f"患者LTV¥{ltv:,}に対し適正CPA上限は¥{optimal_cpa:,}です。現在の予算設定はROI+{current_roi}%と推定されます。"
-
-    return {
-        "success": True,
-        "ltv": ltv,
-        "optimal_cpa": optimal_cpa,
-        "max_safe_cpa": max_safe_cpa,
-        "required_budget": required_budget,
-        "current_cv_estimate": current_cv_estimate,
-        "target_monthly_cv": req.target_monthly_cv,
-        "roi": roi,
-        "current_roi": current_roi,
-        "breakeven_cv": breakeven_cv,
-        "budget_safety": budget_safety,
-        "scenarios": scenarios,
-        "ai_insight": ai_insight,
-    }
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -4376,60 +4083,7 @@ _SEASONAL_DATA = {
 
 @app.get("/api/seasonal-calendar")
 async def seasonal_calendar(clinic_id: int = 1, generate_copy: bool = False):
-    """
-    12ヶ月の整体院特化季節性カレンダーを返す。
-    generate_copy=Trueで当月のAI広告文も生成。
-    """
-    if generate_copy and not db.check_ai_quota_available(clinic_id):
-        raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
-    
-    import datetime
-    current_month = datetime.datetime.now().month
-    current_data  = _SEASONAL_DATA.get(current_month, {})
-    next_month    = (current_month % 12) + 1
-    next_data     = _SEASONAL_DATA.get(next_month, {})
-
-    result = {
-        "calendar": _SEASONAL_DATA,
-        "current_month": current_month,
-        "current": current_data,
-        "next_month": next_month,
-        "next": next_data,
-    }
-
-    if generate_copy:
-        gemini_key = db.get_gemini_api_key(clinic_id)
-        if gemini_key:
-            try:
-                import google.genai as genai
-                gc = genai.Client(api_key=gemini_key)
-                prompt = f"""
-あなたは整体院Google広告の季節特化コピーライターです。
-{current_data.get('month')}（テーマ: {current_data.get('theme')}）向けの
-Google広告見出し5本と説明文2本を生成してください。
-
-季節の主要な痛み: {', '.join(current_data.get('seasonal_pain', []))}
-推奨コピー角度: {current_data.get('copy_angle')}
-推奨キーワード: {', '.join(current_data.get('keywords', [])[:4])}
-
-【条件】
-- 見出し: 各30文字以内
-- 説明文: 各90文字以内
-- 症状名・地域密着・緊急性を必ず含める
-- 「無料相談」「当日予約OK」を1本に含める
-
-JSON形式のみで返答:
-{{"headlines": ["...", "...", "...", "...", "..."], "descriptions": ["...", "..."]}}"""
-                r = gc.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-                import json, re
-                m = re.search(r"\{.*\}", r.text.strip(), re.DOTALL)
-                if m:
-                    result["ai_copy"] = json.loads(m.group(0))
-            except:
-                pass
-    if generate_copy:
-        db.increment_ai_quota(clinic_id, feature_name="seasonal_calendar")
-    return {"success": True, **result}
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
@@ -4660,166 +4314,7 @@ async def negative_kw_ai_scan(clinic_id: int = 1):
 # ============================================================
 @app.get("/api/scorecard")
 async def ad_scorecard(clinic_id: int = 1):
-    """
-    整体院Google広告アカウントの健全度を10軸で診断。
-    各軸0-10点、合計100点満点。
-    改善ロードマップ（Month1/2/3）付き。
-    """
-    from ads_client import AdsClient
-    import datetime, random
-
-    acc = db.get_ads_account(clinic_id) or {}
-    client_ads = AdsClient(acc)
-
-    campaigns  = client_ads.list_campaigns()
-    perf_7d    = client_ads.get_performance_series(days=7)
-    ad_copies  = db.list_ad_copies(clinic_id)
-    nkws       = db.list_negative_keywords(clinic_id)
-    personas   = db.list_personas(clinic_id)
-    bid_rules  = db.list_bid_rules(clinic_id)
-    alerts     = db.list_alerts(clinic_id, limit=50)
-
-    enabled_cps = [c for c in campaigns if c.get("status") == "ENABLED"]
-    active_copy = [c for c in ad_copies  if c.get("status") == "active"]
-
-    def safe_sum(lst, key): return sum(p.get(key, 0) for p in lst)
-    total_cost = safe_sum(perf_7d, "cost_micros") / 1_000_000
-    total_cv   = safe_sum(perf_7d, "conversions")
-    total_clk  = safe_sum(perf_7d, "clicks")
-    total_imp  = safe_sum(perf_7d, "impressions")
-    avg_ctr    = round(total_clk / total_imp * 100, 2) if total_imp else 0
-    cpa        = round(total_cost / total_cv) if total_cv > 0 else 0
-
-    scores = {}
-
-    # 1. キャンペーン構造 (0-10)
-    s1 = min(10, len(enabled_cps) * 2)  # 5本以上で満点
-    has_remarketing = any("リターゲ" in c.get("name","") or "再来院" in c.get("name","") for c in enabled_cps)
-    has_branded     = any("指名" in c.get("name","") or "ブランド" in c.get("name","") for c in enabled_cps)
-    if has_remarketing: s1 = min(10, s1 + 2)
-    if has_branded:     s1 = min(10, s1 + 2)
-    scores["campaign_structure"] = {
-        "label": "キャンペーン構造", "icon": "🏗", "score": s1,
-        "detail": f"有効キャンペーン{len(enabled_cps)}本 / リターゲ{'あり' if has_remarketing else 'なし'} / 指名{'あり' if has_branded else 'なし'}",
-        "fix": "指名検索・リターゲの専用キャンペーンを追加" if not has_branded or not has_remarketing else "高評価",
-    }
-
-    # 2. 広告文品質 (0-10)
-    s2 = min(10, len(active_copy) * 3)  # 3本以上で満点
-    scores["ad_copy_quality"] = {
-        "label": "広告文品質", "icon": "✍️", "score": s2,
-        "detail": f"有効広告文{len(active_copy)}本",
-        "fix": "最低3パターンの広告文A/Bテストを設定" if len(active_copy) < 3 else "A/Bテスト継続",
-    }
-
-    # 3. 除外KW設定 (0-10)
-    s3 = min(10, len(nkws) // 3)
-    scores["negative_kw"] = {
-        "label": "除外KW設定", "icon": "🚫", "score": s3,
-        "detail": f"除外KW{len(nkws)}件設定済 (推奨: 30件以上)",
-        "fix": "AIスキャナーで業界標準除外KWを一括追加" if len(nkws) < 30 else "適切な水準",
-    }
-
-    # 4. CTR健全性 (0-10)
-    if avg_ctr >= 5.0:    s4 = 10
-    elif avg_ctr >= 3.5:  s4 = 8
-    elif avg_ctr >= 2.5:  s4 = 6
-    elif avg_ctr >= 1.5:  s4 = 4
-    else:                 s4 = 2
-    scores["ctr_health"] = {
-        "label": "CTR健全性", "icon": "📈", "score": s4,
-        "detail": f"現在CTR: {avg_ctr:.2f}% (整体院目標: 3.5%以上)",
-        "fix": "広告文の見出しに症状名・地域名を直接入れる" if avg_ctr < 3.5 else "高水準維持",
-    }
-
-    # 5. CPA効率 (0-10)
-    if cpa == 0:          s5 = 3
-    elif cpa <= 3000:     s5 = 10
-    elif cpa <= 5000:     s5 = 8
-    elif cpa <= 8000:     s5 = 5
-    else:                 s5 = 2
-    scores["cpa_efficiency"] = {
-        "label": "CPA効率", "icon": "💰", "score": s5,
-        "detail": f"現在CPA: {'¥'+f'{cpa:,}' if cpa > 0 else 'データ不足'} (目標: ¥5,000以下)",
-        "fix": "除外KW追加とLP改善でCPA削減" if cpa > 5000 else "優秀水準",
-    }
-
-    # 6. ペルソナ設定 (0-10)
-    s6 = min(10, len(personas) * 4)
-    scores["persona_setup"] = {
-        "label": "ターゲットペルソナ", "icon": "👥", "score": s6,
-        "detail": f"ペルソナ{len(personas)}件設定 (推奨: 3件)",
-        "fix": "腰痛・肩こり・産後など症状別ペルソナを追加" if len(personas) < 3 else "適切",
-    }
-
-    # 7. 入札ルール運用 (0-10)
-    s7 = min(10, len(bid_rules) * 3)
-    scores["bid_rules"] = {
-        "label": "入札ルール", "icon": "⚡", "score": s7,
-        "detail": f"入札ルール{len(bid_rules)}件設定",
-        "fix": "時間帯・曜日・デバイス別の入札ルールを設定" if len(bid_rules) < 3 else "適切",
-    }
-
-    # 8. アラート監視 (0-10)
-    unnotified = len([a for a in alerts if not a.get("notified")])
-    s8 = 10 if unnotified == 0 else max(0, 10 - unnotified)
-    scores["alert_monitoring"] = {
-        "label": "アラート監視", "icon": "🔔", "score": s8,
-        "detail": f"未対処アラート{unnotified}件",
-        "fix": "アラートページで未対処の警告を処理" if unnotified > 0 else "問題なし",
-    }
-
-    # 9. データ活用度 (0-10) — ペルソナ+除外+広告文の活用度合い
-    data_score = 0
-    if len(personas) > 0:  data_score += 3
-    if len(nkws) >= 10:    data_score += 3
-    if len(active_copy) >= 2: data_score += 4
-    scores["data_utilization"] = {
-        "label": "データ活用度", "icon": "📊", "score": data_score,
-        "detail": "ペルソナ・除外KW・AIコピーの活用状況",
-        "fix": "AI機能（KW提案・LP診断・競合分析）を積極的に活用" if data_score < 8 else "高活用率",
-    }
-
-    # 10. 予算最適化 (0-10)
-    total_budget = sum(c.get("budget_micros", 0) for c in enabled_cps) / 1_000_000
-    if total_cv > 0 and total_budget > 0:
-        budget_util = total_cost / (total_budget / 30)  # 月換算に対する実消化率
-        if 0.7 <= budget_util <= 1.0: s10 = 10
-        elif 0.5 <= budget_util < 0.7: s10 = 7
-        elif budget_util > 1.0: s10 = 5
-        else: s10 = 4
-    else:
-        s10 = 5
-    scores["budget_optimization"] = {
-        "label": "予算最適化", "icon": "🎯", "score": s10,
-        "detail": f"配信中キャンペーンの予算消化状況",
-        "fix": "日予算を引き上げて機会損失を防ぐ" if s10 < 7 else "適切な消化率",
-    }
-
-    total_score = sum(v["score"] for v in scores.values())
-    if total_score >= 85:   grade = "S"
-    elif total_score >= 70: grade = "A"
-    elif total_score >= 55: grade = "B"
-    elif total_score >= 40: grade = "C"
-    else:                   grade = "D"
-
-    # 改善ロードマップ（優先度順）
-    sorted_scores = sorted(scores.items(), key=lambda x: x[1]["score"])
-    roadmap = {
-        "month1": [{"axis": k, **v} for k, v in sorted_scores[:3]],
-        "month2": [{"axis": k, **v} for k, v in sorted_scores[3:6]],
-        "month3": [{"axis": k, **v} for k, v in sorted_scores[6:9]],
-    }
-
-    return {
-        "success": True,
-        "total_score": total_score,
-        "max_score": 100,
-        "grade": grade,
-        "scores": scores,
-        "roadmap": roadmap,
-        "generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
 
 
 # ============================================================
