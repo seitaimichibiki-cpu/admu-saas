@@ -521,25 +521,48 @@ def create_campaign(req: CampaignCreateReq):
     result = campaign_manager.auto_create_campaign(req.clinic_id, acc, req.model_dump())
     return {"success": True, "campaign": result}
 
-@app.patch("/api/campaigns/{campaign_id}/status")
-def update_campaign_status(campaign_id: int, status: str, clinic_id: int = 1, platform: str = "google"):
-    acc = _require_account(clinic_id)
-    campaign = db.get_campaign(campaign_id)
+def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
+    """campaign_id (ローカルDBのID(数値文字列) または Google広告のID) を元にキャンペーンを解決する。
+    見つからない場合は HTTPException(404) を発生させる。
+    """
+    campaign = None
+    # 1. ローカルIDでのパースと検索を試みる
+    try:
+        local_id = int(campaign_id)
+        campaign = db.get_campaign(local_id)
+        if campaign and campaign.get("clinic_id") != clinic_id:
+            campaign = None
+    except ValueError:
+        pass
+
+    # 2. 見つからない場合は google_campaign_id で検索する
+    if not campaign:
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM campaigns WHERE google_campaign_id=? AND clinic_id=?",
+                (str(campaign_id), clinic_id)
+            ).fetchone()
+            if row:
+                campaign = dict(row)
+
     if not campaign:
         raise HTTPException(404, "キャンペーンが見つかりません")
+    return campaign
+
+@app.patch("/api/campaigns/{campaign_id}/status")
+def update_campaign_status(campaign_id: str, status: str, clinic_id: int = 1, platform: str = "google"):
+    acc = _require_account(clinic_id)
+    campaign = _resolve_campaign(campaign_id, clinic_id)
     client = _get_ads_client(acc, platform)
     client.update_campaign_status(campaign.get("google_campaign_id", ""), status)
     db.upsert_campaign(clinic_id, {**campaign, "status": status})
     return {"success": True}
 
 @app.delete("/api/campaigns/{campaign_id}")
-def delete_campaign(campaign_id: int, clinic_id: int = 1, platform: str = "google"):
+def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
     """AdMuで作成したキャンペーンを削除する。Google Ads API側もREMOVEを試みる。"""
-    campaign = db.get_campaign(campaign_id)
-    if not campaign:
-        raise HTTPException(404, "キャンペーンが見つかりません")
-    if campaign.get("clinic_id") != clinic_id:
-        raise HTTPException(403, "アクセス権限がありません")
+    campaign = _resolve_campaign(campaign_id, clinic_id)
+    local_campaign_id = campaign["id"]
 
     api_warning = None
     try:
@@ -552,16 +575,16 @@ def delete_campaign(campaign_id: int, clinic_id: int = 1, platform: str = "googl
         api_warning = f"Google Ads APIでの削除に失敗しました（ローカルDBからは削除済み）: {str(e)}"
 
     with db.get_conn() as conn:
-        conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (campaign_id, clinic_id))
-        conn.execute("DELETE FROM performance_logs WHERE campaign_id=?", (campaign_id,))
-        conn.execute("DELETE FROM bid_rules WHERE campaign_id=?", (campaign_id,))
-        conn.execute("DELETE FROM alerts WHERE campaign_id=?", (campaign_id,))
-        conn.execute("DELETE FROM ad_copies WHERE campaign_id=?", (campaign_id,))
-        conn.execute("DELETE FROM negative_keywords WHERE campaign_id=?", (campaign_id,))
-        conn.execute("DELETE FROM campaign_personas WHERE campaign_id=? AND clinic_id=?", (str(campaign_id), clinic_id))
+        conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (local_campaign_id, clinic_id))
+        conn.execute("DELETE FROM performance_logs WHERE campaign_id=?", (local_campaign_id,))
+        conn.execute("DELETE FROM bid_rules WHERE campaign_id=?", (local_campaign_id,))
+        conn.execute("DELETE FROM alerts WHERE campaign_id=?", (local_campaign_id,))
+        conn.execute("DELETE FROM ad_copies WHERE campaign_id=?", (local_campaign_id,))
+        conn.execute("DELETE FROM negative_keywords WHERE campaign_id=?", (local_campaign_id,))
+        conn.execute("DELETE FROM campaign_personas WHERE campaign_id=? AND clinic_id=?", (str(local_campaign_id), clinic_id))
         conn.commit()
 
-    result = {"success": True, "campaign_id": campaign_id}
+    result = {"success": True, "campaign_id": local_campaign_id}
     if api_warning:
         result["warning"] = api_warning
     return result
@@ -607,10 +630,12 @@ def ai_budget_allocate_endpoint(clinic_id: int = 1):
 
 # ---- API: 予算（手動・キャンペーン別） ----
 @app.post("/api/budget/{campaign_id}")
-def update_budget(campaign_id: int, req: BudgetUpdateReq):
+def update_budget(campaign_id: str, req: BudgetUpdateReq):
     """予算変更は手動のみ。"""
+    campaign = _resolve_campaign(campaign_id, req.clinic_id)
+    local_campaign_id = campaign["id"]
     try:
-        db.update_budget(campaign_id, req.clinic_id, req.budget_yen * 1_000_000)
+        db.update_budget(local_campaign_id, req.clinic_id, req.budget_yen * 1_000_000)
         return {"success": True, "budget_yen": req.budget_yen}
     except ValueError as e:
         raise HTTPException(400, str(e))
