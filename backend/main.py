@@ -483,21 +483,33 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     client = _get_ads_client(acc, platform)
     api_campaigns = client.list_campaigns()
     
-    # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート）
+    # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート/更新）
     db_campaigns = db.list_campaigns(clinic_id)
+    db_camp_map = {c.get("google_campaign_id"): c for c in db_campaigns if c.get("google_campaign_id")}
+    
     for c in api_campaigns:
-        exists = False
-        for db_c in db_campaigns:
-            if db_c.get("google_campaign_id") == str(c.get("id")):
-                exists = True
-                break
-        if not exists:
+        g_id = str(c.get("id"))
+        if g_id in db_camp_map:
+            # 既に存在する場合は最新情報に更新（同期）
+            db_c = db_camp_map[g_id]
+            if (db_c.get("status") != c.get("status") or 
+                db_c.get("budget_micros") != c.get("budget_micros") or 
+                db_c.get("name") != c.get("name")):
+                
+                db.upsert_campaign(clinic_id, {
+                    "id": db_c["id"],
+                    "name": c.get("name"),
+                    "status": c.get("status"),
+                    "google_campaign_id": g_id,
+                    "budget_micros": c.get("budget_micros", 0),
+                })
+        else:
+            # 新規検知したキャンペーンをローカルDBに登録
             db.upsert_campaign(clinic_id, {
                 "name": c.get("name"),
                 "status": c.get("status"),
-                "google_campaign_id": str(c.get("id")),
-                "platform": platform,
-                "daily_budget_micros": c.get("cost_micros", 0),
+                "google_campaign_id": g_id,
+                "budget_micros": c.get("budget_micros", 0),
             })
             
     db_campaigns = db.list_campaigns(clinic_id)
@@ -542,6 +554,12 @@ def delete_campaign(campaign_id: int, clinic_id: int = 1, platform: str = "googl
     with db.get_conn() as conn:
         conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (campaign_id, clinic_id))
         conn.execute("DELETE FROM performance_logs WHERE campaign_id=?", (campaign_id,))
+        conn.execute("DELETE FROM bid_rules WHERE campaign_id=?", (campaign_id,))
+        conn.execute("DELETE FROM alerts WHERE campaign_id=?", (campaign_id,))
+        conn.execute("DELETE FROM ad_copies WHERE campaign_id=?", (campaign_id,))
+        conn.execute("DELETE FROM negative_keywords WHERE campaign_id=?", (campaign_id,))
+        conn.execute("DELETE FROM campaign_personas WHERE campaign_id=? AND clinic_id=?", (str(campaign_id), clinic_id))
+        conn.commit()
 
     result = {"success": True, "campaign_id": campaign_id}
     if api_warning:

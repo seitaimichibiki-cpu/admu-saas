@@ -108,6 +108,8 @@ class _PGConnWrapper:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self._conn.rollback()
+        else:
+            self._conn.commit()
         self.close()
         return False
 
@@ -630,9 +632,9 @@ def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
     with get_conn() as conn:
         if data.get("id"):
             conn.execute("""
-                UPDATE campaigns SET name=?,status=?,target_region=?,updated_at=?
+                UPDATE campaigns SET name=?,status=?,budget_micros=?,target_region=?,updated_at=?
                 WHERE id=? AND clinic_id=?
-            """, (data["name"], data.get("status","ENABLED"), data.get("target_region",""),
+            """, (data["name"], data.get("status","ENABLED"), data.get("budget_micros",0), data.get("target_region",""),
                   datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data["id"], clinic_id))
             conn.commit()
             return data["id"]
