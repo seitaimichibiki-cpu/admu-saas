@@ -312,6 +312,55 @@ def _run_cleanup():
         print(f"[Monitor] 自動クリーンアップ失敗: {e}")
 
 
+def _collect_performance_data(clinic_id: int):
+    """
+    毎日深夜2:00: 契約クリニックの広告パフォーマンスデータを収集してDBに蓄積。
+
+    蓄積データ活用例:
+    - 管理者(石川さん)がクリニック横断でCTR/CVR/コスト推移を分析可能
+    - 整体院業界のベンチマーク算出（平均CTR・CPA等）
+    - 高パフォーマンスクリニックのベストプラクティス抽出
+    - 低パフォーマンスクリニックへの早期アラート強化
+    """
+    acc = _get_account_and_notify_config(clinic_id)
+    if not acc or acc.get("mock_mode", 1):
+        # モックモード（未設定）のクリニックはスキップ
+        return
+
+    try:
+        client = AdsClient(acc)
+        # 前日分（1日）のパフォーマンスデータを取得
+        perf_list = client.get_performance_series(days=1)
+        if not perf_list:
+            return
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        campaigns = db.list_campaigns(clinic_id)
+        camp_map = {c.get("google_campaign_id"): c["id"] for c in campaigns if c.get("google_campaign_id")}
+
+        saved = 0
+        for perf in perf_list:
+            g_camp_id = str(perf.get("campaign_id", ""))
+            local_camp_id = camp_map.get(g_camp_id)
+            db.insert_performance(clinic_id, {
+                "campaign_id": local_camp_id,
+                "date": perf.get("date", today),
+                "impressions": int(perf.get("impressions", 0)),
+                "clicks": int(perf.get("clicks", 0)),
+                "ctr": float(perf.get("ctr", 0)),
+                "avg_cpc_micros": int(perf.get("avg_cpc_micros", 0)),
+                "cost_micros": int(perf.get("cost_micros", 0)),
+                "conversions": float(perf.get("conversions", 0)),
+                "cvr": float(perf.get("cvr", 0)),
+            })
+            saved += 1
+
+        print(f"[Monitor] パフォーマンス自動収集完了 clinic_id={clinic_id} {saved}件保存")
+
+    except Exception as e:
+        print(f"[Monitor] パフォーマンス自動収集エラー clinic_id={clinic_id}: {e}")
+
+
 def _run_onboarding_followup_check():
     """毎朝10:00: 登録から3日・7日後も未完了のクリニックに自動フォローアップメールを送信"""
     try:
@@ -417,6 +466,11 @@ def start_scheduler():
             _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
             id=f"nkw_scan_{cid}", args=[cid], replace_existing=True
         )
+        # ③ 広告パフォーマンス自動収集（毎日深夜2:00）
+        _scheduler.add_job(
+            _collect_performance_data, CronTrigger(hour=2, minute=0),
+            id=f"perf_collect_{cid}", args=[cid], replace_existing=True
+        )
 
     # システム全体の日次稼働レポート（毎日 9:00 管理者宛）
     _scheduler.add_job(
@@ -488,6 +542,11 @@ def register_clinic_jobs(clinic_id: int):
         _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
         id=f"nkw_scan_{clinic_id}", args=[clinic_id], replace_existing=True
     )
+    # ③ 広告パフォーマンス自動収集（毎日深夜2:00）
+    _scheduler.add_job(
+        _collect_performance_data, CronTrigger(hour=2, minute=0),
+        id=f"perf_collect_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
     print(f"[Monitor] 新規クリニックのジョブを動的登録完了 (clinic_id={clinic_id})")
 
 
@@ -496,7 +555,7 @@ def unregister_clinic_jobs(clinic_id: int):
     global _scheduler
     if not _scheduler or not _scheduler.running:
         return
-    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_"]:
+    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_"]:
         job_id = f"{job_prefix}{clinic_id}"
         try:
             _scheduler.remove_job(job_id)

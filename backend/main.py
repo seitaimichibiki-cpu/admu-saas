@@ -346,11 +346,6 @@ class SettingsReq(BaseModel):
     smtp_pass: Optional[str] = None
     ga4_property_id: Optional[str] = None
     monthly_budget_yen: Optional[int] = None
-    yahoo_account_id: Optional[str] = None
-    yahoo_client_id: Optional[str] = None
-    yahoo_client_secret: Optional[str] = None
-    yahoo_refresh_token: Optional[str] = None
-    yahoo_mock_mode: Optional[int] = None
     # BYOK: 顧客自身のGemini APIキー
     gemini_api_key: Optional[str] = None
     # AI機能の月間呼び出し上限（0=無効, -1=無制限, 1以上=N回まで）
@@ -394,7 +389,6 @@ def _require_account(clinic_id: int) -> dict:
             "clinic_id": clinic_id,
             "mock_mode": 0 if has_creds else 1,
             "customer_id": customer_id,
-            "yahoo_mock_mode": 1,
             "developer_token":   master_token,
             "client_id":         master_cid,
             "client_secret":     master_secret,
@@ -407,8 +401,6 @@ def _require_account(clinic_id: int) -> dict:
             print(f"[_require_account] DBレコードなし・環境変数不足→モックモードで代替 (clinic_id={clinic_id})")
     if acc.get("mock_mode") is None:
         acc["mock_mode"] = 1
-    if acc.get("yahoo_mock_mode") is None:
-        acc["yahoo_mock_mode"] = 1
     return acc
 
 
@@ -1870,27 +1862,16 @@ def dev_autologin(request: Request, response: Response):
 def _get_plan_info(clinic_id: int) -> dict:
     """
     契約テーブルのplan_nameからプラン情報を返す。
-    plan_type: 'starter' = Googleのみ / 'standard' = Google+Yahoo
+    Google広告専用ツールとして整理済み。
     """
     contract = db.get_contract(clinic_id)
     plan_name = (contract.get("plan_name", "") if contract else "") or ""
-    plan_name_lower = plan_name.lower()
-
-    if any(kw in plan_name_lower for kw in ["starter", "スターター", "google only", "google_only"]):
-        plan_type = "starter"
-        yahoo_enabled = False
-    else:
-        # standard / スタンダード / 未契約 (adminは全機能)
-        plan_type = "standard"
-        yahoo_enabled = True
 
     return {
         "plan_name":     plan_name or "スタンダード",
-        "plan_type":     plan_type,
-        "yahoo_enabled": yahoo_enabled,
+        "plan_type":     "standard",
         "features": {
             "google":          True,
-            "yahoo":           yahoo_enabled,
             "ai_budget":       True,
             "scorecard":       True,
             "seasonal":        True,

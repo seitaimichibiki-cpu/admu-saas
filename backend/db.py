@@ -165,9 +165,6 @@ def init_db():
             notification_email TEXT, smtp_user TEXT, smtp_pass TEXT,
             ga4_property_id TEXT, ga4_api_secret TEXT,
             monthly_budget_yen INTEGER DEFAULT 300000,
-            yahoo_account_id TEXT, yahoo_client_id TEXT,
-            yahoo_client_secret TEXT, yahoo_refresh_token TEXT,
-            yahoo_mock_mode INTEGER DEFAULT 1,
             logiction_integration_key TEXT,
             logiction_base_url TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
@@ -336,11 +333,7 @@ def init_db():
         "ALTER TABLE clinics ADD COLUMN plan_status TEXT DEFAULT 'active'",
         "ALTER TABLE clinics ADD COLUMN max_sub_accounts INTEGER DEFAULT 1",
         "ALTER TABLE clinics ADD COLUMN parent_clinic_id INTEGER DEFAULT NULL",
-        "ALTER TABLE ads_accounts ADD COLUMN yahoo_account_id TEXT",
-        "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_id TEXT",
-        "ALTER TABLE ads_accounts ADD COLUMN yahoo_client_secret TEXT",
-        "ALTER TABLE ads_accounts ADD COLUMN yahoo_refresh_token TEXT",
-        "ALTER TABLE ads_accounts ADD COLUMN yahoo_mock_mode INTEGER DEFAULT 1",
+        # Yahoo関連カラムは削除済み（旧DBの互換性のためマイグレーション履歴は残すが新規作成時には使用不可）
         # contractsテーブル: AI利用上限（プラン別設定用、-1=無制限）
         "ALTER TABLE contracts ADD COLUMN ai_quota_monthly INTEGER DEFAULT 30",
         # 顧客自身のGemini APIキー（BYOK: Bring Your Own Key）
@@ -518,7 +511,7 @@ def get_ads_account(clinic_id: int):
         if not row:
             return None
         data = dict(row)
-        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key"]
+        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "gemini_api_key"]
         for field in SECRET_FIELDS:
             if data.get(field):
                 try:
@@ -547,8 +540,7 @@ def save_ads_account(clinic_id: int, data: dict):
                   "login_customer_id", "mock_mode", "line_channel_token", "line_user_id",
                   "target_age_gender", "target_job_lifestyle", "target_pain_point", "target_desired_outcome",
                   "notification_email", "smtp_user", "smtp_pass", "ga4_property_id", "ga4_api_secret",
-                  "monthly_budget_yen", "yahoo_account_id", "yahoo_client_id", "yahoo_client_secret",
-                  "yahoo_refresh_token", "yahoo_mock_mode",
+                  "monthly_budget_yen",
                   "gemini_api_key", "ai_monthly_limit",
                   "google_link_status", "google_link_requested_at",
                   "logiction_integration_key", "logiction_base_url"]
