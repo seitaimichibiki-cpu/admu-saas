@@ -1273,21 +1273,23 @@ document.getElementById('runBidNowBtn').addEventListener('click', async () => {
 const uploadArea = document.getElementById('uploadArea');
 const reportFileInput = document.getElementById('reportFile');
 
-uploadArea.addEventListener('click', () => reportFileInput.click());
-uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
-uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-uploadArea.addEventListener('drop', (e) => {
-  e.preventDefault();
-  uploadArea.classList.remove('dragover');
-  if(e.dataTransfer.files && e.dataTransfer.files[0]) {
-    handleReportUpload(e.dataTransfer.files[0]);
-  }
-});
-reportFileInput.addEventListener('change', (e) => {
-  if(e.target.files && e.target.files[0]) {
-    handleReportUpload(e.target.files[0]);
-  }
-});
+if (uploadArea && reportFileInput) {
+  uploadArea.addEventListener('click', () => reportFileInput.click());
+  uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+  uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+  uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleReportUpload(e.dataTransfer.files[0]);
+    }
+  });
+  reportFileInput.addEventListener('change', (e) => {
+    if(e.target.files && e.target.files[0]) {
+      handleReportUpload(e.target.files[0]);
+    }
+  });
+}
 
 
 
