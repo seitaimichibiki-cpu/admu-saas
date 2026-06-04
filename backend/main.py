@@ -65,6 +65,26 @@ class MemoryCache:
 
 ads_cache = MemoryCache(ttl_seconds=300) # 5分キャッシュ
 
+
+class TemporaryDeletedCampaignCache:
+    def __init__(self, ttl_seconds: int = 120):
+        self.ttl = ttl_seconds
+        self._deleted = {}
+
+    def add(self, google_campaign_id: str):
+        if google_campaign_id:
+            self._deleted[google_campaign_id] = time.time() + self.ttl
+
+    def is_deleted(self, google_campaign_id: str) -> bool:
+        if not google_campaign_id:
+            return False
+        now = time.time()
+        self._deleted = {k: v for k, v in self._deleted.items() if now < v}
+        return google_campaign_id in self._deleted
+
+recent_deleted_campaigns = TemporaryDeletedCampaignCache(ttl_seconds=120)
+
+
 # ---- Lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -457,7 +477,10 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
         try:
             raw_campaigns = client.list_campaigns()
             # REMOVEDのキャンペーンを除去
-            campaigns = [c for c in raw_campaigns if c.get("status") != "REMOVED"]
+            campaigns = [
+                c for c in raw_campaigns
+                if c.get("status") != "REMOVED" and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+            ]
             if use_cache:
                 ads_cache.set(camp_cache_key, campaigns)
         except Exception as e:
@@ -535,7 +558,10 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
 
     if api_campaigns is None:
         # 削除済み（REMOVED）のキャンペーンは一覧から除外し、同期の対象外にする
-        api_campaigns = [c for c in client.list_campaigns() if c.get("status") != "REMOVED"]
+        api_campaigns = [
+            c for c in client.list_campaigns()
+            if c.get("status") != "REMOVED" and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+        ]
         if use_cache:
             ads_cache.set(camp_cache_key, api_campaigns)
     
@@ -630,6 +656,7 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
         g_id = campaign.get("google_campaign_id", "")
         if g_id:
             client.update_campaign_status(g_id, "REMOVED")
+            recent_deleted_campaigns.add(str(g_id))
     except Exception as e:
         err_msg = str(e)
         # 既にGoogle広告側で削除されている場合、動画広告などAPI経由の変更操作が許可されていない場合は無視（正常終了扱い）
