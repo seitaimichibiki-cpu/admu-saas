@@ -950,7 +950,7 @@ async function loadCampaigns() {
       return;
     }
     wrap.innerHTML = campaigns.map(c => `
-      <div class="campaign-item">
+      <div class="campaign-item" id="campaign-item-${c.id}">
         <div class="campaign-header">
           <div class="campaign-name">${c.name}</div>
           <span class="status-badge ${c.status?.toLowerCase()}">${c.status}</span>
@@ -986,12 +986,60 @@ window.toggleCampaign = toggleCampaign;
 
 async function deleteCampaign(id, name) {
   if (!confirm(`キャンペーン「${name}」を削除しますか？\n\nこの操作は元に戻せません。Google Ads上のキャンペーンも削除（REMOVED）されます。`)) return;
+
+  const el = document.getElementById(`campaign-item-${id}`);
+  let currentHeight = 0;
+  if (el) {
+    currentHeight = el.offsetHeight;
+    el.style.maxHeight = currentHeight + 'px';
+    el.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+    el.style.overflow = 'hidden';
+    
+    // トランジションを開始
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'scale(0.9) translateY(20px)';
+        el.style.maxHeight = '0px';
+        el.style.paddingTop = '0px';
+        el.style.paddingBottom = '0px';
+        el.style.marginTop = '0px';
+        el.style.marginBottom = '0px';
+        el.style.borderWidth = '0px';
+      });
+    });
+  }
+
   try {
     const res = await api(`/campaigns/${id}?clinic_id=${currentClinicId}&platform=${currentPlatform}`, { method:'DELETE', body:'{}' });
     if (res.warning) toast('⚠️ ' + res.warning, 'warning', 6000);
     else toast(`キャンペーン「${name}」を削除しました`, 'success');
-    loadCampaigns();
+    
+    // アニメーション完了後にDOMから削除し、リストを更新する
+    setTimeout(() => {
+      if (el) el.remove();
+      loadCampaigns();
+    }, 500);
   } catch(e) {
+    // 削除が失敗した場合はUIを復元する
+    if (el) {
+      el.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+      el.style.maxHeight = currentHeight + 'px';
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+      el.style.paddingTop = '';
+      el.style.paddingBottom = '';
+      el.style.marginTop = '';
+      el.style.marginBottom = '';
+      el.style.borderWidth = '';
+      
+      // アニメーション完了後にスタイルをクリーンアップ
+      setTimeout(() => {
+        el.style.transition = '';
+        el.style.maxHeight = '';
+        el.style.overflow = '';
+      }, 500);
+    }
     toast('削除失敗: ' + e.message, 'error');
   }
 }

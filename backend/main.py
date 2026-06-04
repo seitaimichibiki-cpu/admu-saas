@@ -43,6 +43,28 @@ STRIPE_PRICE_STANDARD = os.environ.get("STRIPE_PRICE_STANDARD", "price_standard_
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8001")
 
 
+class MemoryCache:
+    def __init__(self, ttl_seconds: int = 300):
+        self.ttl = ttl_seconds
+        self._cache = {}
+
+    def get(self, key: str):
+        if key in self._cache:
+            val, expire_time = self._cache[key]
+            if time.time() < expire_time:
+                return val
+            else:
+                del self._cache[key]
+        return None
+
+    def set(self, key: str, val):
+        self._cache[key] = (val, time.time() + self.ttl)
+
+    def clear(self):
+        self._cache.clear()
+
+ads_cache = MemoryCache(ttl_seconds=300) # 5分キャッシュ
+
 # ---- Lifespan ----
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -419,21 +441,43 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
 
+    use_cache = not client.mock_mode
+    camp_cache_key = f"campaigns_{clinic_id}_{platform}"
+    perf_cache_key = f"perf_{clinic_id}_{platform}_{days}_{start_date}_{end_date}"
+
     api_error = None
     campaigns = []
     perf_series = []
 
-    try:
-        campaigns = client.list_campaigns()
-    except Exception as e:
-        api_error = str(e)[:200]
-        print(f"[Dashboard] list_campaigns error: {e}")
+    # 1. キャンペーンリストの取得（キャッシュ優先）
+    if use_cache:
+        campaigns = ads_cache.get(camp_cache_key)
 
-    try:
-        perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
-    except Exception as e:
-        api_error = api_error or str(e)[:200]
-        print(f"[Dashboard] get_performance_series error: {e}")
+    if campaigns is None:
+        try:
+            raw_campaigns = client.list_campaigns()
+            # REMOVEDのキャンペーンを除去
+            campaigns = [c for c in raw_campaigns if c.get("status") != "REMOVED"]
+            if use_cache:
+                ads_cache.set(camp_cache_key, campaigns)
+        except Exception as e:
+            api_error = str(e)[:200]
+            campaigns = []
+            print(f"[Dashboard] list_campaigns error: {e}")
+
+    # 2. パフォーマンスログの取得（キャッシュ優先）
+    if use_cache:
+        perf_series = ads_cache.get(perf_cache_key)
+
+    if perf_series is None:
+        try:
+            perf_series = client.get_performance_series(days=days, start_date=start_date, end_date=end_date)
+            if use_cache:
+                ads_cache.set(perf_cache_key, perf_series)
+        except Exception as e:
+            api_error = api_error or str(e)[:200]
+            perf_series = []
+            print(f"[Dashboard] get_performance_series error: {e}")
 
     alerts = db.list_alerts(clinic_id, limit=10)
     total_cost = sum(p.get("cost_micros", 0) for p in perf_series)
@@ -481,8 +525,19 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
 def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
-    # 削除済み（REMOVED）のキャンペーンは一覧から除外し、同期の対象外にする
-    api_campaigns = [c for c in client.list_campaigns() if c.get("status") != "REMOVED"]
+
+    use_cache = not client.mock_mode
+    camp_cache_key = f"campaigns_{clinic_id}_{platform}"
+    
+    api_campaigns = None
+    if use_cache:
+        api_campaigns = ads_cache.get(camp_cache_key)
+
+    if api_campaigns is None:
+        # 削除済み（REMOVED）のキャンペーンは一覧から除外し、同期の対象外にする
+        api_campaigns = [c for c in client.list_campaigns() if c.get("status") != "REMOVED"]
+        if use_cache:
+            ads_cache.set(camp_cache_key, api_campaigns)
     
     # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート/更新）
     db_campaigns = db.list_campaigns(clinic_id)
@@ -518,6 +573,7 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
 
 @app.post("/api/campaigns")
 def create_campaign(req: CampaignCreateReq):
+    ads_cache.clear()
     acc = _require_account(req.clinic_id)
     result = campaign_manager.auto_create_campaign(req.clinic_id, acc, req.model_dump())
     return {"success": True, "campaign": result}
@@ -552,6 +608,7 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
 
 @app.patch("/api/campaigns/{campaign_id}/status")
 def update_campaign_status(campaign_id: str, status: str, clinic_id: int = 1, platform: str = "google"):
+    ads_cache.clear()
     acc = _require_account(clinic_id)
     campaign = _resolve_campaign(campaign_id, clinic_id)
     client = _get_ads_client(acc, platform)
@@ -612,6 +669,7 @@ class MonthlyBudgetReq(BaseModel):
 @app.post("/api/budget/monthly-target")
 def set_monthly_budget(req: MonthlyBudgetReq):
     """ユーザーが月間総予算を設定。ai_auto_allocate=True の場合、即座にAI配分も実行。"""
+    ads_cache.clear()
     acc = db.get_ads_account(req.clinic_id) or {}
     db.save_ads_account(req.clinic_id, {
         **acc,
@@ -629,6 +687,7 @@ def set_monthly_budget(req: MonthlyBudgetReq):
 @app.post("/api/budget/ai-allocate")
 def ai_budget_allocate_endpoint(clinic_id: int = 1):
     """AIがキャンペーン別パフォーマンスを解析し月間予算を最適配分。"""
+    ads_cache.clear()
     if not db.check_ai_quota_available(clinic_id):
         raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
     acc = db.get_ads_account(clinic_id) or {}
@@ -644,6 +703,7 @@ def ai_budget_allocate_endpoint(clinic_id: int = 1):
 @app.post("/api/budget/{campaign_id}")
 def update_budget(campaign_id: str, req: BudgetUpdateReq):
     """予算変更は手動のみ。"""
+    ads_cache.clear()
     campaign = _resolve_campaign(campaign_id, req.clinic_id)
     local_campaign_id = campaign["id"]
     try:
