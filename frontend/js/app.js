@@ -2990,7 +2990,6 @@ window.switchPerfDays = function(days, btn) {
 
 async function loadAdminPerformance() {
   const tableEl   = document.getElementById('adminPerfClinicTable');
-  const benchEl   = document.getElementById('adminPerfBenchmark');
   const trendEl   = document.getElementById('adminPerfTrendChart');
   const cvEl      = document.getElementById('adminPerfCvChart');
   const cardsEl   = document.getElementById('adminPerfSummaryCards');
@@ -2998,7 +2997,7 @@ async function loadAdminPerformance() {
   if (!tableEl) return;
 
   // ローディング
-  [tableEl, benchEl, trendEl, cvEl].forEach(el => {
+  [tableEl, trendEl, cvEl].forEach(el => {
     if (el) el.innerHTML = '<div class="loading-state"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div></div>';
   });
   if (cardsEl) cardsEl.innerHTML = '';
@@ -3084,36 +3083,10 @@ async function loadAdminPerformance() {
         </div>`;
     }
 
-    // ── 4. 業界ベンチマーク ──
-    if (!bench.clinics_with_data) {
-      benchEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px">ベンチマーク計算に必要なデータがまだありません</div>';
-    } else {
-      const bItems = [
-        { label: '平均CTR', val: bench.avg_ctr + '%', desc: 'クリック率（高いほどターゲット精度↑）', tip: '整骨院業界目安: 3〜6%', color: '#f59e0b' },
-        { label: '平均CVR', val: bench.avg_cvr + '%', desc: 'コンバージョン率', tip: 'LP品質指標', color: '#10b981' },
-        { label: '平均CPA', val: bench.avg_cpa_yen ? '¥' + bench.avg_cpa_yen.toLocaleString() : '-', desc: 'CV1件あたりの広告費', tip: '整骨院目安: ¥3,000〜¥8,000', color: '#6366f1' },
-        { label: '総消化費用', val: '¥' + (bench.total_cost_yen || 0).toLocaleString(), desc: `過去${_adminPerfDays}日 全院合計`, tip: '', color: '#ec4899' },
-        { label: '総CV件数', val: (bench.total_conversions || 0).toFixed(1) + '件', desc: '全院合計コンバージョン', tip: '', color: '#3b82f6' },
-      ];
-      benchEl.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
-          ${bItems.map(b => `
-            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;border-top:2px solid ${b.color}">
-              <div style="font-size:20px;font-weight:800;color:${b.color}">${b.val}</div>
-              <div style="font-size:11px;font-weight:700;color:var(--text-2);margin:4px 0 2px">${b.label}</div>
-              <div style="font-size:10px;color:var(--text-3)">${b.desc}</div>
-              ${b.tip ? `<div style="font-size:10px;color:var(--text-4);margin-top:4px">💡 ${b.tip}</div>` : ''}
-            </div>`).join('')}
-        </div>`;
-    }
 
   } catch(e) {
-    [tableEl, benchEl].forEach(el => {
-      if (el) el.innerHTML = `<div style="color:var(--red);padding:16px;font-size:12px">⚠️ 読み込み失敗: ${e.message}</div>`;
-    });
-    [trendEl, cvEl].forEach(el => {
-      if (el) el.innerHTML = '';
-    });
+    if (tableEl) tableEl.innerHTML = `<div style="color:var(--red);padding:16px;font-size:12px">⚠️ 読み込み失敗: ${e.message}</div>`;
+    [trendEl, cvEl].forEach(el => { if (el) el.innerHTML = ''; });
   }
 }
 
