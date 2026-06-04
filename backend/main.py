@@ -2513,6 +2513,56 @@ def logiction_list_patients(clinic_id: int = 1, limit: int = 100, offset: int = 
     return {"total": total, "patients": [dict(r) for r in rows]}
 
 
+@app.get("/api/logiction/export-customer-match")
+def logiction_export_customer_match(clinic_id: int = 1):
+    """
+    カスタマーマッチ用CSVエクスポート。
+    Google広告のオーディエンスマネージャーにアップロードできる形式で
+    全患者IDをCSVとして返す。
+    """
+    from fastapi.responses import StreamingResponse
+    import csv
+    import io
+    from datetime import datetime
+
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT patient_id, ltv_yen, first_visit_date FROM logiction_patients WHERE clinic_id=? ORDER BY ltv_yen DESC",
+            (clinic_id,)
+        ).fetchall()
+
+    if not rows:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"error": "患者データが存在しません"}, status_code=404)
+
+    # CSV生成
+    output = io.StringIO()
+    writer = csv.writer(output)
+    # Google広告カスタマーマッチ形式ヘッダー
+    writer.writerow(["Patient ID", "LTV(円)", "初来院日"])
+    for r in rows:
+        writer.writerow([
+            r["patient_id"],
+            r["ltv_yen"] if r["ltv_yen"] is not None else "",
+            r["first_visit_date"] if r["first_visit_date"] else "",
+        ])
+
+    csv_content = output.getvalue()
+    output.close()
+
+    today = datetime.now().strftime("%Y%m%d")
+    filename = f"customer_match_{today}_{len(rows)}patients.csv"
+
+    return StreamingResponse(
+        iter([csv_content.encode("utf-8-sig")]),  # BOM付きUTF-8（Excel対応）
+        media_type="text/csv; charset=utf-8-sig",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Patient-Count": str(len(rows)),
+        }
+    )
+
+
 # ============================================================
 # ---- LOGICTION 連携 セルフサーブ設定API ----
 # 顧客が開発者なしで自分でLOGICTION連携を設定できる仕組み

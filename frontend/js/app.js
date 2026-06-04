@@ -1915,20 +1915,35 @@ async function applyLogictionToAds() {
                 </div>`;
             }
 
-            // カスタマーマッチ: IDプレビュー表示
+            // カスタマーマッチ: IDプレビュー + CSVダウンロードボタン
             if (r.type === 'customer_match' && r.sample_ids && r.sample_ids.length > 0) {
               extraHtml += `
                 <div style="margin-top:8px">
                   <div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:5px">🔍 患者IDサンプル（先頭5件）</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:4px">
+                  <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
                     ${r.sample_ids.map(id => `<span style="background:rgba(100,116,139,0.15);color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:10px;font-family:monospace;border:1px solid rgba(100,116,139,0.25)">${id}</span>`).join('')}
                     ${r.patient_count > 5 ? `<span style="color:var(--text-3);font-size:10px;padding:2px 6px">他 ${r.patient_count - 5}名...</span>` : ''}
                   </div>
-                  <div style="margin-top:6px;font-size:10px;color:var(--text-3)">
-                    📤 Google広告 → オーディエンスマネージャー → カスタマーリスト → アップロード
+                  <button id="customerMatchCsvBtn" onclick="downloadCustomerMatchCsv()" style="
+                    display:inline-flex;align-items:center;gap:6px;
+                    background:linear-gradient(135deg,#334155,#1e293b);
+                    color:#94a3b8;border:1px solid rgba(100,116,139,0.35);
+                    border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;
+                    cursor:pointer;transition:all 0.2s;width:100%;justify-content:center;
+                    margin-bottom:6px;
+                  "
+                  onmouseover="this.style.background='linear-gradient(135deg,#475569,#334155)';this.style.color='#e2e8f0';this.style.borderColor='rgba(100,116,139,0.6)'"
+                  onmouseout="this.style.background='linear-gradient(135deg,#334155,#1e293b)';this.style.color='#94a3b8';this.style.borderColor='rgba(100,116,139,0.35)'">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    CSVダウンロード（${r.patient_count}名）
+                  </button>
+                  <div style="font-size:10px;color:var(--text-3);line-height:1.6;background:rgba(255,255,255,0.02);border-radius:6px;padding:6px 8px;border:1px solid rgba(255,255,255,0.05)">
+                    📤 <strong style="color:#64748b">アップロード手順：</strong>
+                    Google広告 → ツール → オーディエンスマネージャー → カスタマーリスト → CSVをアップロード → 除外オーディエンスとしてキャンペーンに設定
                   </div>
                 </div>`;
             }
+
 
             return `
               <div style="display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:8px;border-left:3px solid ${cfg.color}">
@@ -2006,6 +2021,48 @@ async function applyLogictionToAds() {
 window.loadLogictionAnalysis = loadLogictionAnalysis;
 window.applyLogictionToAds = applyLogictionToAds;
 window.loadLogictionIntegrationInfo = loadLogictionIntegrationInfo;
+
+async function downloadCustomerMatchCsv() {
+  const btn = document.getElementById('customerMatchCsvBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></div>ダウンロード中...`;
+  }
+  try {
+    const apiBase = window.API_BASE || '';
+    const url = `${apiBase}/api/logiction/export-customer-match?clinic_id=${currentClinicId}`;
+    const resp = await fetch(url, { credentials: 'include' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: `HTTPエラー ${resp.status}` }));
+      throw new Error(err.error || `HTTPエラー ${resp.status}`);
+    }
+    // ファイル名をレスポンスヘッダーから取得
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `customer_match_${new Date().toISOString().slice(0,10)}.csv`;
+    // Blobに変換してダウンロード
+    const blob = await resp.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+    const count = resp.headers.get('X-Patient-Count') || '?';
+    toast(`✅ カスタマーマッチCSVをダウンロードしました（${count}名）`, 'success', 5000);
+  } catch(e) {
+    toast('CSVダウンロード失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> CSVダウンロード`;
+    }
+  }
+}
+window.downloadCustomerMatchCsv = downloadCustomerMatchCsv;
+
 
 // ---- モード状態確認（本番切り替え診断） ----
 
