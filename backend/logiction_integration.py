@@ -86,16 +86,18 @@ def _auto_update_persona_from_patients(clinic_id: int, db):
         top_symptoms_str = "・".join([s[0] for s in top_symptoms]) if top_symptoms else ""
 
         top_area = conn.execute("""
-            SELECT address_pref, COUNT(*) as c FROM logiction_patients
-            WHERE clinic_id=? AND address_pref IS NOT NULL
-            GROUP BY address_pref ORDER BY c DESC LIMIT 1
+            SELECT address_pref, address_city,
+                   (COALESCE(address_pref,'') || ' ' || COALESCE(address_city,'')) as area_label,
+                   COUNT(*) as c FROM logiction_patients
+            WHERE clinic_id=? AND (address_pref IS NOT NULL OR address_city IS NOT NULL)
+            GROUP BY address_pref, address_city ORDER BY c DESC LIMIT 1
         """, (clinic_id,)).fetchone()
 
     gender_label = {"male": "男性", "female": "女性"}.get(
         (top_gender["gender"] if top_gender else ""), ""
     )
     age_label = top_age["age_group"] if top_age else ""
-    area_label = top_area["address_pref"] if top_area else ""
+    area_label = top_area["area_label"].strip() if top_area else ""
 
     acc = db.get_ads_account(clinic_id)
     if acc:
@@ -273,10 +275,18 @@ def handle_persona_analysis(clinic_id: int, db):
         """, (clinic_id,)).fetchall()
 
         area_rows = conn.execute(f"""
-            SELECT address_pref, COUNT(*) as cnt, AVG(ltv_yen) as avg_ltv
+            SELECT
+                address_pref,
+                address_city,
+                TRIM(COALESCE(address_pref,'') || ' ' || COALESCE(address_city,'')) as area_label,
+                COUNT(*) as cnt,
+                AVG(ltv_yen) as avg_ltv
             FROM logiction_patients
-            WHERE clinic_id={ph} AND address_pref IS NOT NULL
-            GROUP BY address_pref ORDER BY cnt DESC LIMIT 10
+            WHERE clinic_id={ph}
+              AND (address_pref IS NOT NULL OR address_city IS NOT NULL)
+            GROUP BY address_pref, address_city
+            ORDER BY cnt DESC
+            LIMIT 15
         """, (clinic_id,)).fetchall()
 
         all_symptoms_rows = conn.execute(f"""
@@ -478,13 +488,24 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
     # ========================================================
     area_data = insights.get("by_area", [])
     if area_data and len(area_data) > 0:
-        top_area = area_data[0]
+        # 上位エリア（市区町村単位）をリストアップ
+        top_areas = area_data[:5]
+        top_area = top_areas[0]
+        area_name = top_area.get("area_label") or top_area.get("address_city") or top_area.get("address_pref") or "不明"
+        area_list = [
+            (a.get("area_label") or a.get("address_city") or a.get("address_pref") or "不明", a.get("cnt", 0), int(a.get("avg_ltv", 0)))
+            for a in top_areas
+        ]
         recommendations.append({
             "type": "area",
-            "title": f"最多来院エリア: {top_area.get('address_pref', '不明')}",
+            "title": f"最多来院エリア（市区町村別）: {area_name}",
             "detail": f"{top_area.get('cnt', 0)}名来院（平均LTV ¥{int(top_area.get('avg_ltv', 0)):,}）",
-            "action": f"{top_area.get('address_pref', '')}への地域ターゲットを強化することを推奨します",
+            "action": f"{area_name}への地域ターゲットを強化することを推奨します",
             "avg_ltv": int(top_area.get("avg_ltv", 0)),
+            "area_breakdown": [
+                {"name": name, "cnt": cnt, "avg_ltv": ltv}
+                for name, cnt, ltv in area_list
+            ],
         })
 
     # ========================================================

@@ -1853,12 +1853,41 @@ async function applyLogictionToAds() {
         channel_google:  { icon: '🎯', color: '#6366f1', label: 'Google広告LTV' },
         symptom:         { icon: '🩺', color: '#f59e0b', label: '症状キーワード' },
         keyword_suggestion: { icon: '🔑', color: '#a855f7', label: 'KW推奨' },
-        area:            { icon: '📍', color: '#3b82f6', label: 'エリア戦略' },
+        area:            { icon: '📍', color: '#3b82f6', label: 'エリア戦略（市区町村）' },
       };
       const recHtml = recList.length === 0
         ? `<div style="font-size:12px;color:var(--text-3);padding:8px 0">推奨事項なし</div>`
         : recList.map(r => {
             const cfg = typeConfig[r.type] || { icon: '💡', color: '#6366f1', label: '推奨' };
+
+            // エリア戦略の場合: 市区町村ランキングを表示
+            let extraHtml = '';
+            if (r.type === 'area' && r.area_breakdown && r.area_breakdown.length > 0) {
+              const maxCnt = Math.max(...r.area_breakdown.map(a => a.cnt), 1);
+              extraHtml = `
+                <div style="margin-top:8px">
+                  <div style="font-size:10px;color:#3b82f6;font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.04em">📊 来院数ランキング（市区町村）</div>
+                  ${r.area_breakdown.map((a, i) => {
+                    const pct = Math.round((a.cnt / maxCnt) * 100);
+                    const isBest = i === 0;
+                    return `
+                      <div style="margin-bottom:5px">
+                        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">
+                          <span style="color:${isBest ? '#3b82f6' : 'var(--text-2)'};font-weight:${isBest ? 700 : 400}">${isBest ? '🏆 ' : ''}${a.name}</span>
+                          <span style="color:var(--text-3)">${a.cnt}名 <span style="color:var(--text-1);font-weight:600">¥${a.avg_ltv.toLocaleString()}</span></span>
+                        </div>
+                        <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px">
+                          <div style="height:100%;width:${pct}%;background:${isBest ? '#3b82f6' : '#334155'};border-radius:2px;transition:width 0.5s ease"></div>
+                        </div>
+                      </div>`;
+                  }).join('')}
+                </div>`;
+            }
+            // キーワードタグ
+            if (r.keywords) {
+              extraHtml += `<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${r.keywords.map(k=>`<span style="background:rgba(168,85,247,0.15);color:#a855f7;padding:2px 7px;border-radius:10px;font-size:10px;border:1px solid rgba(168,85,247,0.25)">${k}</span>`).join('')}</div>`;
+            }
+
             return `
               <div style="display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:8px;border-left:3px solid ${cfg.color}">
                 <span style="font-size:18px;line-height:1.2">${cfg.icon}</span>
@@ -1867,10 +1896,11 @@ async function applyLogictionToAds() {
                   <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:3px">${r.title}</div>
                   <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">${r.detail}</div>
                   <div style="font-size:11px;color:var(--text-3);line-height:1.4">→ ${r.action}</div>
-                  ${r.keywords ? `<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${r.keywords.map(k=>`<span style="background:rgba(168,85,247,0.15);color:#a855f7;padding:2px 7px;border-radius:10px;font-size:10px;border:1px solid rgba(168,85,247,0.25)">${k}</span>`).join('')}</div>` : ''}
+                  ${extraHtml}
                 </div>
               </div>`;
           }).join('');
+
 
       // --- サマリー ---
       const totalP = res.total_patients_analyzed || 0;
