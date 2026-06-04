@@ -482,6 +482,24 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
     api_campaigns = client.list_campaigns()
+    
+    # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート）
+    db_campaigns = db.list_campaigns(clinic_id)
+    for c in api_campaigns:
+        exists = False
+        for db_c in db_campaigns:
+            if db_c.get("google_campaign_id") == str(c.get("id")):
+                exists = True
+                break
+        if not exists:
+            db.upsert_campaign(clinic_id, {
+                "name": c.get("name"),
+                "status": c.get("status"),
+                "google_campaign_id": str(c.get("id")),
+                "platform": platform,
+                "daily_budget_micros": c.get("cost_micros", 0),
+            })
+            
     db_campaigns = db.list_campaigns(clinic_id)
     return {"campaigns": api_campaigns, "local_campaigns": db_campaigns}
 
