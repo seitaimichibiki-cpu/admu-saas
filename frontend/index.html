@@ -1173,7 +1173,8 @@
           <button id="adminTabContracts" class="range-btn"              onclick="switchAdminTab('contracts')" style="flex:1;min-width:90px">📝 契約</button>
           <button id="adminTabAdd"       class="range-btn"              onclick="switchAdminTab('add')"       style="flex:1;min-width:110px">➕ 追加</button>
           <button id="adminTabAnnounce"  class="range-btn"              onclick="switchAdminTab('announce')"  style="flex:1;min-width:90px">📢 お知らせ</button>
-          <button id="adminTabInquiry"   class="range-btn"              onclick="switchAdminTab('inquiry')"   style="flex:1;min-width:100px">📩 問い合わせ</button>
+          <button id="adminTabInquiry"     class="range-btn"              onclick="switchAdminTab('inquiry')"     style="flex:1;min-width:100px">📩 問い合わせ</button>
+          <button id="adminTabPerformance" class="range-btn"              onclick="switchAdminTab('performance')" style="flex:1;min-width:110px">📈 実績分析</button>
         </div>
 
         <!-- 広告数値タブ -->
@@ -1321,6 +1322,48 @@
             <div id="inquiryEmpty" style="display:none;text-align:center;padding:40px;color:var(--text-3);font-size:13px">
               まだ問い合わせはありません
             </div>
+          </div>
+        </div>
+
+        <!-- 広告実績分析タブ -->
+        <div id="adminTabPane-performance" style="display:none">
+          <!-- KPIサマリーカード -->
+          <div id="adminPerfSummaryCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px"></div>
+
+          <!-- 期間切り替え -->
+          <div style="display:flex;gap:6px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+            <button class="range-btn range-active" id="adminPerfBtn7"  onclick="switchPerfDays(7, this)">7日</button>
+            <button class="range-btn" id="adminPerfBtn30" onclick="switchPerfDays(30, this)">30日</button>
+            <button class="range-btn" id="adminPerfBtn90" onclick="switchPerfDays(90, this)">90日</button>
+            <span id="adminPerfMeta" style="margin-left:auto;font-size:11px;color:var(--text-3)"></span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+            <!-- 日次費用トレンド -->
+            <div class="card" style="padding:16px">
+              <h3 class="card-title" style="margin-bottom:12px">📉 日次広告費トレンド（全院合計）</h3>
+              <div id="adminPerfTrendChart" style="height:160px;position:relative"></div>
+            </div>
+            <!-- 日次CV数トレンド -->
+            <div class="card" style="padding:16px">
+              <h3 class="card-title" style="margin-bottom:12px">🎯 日次コンバージョントレンド（全院合計）</h3>
+              <div id="adminPerfCvChart" style="height:160px;position:relative"></div>
+            </div>
+          </div>
+
+          <!-- クリニック別KPIランキング -->
+          <div class="card" style="padding:16px;margin-bottom:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <h3 class="card-title" style="margin:0">🏆 クリニック別 KPIランキング</h3>
+              <button class="btn btn-secondary" onclick="loadAdminPerformance()" style="font-size:11px;padding:4px 10px">🔄 更新</button>
+            </div>
+            <div id="adminPerfClinicTable"><div class="loading-state"><div class="spinner"></div><span>読み込み中...</span></div></div>
+          </div>
+
+          <!-- 業界ベンチマーク -->
+          <div class="card" style="padding:16px">
+            <h3 class="card-title" style="margin-bottom:12px">📊 業界ベンチマーク（全院平均）</h3>
+            <div id="adminPerfBenchmark"><div class="loading-state"><div class="spinner"></div></div></div>
           </div>
         </div>
 

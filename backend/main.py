@@ -3305,6 +3305,162 @@ def admin_overview(request: Request, start: Optional[str] = None, end: Optional[
     return {"clinics": db.get_admin_overview(start, end)}
 
 
+@app.get("/api/admin/performance-analysis")
+def admin_performance_analysis(
+    request: Request,
+    days: int = 30,
+    password: str = "",
+    authorization: Optional[str] = Header(None)
+):
+    """
+    全クリニック横断の広告実績分析（管理者専用）。
+    performance_logs テーブルに蓄積されたデータを集計し、
+    - クリニック別KPIランキング
+    - 業界ベンチマーク（CTR/CVR/CPA平均）
+    - 日次トレンド（費用・CV数）
+    を返す。
+    """
+    _check_admin(password, authorization, request)
+    import datetime as _dt
+
+    ph = "%s" if db.USE_PG else "?"
+    days_str = f"-{days}" if not db.USE_PG else None
+
+    with db.get_conn() as conn:
+        # ── 1. クリニック別集計 ──
+        if db.USE_PG:
+            clinic_rows = conn.execute(f"""
+                SELECT
+                    p.clinic_id,
+                    c.name as clinic_name,
+                    COUNT(DISTINCT p.date) as data_days,
+                    SUM(p.impressions) as impressions,
+                    SUM(p.clicks) as clicks,
+                    SUM(p.cost_micros) as cost_micros,
+                    SUM(p.conversions) as conversions,
+                    AVG(p.ctr) as avg_ctr,
+                    AVG(p.cvr) as avg_cvr
+                FROM performance_logs p
+                JOIN clinics c ON c.id = p.clinic_id
+                WHERE p.date >= (CURRENT_DATE - INTERVAL '{days} days')
+                GROUP BY p.clinic_id, c.name
+                ORDER BY SUM(p.cost_micros) DESC
+            """).fetchall()
+        else:
+            clinic_rows = conn.execute(f"""
+                SELECT
+                    p.clinic_id,
+                    c.name as clinic_name,
+                    COUNT(DISTINCT p.date) as data_days,
+                    SUM(p.impressions) as impressions,
+                    SUM(p.clicks) as clicks,
+                    SUM(p.cost_micros) as cost_micros,
+                    SUM(p.conversions) as conversions,
+                    AVG(p.ctr) as avg_ctr,
+                    AVG(p.cvr) as avg_cvr
+                FROM performance_logs p
+                JOIN clinics c ON c.id = p.clinic_id
+                WHERE p.date >= date('now', ? || ' days', 'localtime')
+                GROUP BY p.clinic_id, c.name
+                ORDER BY SUM(p.cost_micros) DESC
+            """, (f"-{days}",)).fetchall()
+
+        # ── 2. 日次トレンド（全クリニック合計） ──
+        if db.USE_PG:
+            trend_rows = conn.execute(f"""
+                SELECT
+                    date,
+                    SUM(impressions) as impressions,
+                    SUM(clicks) as clicks,
+                    SUM(cost_micros) as cost_micros,
+                    SUM(conversions) as conversions
+                FROM performance_logs
+                WHERE date >= (CURRENT_DATE - INTERVAL '{days} days')
+                GROUP BY date
+                ORDER BY date ASC
+            """).fetchall()
+        else:
+            trend_rows = conn.execute("""
+                SELECT
+                    date,
+                    SUM(impressions) as impressions,
+                    SUM(clicks) as clicks,
+                    SUM(cost_micros) as cost_micros,
+                    SUM(conversions) as conversions
+                FROM performance_logs
+                WHERE date >= date('now', ? || ' days', 'localtime')
+                GROUP BY date
+                ORDER BY date ASC
+            """, (f"-{days}",)).fetchall()
+
+        # ── 3. ログ蓄積件数（データ品質確認） ──
+        total_log_count = conn.execute(
+            f"SELECT COUNT(*) as c FROM performance_logs WHERE date >= {'(CURRENT_DATE - INTERVAL ' + repr(str(days) + ' days') + ')' if db.USE_PG else \"date('now', ? || ' days', 'localtime')\"}"
+            if db.USE_PG else "SELECT COUNT(*) as c FROM performance_logs WHERE date >= date('now', ? || ' days', 'localtime')",
+            () if db.USE_PG else (f"-{days}",)
+        ).fetchone()["c"]
+
+    # クリニック別KPI計算
+    clinic_stats = []
+    for r in clinic_rows:
+        cost_yen = round((r["cost_micros"] or 0) / 1_000_000)
+        convs = float(r["conversions"] or 0)
+        clicks = int(r["clicks"] or 0)
+        imps = int(r["impressions"] or 0)
+        ctr = round(float(r["avg_ctr"] or 0) * 100, 2)
+        cvr = round(float(r["avg_cvr"] or 0) * 100, 2)
+        cpa_yen = round(cost_yen / convs) if convs > 0 else None
+        cpc_yen = round(cost_yen / clicks) if clicks > 0 else None
+        clinic_stats.append({
+            "clinic_id": r["clinic_id"],
+            "clinic_name": r["clinic_name"],
+            "data_days": r["data_days"],
+            "impressions": imps,
+            "clicks": clicks,
+            "cost_yen": cost_yen,
+            "conversions": round(convs, 1),
+            "ctr": ctr,
+            "cvr": cvr,
+            "cpa_yen": cpa_yen,
+            "cpc_yen": cpc_yen,
+        })
+
+    # 業界ベンチマーク（データあるクリニックのみ）
+    active = [c for c in clinic_stats if c["impressions"] > 0]
+    benchmark = {}
+    if active:
+        benchmark = {
+            "avg_ctr": round(sum(c["ctr"] for c in active) / len(active), 2),
+            "avg_cvr": round(sum(c["cvr"] for c in active) / len(active), 2),
+            "avg_cpa_yen": round(sum(c["cpa_yen"] for c in active if c["cpa_yen"]) / max(sum(1 for c in active if c["cpa_yen"]), 1)),
+            "total_cost_yen": sum(c["cost_yen"] for c in active),
+            "total_conversions": round(sum(c["conversions"] for c in active), 1),
+            "clinics_with_data": len(active),
+        }
+
+    # 日次トレンド整形
+    trend = [
+        {
+            "date": r["date"],
+            "cost_yen": round((r["cost_micros"] or 0) / 1_000_000),
+            "clicks": int(r["clicks"] or 0),
+            "conversions": round(float(r["conversions"] or 0), 1),
+            "impressions": int(r["impressions"] or 0),
+        }
+        for r in trend_rows
+    ]
+
+    return {
+        "success": True,
+        "period_days": days,
+        "total_log_records": total_log_count,
+        "clinic_stats": clinic_stats,
+        "benchmark": benchmark,
+        "trend": trend,
+        "generated_at": _dt.datetime.now().isoformat(),
+    }
+
+
 @app.get("/api/admin/aggregated-stats")
 def admin_aggregated_stats(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
     """全テナントのKPIを集計（管理者専用・ベンチマーク用）"""

@@ -2963,17 +2963,189 @@ window.applyAdminCustomDate = function() {
 let adminCurrentTab = 'kpi';
 window.switchAdminTab = function(tab) {
   adminCurrentTab = tab;
-  ['kpi', 'contracts', 'add', 'announce', 'inquiry'].forEach(t => {
+  ['kpi', 'contracts', 'add', 'announce', 'inquiry', 'performance'].forEach(t => {
     const pane = document.getElementById(`adminTabPane-${t}`);
     const btn  = document.getElementById(`adminTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
     if (pane) pane.style.display = t === tab ? '' : 'none';
     if (btn)  { btn.classList.toggle('range-active', t === tab); }
   });
-  if (tab === 'contracts') loadAdminContracts();
-  if (tab === 'add')       populateClinicSelect('contractClinicId');
-  if (tab === 'announce')  loadAdminAnnouncements();
-  if (tab === 'inquiry')   loadInquiries();
+  if (tab === 'contracts')   loadAdminContracts();
+  if (tab === 'add')         populateClinicSelect('contractClinicId');
+  if (tab === 'announce')    loadAdminAnnouncements();
+  if (tab === 'inquiry')     loadInquiries();
+  if (tab === 'performance') loadAdminPerformance();
 };
+
+// ============================================================
+// 広告実績分析タブ（全クリニック横断）
+// ============================================================
+let _adminPerfDays = 30;
+
+window.switchPerfDays = function(days, btn) {
+  _adminPerfDays = days;
+  document.querySelectorAll('#adminTabPane-performance .range-btn').forEach(b => b.classList.remove('range-active'));
+  if (btn) btn.classList.add('range-active');
+  loadAdminPerformance();
+};
+
+async function loadAdminPerformance() {
+  const tableEl   = document.getElementById('adminPerfClinicTable');
+  const benchEl   = document.getElementById('adminPerfBenchmark');
+  const trendEl   = document.getElementById('adminPerfTrendChart');
+  const cvEl      = document.getElementById('adminPerfCvChart');
+  const cardsEl   = document.getElementById('adminPerfSummaryCards');
+  const metaEl    = document.getElementById('adminPerfMeta');
+  if (!tableEl) return;
+
+  // ローディング
+  [tableEl, benchEl, trendEl, cvEl].forEach(el => {
+    if (el) el.innerHTML = '<div class="loading-state"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div></div>';
+  });
+  if (cardsEl) cardsEl.innerHTML = '';
+
+  try {
+    const data = await fetch(`${API}/admin/performance-analysis?days=${_adminPerfDays}`, {
+      headers: authHeaders()
+    }).then(r => r.json());
+
+    if (!data.success) throw new Error(data.detail || 'APIエラー');
+
+    const stats   = data.clinic_stats || [];
+    const bench   = data.benchmark || {};
+    const trend   = data.trend || [];
+    if (metaEl) metaEl.textContent = `過去${_adminPerfDays}日 / ログ${data.total_log_records}件 / 更新: ${data.generated_at?.slice(0,16) || '-'}`;
+
+    // ── 1. KPIサマリーカード ──
+    const totalCost = stats.reduce((s, c) => s + (c.cost_yen || 0), 0);
+    const totalCv   = stats.reduce((s, c) => s + (c.conversions || 0), 0);
+    const totalClk  = stats.reduce((s, c) => s + (c.clicks || 0), 0);
+    const avgCtr    = bench.avg_ctr || 0;
+    const avgCpa    = bench.avg_cpa_yen || 0;
+    const kpiCards = [
+      { label: '総広告費', value: '¥' + totalCost.toLocaleString(), sub: `${_adminPerfDays}日間`, color: '#6366f1', icon: '💰' },
+      { label: '総CV数', value: totalCv.toFixed(1) + '件', sub: '全院合計', color: '#10b981', icon: '🎯' },
+      { label: '総クリック', value: totalClk.toLocaleString(), sub: '全院合計', color: '#3b82f6', icon: '👆' },
+      { label: '平均CTR', value: avgCtr + '%', sub: 'クリニック平均', color: '#f59e0b', icon: '📊' },
+      { label: '平均CPA', value: avgCpa ? '¥' + avgCpa.toLocaleString() : '-', sub: 'CV取得単価平均', color: '#ec4899', icon: '💡' },
+      { label: 'データ有院数', value: (bench.clinics_with_data || 0) + '院', sub: '実績ログあり', color: '#a855f7', icon: '🏥' },
+    ];
+    if (cardsEl) {
+      cardsEl.innerHTML = kpiCards.map(k => `
+        <div style="background:var(--bg-card);border-radius:12px;padding:14px 16px;border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${k.color};transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+          <div style="font-size:18px;margin-bottom:4px">${k.icon}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text-1);letter-spacing:-0.5px">${k.value}</div>
+          <div style="font-size:11px;color:${k.color};font-weight:700;margin:2px 0">${k.label}</div>
+          <div style="font-size:10px;color:var(--text-3)">${k.sub}</div>
+        </div>`).join('');
+    }
+
+    // ── 2. 日次トレンドチャート（SVGバーチャート） ──
+    _renderAdminBarChart(trendEl, trend, 'cost_yen', '#6366f1', v => '¥' + Math.round(v/1000) + 'k');
+    _renderAdminBarChart(cvEl, trend, 'conversions', '#10b981', v => v.toFixed(1) + '件');
+
+    // ── 3. クリニック別KPIランキングテーブル ──
+    if (!stats.length) {
+      tableEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);font-size:13px">📭 performance_logsにデータがありません（毎日2時の自動収集を待ってください）</div>';
+    } else {
+      const maxCost = Math.max(...stats.map(c => c.cost_yen || 0), 1);
+      tableEl.innerHTML = `
+        <div style="overflow-x:auto">
+          <table class="data-table" style="min-width:760px">
+            <thead><tr>
+              <th>#</th><th>クリニック</th>
+              <th style="text-align:right">データ日数</th>
+              <th style="text-align:right">費用(円)</th>
+              <th style="text-align:right">クリック</th>
+              <th style="text-align:right">CV数</th>
+              <th style="text-align:right">CTR</th>
+              <th style="text-align:right">CVR</th>
+              <th style="text-align:right">CPA(円)</th>
+            </tr></thead>
+            <tbody>${stats.map((c, i) => {
+              const barW = Math.round((c.cost_yen / maxCost) * 100);
+              const rankIcon = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+              const cpaColor = c.cpa_yen ? (c.cpa_yen < (bench.avg_cpa_yen || 99999) ? 'var(--green)' : '#f87171') : 'var(--text-3)';
+              return `<tr>
+                <td style="color:var(--text-3);font-size:12px">${rankIcon}</td>
+                <td><div style="font-weight:600;font-size:13px">${c.clinic_name}</div>
+                  <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:4px;width:100%">
+                    <div style="height:100%;width:${barW}%;background:linear-gradient(90deg,#6366f1,#a855f7);border-radius:2px;transition:width 0.6s ease"></div>
+                  </div></td>
+                <td style="text-align:right;color:var(--text-3);font-size:12px">${c.data_days}日</td>
+                <td style="text-align:right;font-weight:700">¥${(c.cost_yen || 0).toLocaleString()}</td>
+                <td style="text-align:right">${(c.clicks || 0).toLocaleString()}</td>
+                <td style="text-align:right;color:var(--green)">${c.conversions}</td>
+                <td style="text-align:right;color:${c.ctr >= avgCtr ? 'var(--green)' : 'var(--text-2)'}">${c.ctr}%</td>
+                <td style="text-align:right">${c.cvr}%</td>
+                <td style="text-align:right;color:${cpaColor};font-weight:600">${c.cpa_yen ? '¥' + c.cpa_yen.toLocaleString() : '-'}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    // ── 4. 業界ベンチマーク ──
+    if (!bench.clinics_with_data) {
+      benchEl.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px">ベンチマーク計算に必要なデータがまだありません</div>';
+    } else {
+      const bItems = [
+        { label: '平均CTR', val: bench.avg_ctr + '%', desc: 'クリック率（高いほどターゲット精度↑）', tip: '整骨院業界目安: 3〜6%', color: '#f59e0b' },
+        { label: '平均CVR', val: bench.avg_cvr + '%', desc: 'コンバージョン率', tip: 'LP品質指標', color: '#10b981' },
+        { label: '平均CPA', val: bench.avg_cpa_yen ? '¥' + bench.avg_cpa_yen.toLocaleString() : '-', desc: 'CV1件あたりの広告費', tip: '整骨院目安: ¥3,000〜¥8,000', color: '#6366f1' },
+        { label: '総消化費用', val: '¥' + (bench.total_cost_yen || 0).toLocaleString(), desc: `過去${_adminPerfDays}日 全院合計`, tip: '', color: '#ec4899' },
+        { label: '総CV件数', val: (bench.total_conversions || 0).toFixed(1) + '件', desc: '全院合計コンバージョン', tip: '', color: '#3b82f6' },
+      ];
+      benchEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+          ${bItems.map(b => `
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;border-top:2px solid ${b.color}">
+              <div style="font-size:20px;font-weight:800;color:${b.color}">${b.val}</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-2);margin:4px 0 2px">${b.label}</div>
+              <div style="font-size:10px;color:var(--text-3)">${b.desc}</div>
+              ${b.tip ? `<div style="font-size:10px;color:var(--text-4);margin-top:4px">💡 ${b.tip}</div>` : ''}
+            </div>`).join('')}
+        </div>`;
+    }
+
+  } catch(e) {
+    [tableEl, benchEl].forEach(el => {
+      if (el) el.innerHTML = `<div style="color:var(--red);padding:16px;font-size:12px">⚠️ 読み込み失敗: ${e.message}</div>`;
+    });
+    [trendEl, cvEl].forEach(el => {
+      if (el) el.innerHTML = '';
+    });
+  }
+}
+
+function _renderAdminBarChart(container, trend, key, color, fmtVal) {
+  if (!container || !trend.length) {
+    if (container) container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px;text-align:center">データなし</div>';
+    return;
+  }
+  const vals = trend.map(d => d[key] || 0);
+  const maxV = Math.max(...vals, 1);
+  const bars = trend.map((d, i) => {
+    const h = Math.round((vals[i] / maxV) * 110);
+    const isLast = i === trend.length - 1;
+    const dateLabel = (d.date || '').slice(5); // MM-DD
+    const showLabel = trend.length <= 14 || i % Math.ceil(trend.length / 10) === 0 || isLast;
+    return `
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0" title="${d.date}: ${fmtVal(vals[i])}">
+        <div style="font-size:8px;color:var(--text-3);margin-bottom:2px;white-space:nowrap">
+          ${showLabel ? fmtVal(vals[i]) : ''}
+        </div>
+        <div style="flex:1;display:flex;align-items:flex-end;width:100%;min-height:110px">
+          <div style="width:100%;height:${Math.max(h,2)}px;background:${isLast ? color : color + 'aa'};border-radius:3px 3px 0 0;transition:height 0.4s ease"></div>
+        </div>
+        <div style="font-size:8px;color:var(--text-4);margin-top:2px;white-space:nowrap;overflow:hidden">
+          ${showLabel ? dateLabel : ''}
+        </div>
+      </div>`;
+  }).join('');
+  container.innerHTML = `<div style="display:flex;align-items:flex-end;gap:2px;height:100%;padding:4px 0">${bars}</div>`;
+}
+
+window.loadAdminPerformance = loadAdminPerformance;
 
 // ============================================================
 // お知らせ管理
