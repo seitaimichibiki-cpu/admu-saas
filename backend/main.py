@@ -475,10 +475,13 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
     if campaigns is None:
         try:
             raw_campaigns = client.list_campaigns()
-            # REMOVEDのキャンペーンを除去
+            # 永続ブラックリスト（DB）＋インメモリキャッシュの両方でフィルタリング
+            bl = db.get_campaign_blacklist(clinic_id)
             campaigns = [
                 c for c in raw_campaigns
-                if c.get("status") != "REMOVED" and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+                if c.get("status") != "REMOVED"
+                and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+                and str(c.get("id")) not in bl
             ]
             if use_cache:
                 ads_cache.set(camp_cache_key, campaigns)
@@ -556,10 +559,13 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
         api_campaigns = ads_cache.get(camp_cache_key)
 
     if api_campaigns is None:
-        # 削除済み（REMOVED）のキャンペーンは一覧から除外し、同期の対象外にする
+        # 永続ブラックリスト（DB）＋インメモリキャッシュの両方でフィルタリング
+        bl = db.get_campaign_blacklist(clinic_id)
         api_campaigns = [
             c for c in client.list_campaigns()
-            if c.get("status") != "REMOVED" and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+            if c.get("status") != "REMOVED"
+            and not recent_deleted_campaigns.is_deleted(str(c.get("id")))
+            and str(c.get("id")) not in bl
         ]
         if use_cache:
             ads_cache.set(camp_cache_key, api_campaigns)
@@ -656,6 +662,8 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
         if g_id:
             # API呼び出しより前に登録する（呼び出しが例外で失敗しても除外キャッシュに残るように）
             recent_deleted_campaigns.add(str(g_id))
+            # 永続ブラックリストにも追加（サーバー再起動後も復活しないように）
+            db.add_campaign_blacklist(clinic_id, str(g_id), campaign_name=campaign.get("name", ""))
             client.update_campaign_status(g_id, "REMOVED")
     except Exception as e:
         err_msg = str(e)

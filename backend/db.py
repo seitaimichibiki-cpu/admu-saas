@@ -297,6 +297,15 @@ def init_db():
             sync_source TEXT DEFAULT 'api',
             synced_at {TS},
             FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
+        # キャンペーン永久ブラックリスト（削除後に再同期されても無視するため）
+        f"""CREATE TABLE IF NOT EXISTS campaign_blacklist (
+            id {PK},
+            clinic_id INTEGER NOT NULL,
+            google_campaign_id TEXT NOT NULL,
+            campaign_name TEXT,
+            reason TEXT DEFAULT 'user_deleted',
+            created_at {TS},
+            UNIQUE(clinic_id, google_campaign_id))""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -647,6 +656,39 @@ def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
                   data.get("target_region",""), data.get("google_campaign_id","")))
             conn.commit()
             return cur.lastrowid
+
+# ---- キャンペーン永久ブラックリスト ----
+def add_campaign_blacklist(clinic_id: int, google_campaign_id: str, campaign_name: str = None, reason: str = "user_deleted"):
+    """削除されたキャンペーンをDBに永続的に記録し、Google Ads APIからの再同期を防止する"""
+    if not google_campaign_id:
+        return
+    with get_conn() as conn:
+        try:
+            if USE_PG:
+                conn.execute("""
+                    INSERT INTO campaign_blacklist (clinic_id, google_campaign_id, campaign_name, reason)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (clinic_id, google_campaign_id) DO NOTHING
+                """, (clinic_id, str(google_campaign_id), campaign_name, reason))
+            else:
+                conn.execute("""
+                    INSERT OR IGNORE INTO campaign_blacklist (clinic_id, google_campaign_id, campaign_name, reason)
+                    VALUES (?, ?, ?, ?)
+                """, (clinic_id, str(google_campaign_id), campaign_name, reason))
+            conn.commit()
+        except Exception as e:
+            print(f"[DB] campaign_blacklist insert error: {e}")
+
+def get_campaign_blacklist(clinic_id: int) -> set:
+    """ブラックリストに登録された google_campaign_id のセットを返す"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT google_campaign_id FROM campaign_blacklist WHERE clinic_id=?",
+            (clinic_id,)
+        ).fetchall()
+        return {r["google_campaign_id"] for r in rows}
+
+
 
 def update_budget(campaign_id: int, clinic_id: int, budget_micros: int):
     """予算は手動設定のみ。budget_locked=1 のものは拒否。"""
