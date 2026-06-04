@@ -25,14 +25,24 @@ import urllib.request
 import stripe
 import sentry_sdk
 
-SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
-if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
-    )
-    print(f"[Sentry] 初期化完了 (DSN設定済み)")
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if SENTRY_DSN.startswith(('"', "'")) and SENTRY_DSN.endswith(('"', "'")):
+    SENTRY_DSN = SENTRY_DSN[1:-1].strip()
+
+if SENTRY_DSN and SENTRY_DSN.lower().startswith(("http://", "https://")):
+    try:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            profiles_sample_rate=1.0,
+        )
+        print(f"[Sentry] 初期化完了 (DSN設定済み)")
+    except Exception as e:
+        print(f"[Sentry] 初期化に失敗しました: {e}")
+        SENTRY_DSN = ""  # フロント用にも無効化
+else:
+    SENTRY_DSN = ""  # 無効なスキーマや空文字なら空にする
+
 
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
