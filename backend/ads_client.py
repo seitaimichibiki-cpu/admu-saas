@@ -210,11 +210,17 @@ class AdsClient:
             return
         campaign_service = self._client.get_service("CampaignService")
         campaign_op = self._client.get_type("CampaignOperation")
-        campaign = campaign_op.update
-        campaign.resource_name = f"customers/{self.customer_id}/campaigns/{google_campaign_id}"
-        status_enum = self._client.enums.CampaignStatusEnum[status]
-        campaign.status = status_enum
-        campaign_op.update_mask.paths.append("status")
+        
+        resource_name = f"customers/{self.customer_id}/campaigns/{google_campaign_id}"
+        if status == "REMOVED":
+            campaign_op.remove = resource_name
+        else:
+            campaign = campaign_op.update
+            campaign.resource_name = resource_name
+            status_enum = self._client.enums.CampaignStatusEnum[status]
+            campaign.status = status_enum
+            campaign_op.update_mask.paths.append("status")
+            
         campaign_service.mutate_campaigns(customer_id=self.customer_id, operations=[campaign_op])
 
     # ---- パフォーマンス ----
