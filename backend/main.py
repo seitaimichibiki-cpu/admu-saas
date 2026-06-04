@@ -572,7 +572,12 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
         if g_id:
             client.update_campaign_status(g_id, "REMOVED")
     except Exception as e:
-        api_warning = f"Google Ads APIでの削除に失敗しました（ローカルDBからは削除済み）: {str(e)}"
+        err_msg = str(e)
+        # 既にGoogle広告側で削除されている場合、または削除済みのリソースに対する操作エラーは無視（正常終了扱い）
+        if "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE" in err_msg or "RESOURCE_NOT_FOUND" in err_msg:
+            pass
+        else:
+            api_warning = f"Google Ads APIでの削除に失敗しました（ローカルDBからは削除済み）: {err_msg}"
 
     with db.get_conn() as conn:
         conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (local_campaign_id, clinic_id))
