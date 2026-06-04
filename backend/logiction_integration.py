@@ -87,9 +87,10 @@ def _auto_update_persona_from_patients(clinic_id: int, db):
 
         top_area = conn.execute("""
             SELECT address_pref, address_city,
-                   (COALESCE(address_pref,'') || ' ' || COALESCE(address_city,'')) as area_label,
+                   TRIM(COALESCE(address_pref,'') || ' ' || COALESCE(address_city,'')) as area_label,
                    COUNT(*) as c FROM logiction_patients
-            WHERE clinic_id=? AND (address_pref IS NOT NULL OR address_city IS NOT NULL)
+            WHERE clinic_id=?
+              AND TRIM(COALESCE(address_pref,'') || COALESCE(address_city,'')) != ''
             GROUP BY address_pref, address_city ORDER BY c DESC LIMIT 1
         """, (clinic_id,)).fetchone()
 
@@ -283,7 +284,7 @@ def handle_persona_analysis(clinic_id: int, db):
                 AVG(ltv_yen) as avg_ltv
             FROM logiction_patients
             WHERE clinic_id={ph}
-              AND (address_pref IS NOT NULL OR address_city IS NOT NULL)
+              AND TRIM(COALESCE(address_pref,'') || COALESCE(address_city,'')) != ''
             GROUP BY address_pref, address_city
             ORDER BY cnt DESC
             LIMIT 15
