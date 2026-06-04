@@ -655,8 +655,9 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
         client = _get_ads_client(acc, platform)
         g_id = campaign.get("google_campaign_id", "")
         if g_id:
-            client.update_campaign_status(g_id, "REMOVED")
+            # API呼び出しより前に登録する（呼び出しが例外で失敗しても除外キャッシュに残るように）
             recent_deleted_campaigns.add(str(g_id))
+            client.update_campaign_status(g_id, "REMOVED")
     except Exception as e:
         err_msg = str(e)
         # 既にGoogle広告側で削除されている場合、動画広告などAPI経由の変更操作が許可されていない場合は無視（正常終了扱い）
