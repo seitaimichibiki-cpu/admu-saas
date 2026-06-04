@@ -325,44 +325,27 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentPlatform = localStorage.getItem('admu_platform') || 'google';
 
 window.switchPlatform = function switchPlatform(platform) {
-  // ── STARTERplanはYahooをブロック ────────────────────────────────
-  if (platform === 'yahoo') {
-    const user = getUser();
-    if (user.yahoo_enabled === false || user.plan_type === 'starter') {
-      toast('🔒 Yahoo!広告はSTANDARDプラン以上で利用できます。プランのアップグレードを詳はサポートまでご連絡ください。', 'error', 5000);
-      return; // 処理中断―Yahooに切り替えない
-    }
-  }
-
-  currentPlatform = platform;
-  localStorage.setItem('admu_platform', platform);
+  currentPlatform = 'google';
+  localStorage.setItem('admu_platform', 'google');
 
   // ボタンスタイル更新
-  document.getElementById('btnGoogle').className = 'platform-btn' + (platform === 'google' ? ' active-google' : '');
-  document.getElementById('btnYahoo').className  = 'platform-btn' + (platform === 'yahoo'  ? ' active-yahoo'  : '');
+  const btnGoogle = document.getElementById('btnGoogle');
+  if (btnGoogle) btnGoogle.className = 'platform-btn active-google';
 
   // バッジ更新
   const badge = document.getElementById('platformBadge');
   if(badge) {
-    if(platform === 'google') {
-      badge.textContent = '🔵 Google広告';
-      badge.className = 'badge-google';
-      badge.style.display = 'inline-flex';
-    } else {
-      badge.textContent = '🔴 Yahoo!広告';
-      badge.className = 'badge-yahoo';
-      badge.style.display = 'inline-flex';
-    }
+    badge.textContent = '🔵 Google広告';
+    badge.className = 'badge-google';
+    badge.style.display = 'inline-flex';
   }
 
   // モックモードバッジのテキストも更新
   const mockBadge = document.getElementById('mockBadge');
   if(mockBadge) {
-    mockBadge.textContent = platform === 'google' ? '● モックモード（Google）' : '● モックモード（Yahoo!）';
+    mockBadge.textContent = '● モックモード（Google）';
   }
 
-  // データ再読み込み
-  toast(platform === 'google' ? 'Google広告に切り替えました' : 'Yahoo!広告に切り替えました', 'success', 2000);
   loadDashboard();
   if(typeof loadCampaigns === 'function') loadCampaigns();
 }
@@ -674,7 +657,7 @@ document.getElementById('clinicSelect').addEventListener('change', function() {
 // ============================================================
 async function loadDashboard() {
   try {
-    const platform = document.getElementById('btnYahoo')?.classList.contains('active-yahoo') ? 'yahoo' : 'google';
+    const platform = 'google';
     const qs = (currentDaysRange === 'custom' && dashCustomStart && dashCustomEnd)
       ? `?clinic_id=${currentClinicId}&platform=${platform}&days=${currentDaysRange}&start_date=${dashCustomStart}&end_date=${dashCustomEnd}`
       : `?clinic_id=${currentClinicId}&platform=${platform}&days=${currentDaysRange}`;
@@ -754,7 +737,7 @@ window.exportCsv = function() {
   const url = URL.createObjectURL(blob);
   link.setAttribute("href", url);
   
-  const platform = document.getElementById('btnYahoo')?.classList.contains('active-yahoo') ? 'yahoo' : 'google';
+  const platform = 'google';
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   link.setAttribute("download", `admu_performance_${platform}_${timestamp}.csv`);
   link.style.visibility = 'hidden';
@@ -791,7 +774,7 @@ window.exportCampaignsCSV = function() {
   const url = URL.createObjectURL(blob);
   link.setAttribute("href", url);
   
-  const platform = document.getElementById('btnYahoo')?.classList.contains('active-yahoo') ? 'yahoo' : 'google';
+  const platform = 'google';
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   link.setAttribute("download", `admu_campaigns_${platform}_${timestamp}.csv`);
   link.style.visibility = 'hidden';
@@ -1461,16 +1444,7 @@ async function loadSettings() {
     document.getElementById('settRefreshToken').value = s.refresh_token === '***設定済み***' ? '' : (s.refresh_token||'');
     document.getElementById('settRefreshToken').placeholder = s.refresh_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
     document.getElementById('settMockMode').value     = s.mock_mode != null ? String(s.mock_mode) : '1';
-    // Yahoo設定
-    if (document.getElementById('settYahooAccountId')) {
-      document.getElementById('settYahooAccountId').value = s.yahoo_account_id || '';
-      document.getElementById('settYahooClientId').value  = s.yahoo_client_id || '';
-      document.getElementById('settYahooClientSecret').value = s.yahoo_client_secret === '***設定済み***' ? '' : (s.yahoo_client_secret||'');
-      document.getElementById('settYahooClientSecret').placeholder = s.yahoo_client_secret === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
-      document.getElementById('settYahooRefreshToken').value = s.yahoo_refresh_token === '***設定済み***' ? '' : (s.yahoo_refresh_token||'');
-      document.getElementById('settYahooRefreshToken').placeholder = s.yahoo_refresh_token === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : '';
-      document.getElementById('settYahooMockMode').value = s.yahoo_mock_mode != null ? String(s.yahoo_mock_mode) : '1';
-    }
+
     document.getElementById('settLineToken').value    = '';
     document.getElementById('settLineUserId').value   = s.line_user_id || '';
     document.getElementById('settPersonaAgeGender').value = s.target_age_gender || '';
@@ -1531,23 +1505,16 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     smtp_user: document.getElementById('settSmtpUser').value || null,
     ga4_property_id: document.getElementById('settGa4PropertyId')?.value || null,
     monthly_budget_yen: parseInt(document.getElementById('settMonthlyBudget')?.value || '300000') || 300000,
-    yahoo_account_id: document.getElementById('settYahooAccountId')?.value || null,
-    yahoo_client_id: document.getElementById('settYahooClientId')?.value || null,
-    yahoo_mock_mode: parseInt(document.getElementById('settYahooMockMode')?.value || '1'),
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;
   const refreshToken = document.getElementById('settRefreshToken')?.value;
   const lineToken = document.getElementById('settLineToken').value;
   const smtpPass  = document.getElementById('settSmtpPass').value;
-  const yClientSecret = document.getElementById('settYahooClientSecret')?.value;
-  const yRefreshToken = document.getElementById('settYahooRefreshToken')?.value;
   
   if(devToken)  body.developer_token  = devToken;
   if(clientSecret) body.client_secret = clientSecret;
   if(refreshToken) body.refresh_token = refreshToken;
-  if(yClientSecret) body.yahoo_client_secret = yClientSecret;
-  if(yRefreshToken) body.yahoo_refresh_token = yRefreshToken;
   if(lineToken) body.line_channel_token = lineToken;
   if(smtpPass)  body.smtp_pass = smtpPass;
 
@@ -3607,43 +3574,14 @@ document.addEventListener('click', function _budgetPageTrigger(e) {
  * - STANDARDプラン → 通常表示
  */
 function applyPlanRestrictions(data) {
-  const yahooEnabled = data.yahoo_enabled !== false;
   const planType     = data.plan_type || 'standard';
   const planName     = data.plan_name || 'スタンダード';
 
-  const btnYahoo = document.getElementById('btnYahoo');
-  if (!btnYahoo) return;
-
-  if (!yahooEnabled || planType === 'starter') {
-    // ロック表示
-    btnYahoo.style.opacity     = '0.4';
-    btnYahoo.style.cursor      = 'not-allowed';
-    btnYahoo.style.filter      = 'grayscale(60%)';
-    btnYahoo.title             = `Yahoo!広告はSTANDARDプラン以上で利用できます（現在: ${planName}）`;
-
-    // ボタンラベルにカギアイコン追加（二重追加防止）
-    if (!btnYahoo.querySelector('.lock-icon')) {
-      const lock = document.createElement('span');
-      lock.className   = 'lock-icon';
-      lock.textContent = ' 🔒';
-      lock.style.fontSize = '10px';
-      btnYahoo.appendChild(lock);
-    }
-  } else {
-    // ロック解除
-    btnYahoo.style.opacity = '';
-    btnYahoo.style.cursor  = '';
-    btnYahoo.style.filter  = '';
-    btnYahoo.title         = '';
-    const lock = btnYahoo.querySelector('.lock-icon');
-    if (lock) lock.remove();
-  }
-
   // サイドバー下部にプランバッジを表示
-  _renderPlanBadge(planName, planType, yahooEnabled);
+  _renderPlanBadge(planName, planType);
 }
 
-function _renderPlanBadge(planName, planType, yahooEnabled) {
+function _renderPlanBadge(planName, planType) {
   // 既存バッジの削除
   document.getElementById('sidebarPlanBadge')?.remove();
 
@@ -3665,8 +3603,8 @@ function _renderPlanBadge(planName, planType, yahooEnabled) {
     letter-spacing: 0.5px;
   `;
   badge.textContent = planType === 'starter'
-    ? `📋 ${planName} (Google専用)`
-    : `⭐ ${planName} (Google+Yahoo)`;
+    ? `📋 ${planName}`
+    : `⭐ ${planName}`;
 
   // ログアウトボタンの直前に挿入（logoutBtnがsidebarの子でない場合はappend）
   const logoutBtn = document.getElementById('logoutBtn');

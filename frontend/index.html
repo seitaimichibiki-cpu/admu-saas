@@ -240,15 +240,7 @@
       <label class="clinic-label">クリニック</label>
       <select id="clinicSelect" class="clinic-select"></select>
     </div>
-    <!-- プラットフォームスイッチャー -->
-    <div class="platform-switcher" id="platformSwitcher">
-      <button class="platform-btn active-google" id="btnGoogle" onclick="switchPlatform('google')">
-        <span class="platform-label">🔵 Google広告</span>
-      </button>
-      <button class="platform-btn" id="btnYahoo" onclick="switchPlatform('yahoo')">
-        <span class="platform-label">🔴 Yahoo!広告</span>
-      </button>
-    </div>
+
 
     <nav class="sidebar-nav">
       <a href="#" class="nav-item active" data-page="dashboard">
@@ -845,37 +837,14 @@
           <div class="card settings-card">
             <h3 class="card-title">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              Yahoo!広告 API設定
+              外部システム・目標設定
             </h3>
-            <div class="form-group">
-              <label>アカウントID (Account ID)</label>
-              <input type="text" id="settYahooAccountId" placeholder="12345678" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>クライアントID</label>
-              <input type="text" id="settYahooClientId" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>クライアントシークレット</label>
-              <input type="password" id="settYahooClientSecret" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>リフレッシュトークン</label>
-              <input type="password" id="settYahooRefreshToken" class="form-input">
-            </div>
-            <div class="form-group">
-              <label>モックモード</label>
-              <select id="settYahooMockMode" class="form-input">
-                <option value="1">ON（テスト・デモ用）</option>
-                <option value="0">OFF（本番API使用）</option>
-              </select>
-            </div>
             <div class="form-group">
               <label>GA4 プロパティID <span style="font-size:11px;color:var(--text-3);font-weight:400">（コンバージョン連携用）</span></label>
               <input type="text" id="settGa4PropertyId" placeholder="例: 123456789" class="form-input">
             </div>
             <div class="form-group">
-              <label>月予算目標 <span style="font-size:11px;color:var(--text-3);font-weight:400">（消化率ゲージの基準）</span></label>
+              <label>月予算目標 <span style="font-size:11px;color:var(--text-3);font-weight:400">（消化率ゲージ of 基準）</span></label>
               <div style="display:flex;align-items:center;gap:8px">
                 <span style="color:var(--text-2);font-size:14px">¥</span>
                 <input type="number" id="settMonthlyBudget" placeholder="300000" class="form-input" min="0" step="10000">
@@ -1485,7 +1454,7 @@
 
   <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第2条（定義）</h4>
   <ol style="padding-left:24px;margin-bottom:12px">
-    <li>「本サービス」とは、当社が提供するGoogle広告・Yahoo!広告の自動運用SaaSツール「AdMu」および関連する一切の機能を指します。</li>
+    <li>「本サービス」とは、当社が提供するGoogle広告の自動運用SaaSツール「AdMu」および関連する一切の機能を指します。</li>
     <li>「エリア独占」とは、同一市区町村レベルの地域において1院のみに本サービスを提供する制度を指します。</li>
   </ol>
 
@@ -1509,14 +1478,14 @@
   <ol style="padding-left:24px;margin-bottom:12px">
     <li>ユーザーは、当社が定める利用料金を毎月支払うものとします。</li>
     <li>利用料金はクレジットカードによる自動決済とし、支払い日は契約日に準じます。</li>
-    <li>Google広告・Yahoo!広告等のメディアへの広告費は本サービスの利用料金に含まれません。</li>
+    <li>Google広告等のメディアへの広告費は本サービスの利用料金に含まれません。</li>
     <li>支払い済みの利用料金は、理由の如何を問わず返金いたしません。</li>
   </ol>
 
   <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">第6条（広告運用に関する免責）</h4>
   <ol style="padding-left:24px;margin-bottom:12px">
     <li>本サービスはAIによる広告運用の最適化を支援するものであり、広告効果（集客数・売上等）を保証するものではありません。</li>
-    <li>Google・Yahoo!等プラットフォームの仕様変更により、一時的に機能が制限される場合があります。</li>
+    <li>Google等プラットフォームの仕様変更により、一時的に機能が制限される場合があります。</li>
     <li>広告審査の結果、広告が非承認となった場合の損害について当社は責任を負いません。</li>
   </ol>
 
@@ -1568,7 +1537,7 @@
     <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">氏名・院名</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">お問い合わせフォーム、利用登録</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">ご本人確認、契約管理</td></tr>
     <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">メールアドレス</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">利用登録時</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">ログイン認証、レポート送信、各種通知</td></tr>
     <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">地域（市区町村）</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">お問い合わせフォーム</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">エリア独占制度の管理</td></tr>
-    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">広告アカウント情報</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">OAuth連携</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">Google広告・Yahoo!広告の自動運用</td></tr>
+    <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">広告アカウント情報</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">OAuth連携</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">Google広告の自動運用</td></tr>
     <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">広告パフォーマンスデータ</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">API連携（自動取得）</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">AI解析・最適化・レポート生成</td></tr>
     <tr><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">支払い情報</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">決済システム（Stripe）経由</td><td style="border:1px solid rgba(255,255,255,0.1);padding:8px">月額利用料の決済（当社はカード番号を直接保持しません）</td></tr>
   </table>
@@ -1589,7 +1558,7 @@
   <ul style="padding-left:24px;margin-bottom:12px">
     <li>ユーザーの同意がある場合</li>
     <li>法令に基づく場合</li>
-    <li>本サービスの提供に必要な範囲で業務委託先に提供する場合（Google、Yahoo!、Stripe等）</li>
+    <li>本サービスの提供に必要な範囲で業務委託先に提供する場合（Google、Stripe等）</li>
   </ul>
 
   <h4 style="margin:20px 0 8px;font-size:14px;color:var(--text-1)">4. 外部サービスとの連携</h4>
@@ -1676,7 +1645,7 @@
         STARTER プラン: 月額 19,800円（税込）<br>
         STANDARD プラン: 月額 29,800円（税込）<br>
         初期設定費: 29,800円（税込・1回のみ）<br>
-        ※ Google広告・Yahoo!広告等への広告費は別途必要です。
+        ※ Google広告等への広告費は別途必要です。
       </td>
     </tr>
     <tr>

@@ -404,8 +404,7 @@ def _require_account(clinic_id: int) -> dict:
 
 def _get_ads_client(acc: dict, platform: str = "google"):
     if platform == "yahoo":
-        from yahoo_ads_client import YahooAdsClient
-        return YahooAdsClient(acc)
+        raise HTTPException(status_code=400, detail="Yahoo Ads is not supported.")
     else:
         from ads_client import AdsClient
         return AdsClient(acc)
@@ -1526,6 +1525,7 @@ def reset_password_confirm(req: PasswordResetConfirmReq):
     db.update_user_password(user_id, new_hash)
     db.consume_password_reset_token(req.token)
     return {"success": True, "message": "パスワードの再設定が完了しました。"}
+
 
 @app.get("/health", include_in_schema=False)
 def health_check():
@@ -4056,6 +4056,7 @@ async def ltv_simulator(req: LtvSimReq):
 # ============================================================
 @app.get("/api/narrative-report")
 async def narrative_report(clinic_id: int = 1, days: int = 7):
+    raise HTTPException(status_code=410, detail="This feature has been removed.")
     """
     週次パフォーマンスデータをMcKinsey SCQA Frameworkで
     ビジネスメモ形式のナラティブに変換する。
