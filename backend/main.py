@@ -619,6 +619,7 @@ def update_campaign_status(campaign_id: str, status: str, clinic_id: int = 1, pl
 @app.delete("/api/campaigns/{campaign_id}")
 def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
     """AdMuで作成したキャンペーンを削除する。Google Ads API側もREMOVEを試みる。"""
+    ads_cache.clear()
     campaign = _resolve_campaign(campaign_id, clinic_id)
     local_campaign_id = campaign["id"]
 
