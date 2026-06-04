@@ -450,6 +450,74 @@ class AdsClient:
             print(f"[AdsClient] 入札スケジュール適用エラー: {e}")
             return {"success": False, "error": str(e)}
 
+    # ---- デモグラフィック入札調整（性別・年齢）---- ⑥
+    def set_demographic_bid_adjustment(
+        self,
+        campaign_id: str,
+        dimension: str,   # "gender" or "age"
+        value: str,       # "MALE"/"FEMALE" or "AGE_RANGE_18_24" etc.
+        adjustment_pct: int,  # -20 ~ +20 の整数（%）
+    ) -> dict:
+        """
+        LOGICTIONのLTVデータに基づいてキャンペーンの性別・年齢別入札調整率を設定する。
+
+        Args:
+            campaign_id:     Google AdsキャンペーンID（数値文字列）
+            dimension:       "gender" または "age"
+            value:           性別: "MALE"/"FEMALE"  年齢: "AGE_RANGE_18_24" etc.
+            adjustment_pct:  入札調整率（%）。-20〜+20。0は変更なし。
+        Returns:
+            dict: { "success": bool, "applied": bool, "adjustment_pct": int }
+        """
+        if self.mock_mode:
+            print(f"[MOCK] デモグラフィック入札調整: campaign={campaign_id} {dimension}={value} adj={adjustment_pct:+}%")
+            return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": True}
+
+        # 入力バリデーション
+        adjustment_pct = max(-90, min(900, adjustment_pct))  # Google Ads APIの許容範囲
+        bid_modifier = 1.0 + (adjustment_pct / 100.0)
+
+        try:
+            campaign_criterion_service = self._client.get_service("CampaignCriterionService")
+            op = self._client.get_type("CampaignCriterionOperation")
+            criterion = op.create
+            criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
+            criterion.bid_modifier = bid_modifier
+
+            if dimension == "gender":
+                gender_map = {
+                    "MALE":    self._client.enums.GenderTypeEnum.MALE,
+                    "FEMALE":  self._client.enums.GenderTypeEnum.FEMALE,
+                    "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
+                }
+                criterion.gender.type_ = gender_map.get(value, self._client.enums.GenderTypeEnum.UNDETERMINED)
+
+            elif dimension == "age":
+                age_map = {
+                    "AGE_RANGE_18_24": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_18_24,
+                    "AGE_RANGE_25_34": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_25_34,
+                    "AGE_RANGE_35_44": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_35_44,
+                    "AGE_RANGE_45_54": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_45_54,
+                    "AGE_RANGE_55_64": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_55_64,
+                    "AGE_RANGE_65_UP": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_65_UP,
+                }
+                if value not in age_map:
+                    return {"success": False, "error": f"Unknown age range: {value}"}
+                criterion.age_range.type_ = age_map[value]
+            else:
+                return {"success": False, "error": f"Unknown dimension: {dimension}"}
+
+            campaign_criterion_service.mutate_campaign_criteria(
+                customer_id=self.customer_id, operations=[op]
+            )
+            print(f"[AdsClient] デモグラフィック入札調整適用: campaign={campaign_id} {dimension}={value} modifier={bid_modifier:.2f}")
+            return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": False}
+
+        except Exception as e:
+            err = str(e)
+            print(f"[AdsClient] デモグラフィック入札調整エラー: {err}")
+            return {"success": False, "applied": False, "error": err}
+
     # ---- コンバージョン送信 (OCT) ----
     def upload_offline_conversion(self, gclid: str, conversion_name: str, conversion_value: float, conversion_time: str):
         if self.mock_mode:

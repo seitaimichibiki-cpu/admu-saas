@@ -318,10 +318,21 @@ def handle_persona_analysis(clinic_id: int, db):
 
 
 async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_account, _get_ads_client):
-    """患者データ分析をGoogle Ads入札調整に反映"""
+    """
+    LOGICTIONの患者データを多角的に分析し、Google Ads入札を自動最適化する。
+
+    最適化の軸：
+        1. 性別別LTV → 性別入札調整
+        2. 年齢層別LTV → 年齢入札調整
+        3. 来院チャネル別分析 → 推奨予算配分（ログのみ、API制限なし）
+        4. 症状別LTV分析 → キーワード推奨（ログのみ）
+        5. 地域別来院数分析 → エリアターゲット推奨（ログのみ）
+    """
+    ph = "%s" if db.USE_PG else "?"
+
     with db.get_conn() as conn:
         total = conn.execute(
-            "SELECT COUNT(*) as c FROM logiction_patients WHERE clinic_id=?",
+            f"SELECT COUNT(*) as c FROM logiction_patients WHERE clinic_id={ph}",
             (clinic_id,)
         ).fetchone()["c"]
 
@@ -331,14 +342,19 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
     analysis = handle_persona_analysis(clinic_id, db)
     insights = analysis.get("insights", {})
     adjustments_applied = []
+    recommendations = []   # APIでは変更せず推奨情報として返す
     warnings = []
 
+    # ========================================================
+    # 1 & 2: Google Ads API経由の入札調整（性別・年齢）
+    # ========================================================
     try:
         acc = _require_account(clinic_id)
         client = _get_ads_client(acc, platform)
         campaigns = db.list_campaigns(clinic_id)
+        active_campaigns = [c for c in campaigns if c.get("status") in ("ENABLED", "PAUSED") and c.get("google_campaign_id")]
 
-        for camp in campaigns:
+        for camp in active_campaigns:
             g_id = camp.get("google_campaign_id", "")
             if not g_id:
                 continue
@@ -349,20 +365,29 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
                 avg_all = sum(r["avg_ltv"] for r in gender_data) / len(gender_data)
                 for g_data in gender_data:
                     ratio = g_data["avg_ltv"] / max(avg_all, 1)
-                    adj_pct = max(-20, min(20, int((ratio - 1) * 100)))
+                    # LTV差が5%以上の場合のみ調整（ノイズ除去）
+                    if abs(ratio - 1) < 0.05:
+                        continue
+                    adj_pct = max(-30, min(30, int((ratio - 1) * 100)))
                     gender_map = {"female": "FEMALE", "male": "MALE"}
                     g_type = gender_map.get(g_data.get("gender", ""), "")
                     if g_type and adj_pct != 0:
                         try:
-                            client.set_demographic_bid_adjustment(g_id, "gender", g_type, adj_pct)
+                            result = client.set_demographic_bid_adjustment(g_id, "gender", g_type, adj_pct)
+                            label = {"female": "女性", "male": "男性"}.get(g_data.get("gender", ""), g_data.get("gender", ""))
                             adjustments_applied.append({
-                                "type": "gender", "value": g_data["gender"],
+                                "type": "gender",
+                                "label": label,
+                                "value": g_data["gender"],
                                 "adjustment_pct": adj_pct,
                                 "avg_ltv": int(g_data["avg_ltv"]),
-                                "campaign": camp.get("name")
+                                "patient_count": g_data.get("cnt", 0),
+                                "campaign": camp.get("name"),
+                                "campaign_id": g_id,
+                                "applied_to_api": result.get("success", False),
                             })
                         except Exception as e:
-                            warnings.append(f"gender bid adjustment failed: {e}")
+                            warnings.append(f"性別入札調整エラー ({g_data.get('gender')}): {e}")
 
             # 年齢別入札調整
             age_data = insights.get("by_age_group", [])
@@ -375,34 +400,123 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
                 }
                 for a_data in age_data:
                     ratio = a_data["avg_ltv"] / max(avg_all, 1)
-                    adj_pct = max(-20, min(20, int((ratio - 1) * 100)))
+                    if abs(ratio - 1) < 0.05:
+                        continue
+                    adj_pct = max(-30, min(30, int((ratio - 1) * 100)))
                     age_type = age_map.get(a_data.get("age_group", ""), "")
                     if age_type and adj_pct != 0:
                         try:
-                            client.set_demographic_bid_adjustment(g_id, "age", age_type, adj_pct)
+                            result = client.set_demographic_bid_adjustment(g_id, "age", age_type, adj_pct)
                             adjustments_applied.append({
-                                "type": "age", "value": a_data["age_group"],
+                                "type": "age",
+                                "label": a_data.get("age_group", ""),
+                                "value": a_data.get("age_group", ""),
                                 "adjustment_pct": adj_pct,
                                 "avg_ltv": int(a_data["avg_ltv"]),
-                                "campaign": camp.get("name")
+                                "patient_count": a_data.get("cnt", 0),
+                                "campaign": camp.get("name"),
+                                "campaign_id": g_id,
+                                "applied_to_api": result.get("success", False),
                             })
                         except Exception as e:
-                            warnings.append(f"age bid adjustment failed: {e}")
+                            warnings.append(f"年齢入札調整エラー ({a_data.get('age_group')}): {e}")
 
     except Exception as e:
         warnings.append(f"Google Ads API接続エラー: {str(e)}")
 
+    # ========================================================
+    # 3: 来院チャネル別分析 → 推奨（API変更なし）
+    # ========================================================
+    channel_data = insights.get("by_channel", [])
+    if channel_data:
+        best_channel = channel_data[0]  # avg_ltv降順でソート済み
+        if best_channel.get("avg_ltv", 0) > 0:
+            recommendations.append({
+                "type": "channel",
+                "title": f"最高LTVチャネル: {best_channel.get('acquisition_channel', '不明')}",
+                "detail": f"平均LTV ¥{int(best_channel.get('avg_ltv', 0)):,}（{best_channel.get('cnt', 0)}名）",
+                "action": "このチャネルへの予算配分を増やすことを推奨します",
+                "avg_ltv": int(best_channel.get("avg_ltv", 0)),
+            })
+        # Google広告経由の患者が特定できている場合は特記
+        google_ch = next((c for c in channel_data if "google" in (c.get("acquisition_channel") or "").lower()), None)
+        if google_ch:
+            recommendations.append({
+                "type": "channel_google",
+                "title": f"Google広告経由患者のLTV",
+                "detail": f"¥{int(google_ch.get('avg_ltv', 0)):,}（{google_ch.get('cnt', 0)}名）",
+                "action": "Google Ads経由の患者が特定できています。OCTでの価値ベース入札への切替を推奨します",
+                "avg_ltv": int(google_ch.get("avg_ltv", 0)),
+            })
+
+    # ========================================================
+    # 4: 症状別LTV分析 → キーワード推奨
+    # ========================================================
+    symptom_data = insights.get("by_symptom", [])
+    if symptom_data:
+        top_symptom = symptom_data[0]
+        recommendations.append({
+            "type": "symptom",
+            "title": f"高LTV症状キーワード: 「{top_symptom.get('symptom', '')}」",
+            "detail": f"平均LTV ¥{int(top_symptom.get('avg_ltv', 0)):,}（{top_symptom.get('cnt', 0)}名）",
+            "action": f"「{top_symptom.get('symptom', '')}」系のキーワードに入札単価を上げることを推奨します",
+            "avg_ltv": int(top_symptom.get("avg_ltv", 0)),
+        })
+        # 上位3症状をキーワード候補としてリスト
+        kw_suggestions = [s.get("symptom", "") for s in symptom_data[:3]]
+        if kw_suggestions:
+            recommendations.append({
+                "type": "keyword_suggestion",
+                "title": "推奨キーワード（高LTV症状）",
+                "detail": "・".join(kw_suggestions),
+                "action": "これらの症状ワードを含むキーワードを広告グループに追加することを推奨します",
+                "keywords": kw_suggestions,
+            })
+
+    # ========================================================
+    # 5: 地域別来院分析 → エリアターゲット推奨
+    # ========================================================
+    area_data = insights.get("by_area", [])
+    if area_data and len(area_data) > 0:
+        top_area = area_data[0]
+        recommendations.append({
+            "type": "area",
+            "title": f"最多来院エリア: {top_area.get('address_pref', '不明')}",
+            "detail": f"{top_area.get('cnt', 0)}名来院（平均LTV ¥{int(top_area.get('avg_ltv', 0)):,}）",
+            "action": f"{top_area.get('address_pref', '')}への地域ターゲットを強化することを推奨します",
+            "avg_ltv": int(top_area.get("avg_ltv", 0)),
+        })
+
+    # ========================================================
+    # 監査ログ & ペルソナ自動更新
+    # ========================================================
+    try:
+        _auto_update_persona_from_patients(clinic_id, db)
+    except Exception as e:
+        warnings.append(f"ペルソナ自動更新エラー: {e}")
+
     db.add_audit_log(
         clinic_id, "system",
-        f"[LOGICTION→Ads] 入札調整{len(adjustments_applied)}件適用",
+        f"[LOGICTION自動入札最適化] 入札調整{len(adjustments_applied)}件適用、推奨{len(recommendations)}件生成",
         entity="persona_bid_apply"
     )
 
     return {
         "success": True,
+        "total_patients_analyzed": total,
         "adjustments_applied": adjustments_applied,
         "adjustments_count": len(adjustments_applied),
+        "recommendations": recommendations,
+        "recommendations_count": len(recommendations),
         "warnings": warnings,
         "persona_updated": True,
-        "message": f"{len(adjustments_applied)}件の入札調整をGoogle Adsに反映しました"
+        "insights_summary": {
+            "top_gender": (insights.get("by_gender") or [{}])[0],
+            "top_age": (insights.get("by_age_group") or [{}])[0],
+            "top_channel": (insights.get("by_channel") or [{}])[0],
+            "top_symptom": (insights.get("by_symptom") or [{}])[0],
+            "top_area": (insights.get("by_area") or [{}])[0],
+        },
+        "message": f"✅ {len(adjustments_applied)}件の入札調整を適用、{len(recommendations)}件の改善提案を生成しました（分析患者数: {total}名）"
     }
+

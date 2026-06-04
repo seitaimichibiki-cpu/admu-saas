@@ -1810,26 +1810,125 @@ function _renderLtvBars(containerId, data, labelKey, color) {
 
 async function applyLogictionToAds() {
   const btn = document.getElementById('logictionApplyBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '適用中...'; }
+  const resultPanel = document.getElementById('logictionOptResultPanel');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></div>最適化処理中...'; }
+  if (resultPanel) resultPanel.style.display = 'none';
+
   try {
     const res = await api(`/logiction/apply-to-ads?clinic_id=${currentClinicId}&platform=${currentPlatform}`, {
       method: 'POST', body: '{}'
     });
-    if (res.adjustments_count === 0) {
-      toast('入札調整の適用対象がありません（キャンペーンが0件またはデータ不足）', 'warning');
+
+    // ---- 結果パネルを描画 ----
+    const adjList = (res.adjustments_applied || []);
+    const recList = (res.recommendations || []);
+
+    if (resultPanel) {
+      resultPanel.style.display = 'block';
+
+      // --- 入札調整済み一覧 ---
+      const adjHtml = adjList.length === 0
+        ? `<div style="font-size:12px;color:var(--text-3);padding:8px 0">入札調整の対象なし（データ不足または5%未満の差異）</div>`
+        : adjList.map(a => {
+            const isPos = a.adjustment_pct > 0;
+            const icon = a.type === 'gender' ? '👤' : '🎂';
+            const apiIcon = a.applied_to_api ? '✅' : '⚙️';
+            return `
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:6px">
+                <span style="font-size:16px">${icon}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:600;color:var(--text-1)">${a.label || a.value}</div>
+                  <div style="font-size:11px;color:var(--text-3)">${a.campaign || '-'} • ${a.patient_count || 0}名 • LTV ¥${(a.avg_ltv||0).toLocaleString()}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                  <div style="font-size:13px;font-weight:700;color:${isPos ? '#10b981' : '#f87171'}">${isPos ? '+' : ''}${a.adjustment_pct}%</div>
+                  <div style="font-size:10px;color:var(--text-3)">${apiIcon} ${a.applied_to_api ? 'API適用' : 'モック'}</div>
+                </div>
+              </div>`;
+          }).join('');
+
+      // --- 改善推奨一覧 ---
+      const typeConfig = {
+        channel:         { icon: '📡', color: '#10b981', label: 'チャネル戦略' },
+        channel_google:  { icon: '🎯', color: '#6366f1', label: 'Google広告LTV' },
+        symptom:         { icon: '🩺', color: '#f59e0b', label: '症状キーワード' },
+        keyword_suggestion: { icon: '🔑', color: '#a855f7', label: 'KW推奨' },
+        area:            { icon: '📍', color: '#3b82f6', label: 'エリア戦略' },
+      };
+      const recHtml = recList.length === 0
+        ? `<div style="font-size:12px;color:var(--text-3);padding:8px 0">推奨事項なし</div>`
+        : recList.map(r => {
+            const cfg = typeConfig[r.type] || { icon: '💡', color: '#6366f1', label: '推奨' };
+            return `
+              <div style="display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:8px;border-left:3px solid ${cfg.color}">
+                <span style="font-size:18px;line-height:1.2">${cfg.icon}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:11px;color:${cfg.color};font-weight:700;margin-bottom:2px">${cfg.label}</div>
+                  <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:3px">${r.title}</div>
+                  <div style="font-size:11px;color:var(--text-2);margin-bottom:4px">${r.detail}</div>
+                  <div style="font-size:11px;color:var(--text-3);line-height:1.4">→ ${r.action}</div>
+                  ${r.keywords ? `<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${r.keywords.map(k=>`<span style="background:rgba(168,85,247,0.15);color:#a855f7;padding:2px 7px;border-radius:10px;font-size:10px;border:1px solid rgba(168,85,247,0.25)">${k}</span>`).join('')}</div>` : ''}
+                </div>
+              </div>`;
+          }).join('');
+
+      // --- サマリー ---
+      const totalP = res.total_patients_analyzed || 0;
+      const adjCnt = res.adjustments_count || 0;
+      const recCnt = res.recommendations_count || 0;
+
+      resultPanel.innerHTML = `
+        <div style="border-top:1px solid rgba(255,255,255,0.07);margin-top:14px;padding-top:14px">
+          <!-- ヘッダー -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <div style="width:28px;height:28px;background:linear-gradient(135deg,#10b981,#059669);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">✅</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700;color:var(--text-1)">最適化完了</div>
+              <div style="font-size:11px;color:var(--text-3)">分析患者数: ${totalP}名 • 入札調整: ${adjCnt}件 • 改善提案: ${recCnt}件</div>
+            </div>
+          </div>
+
+          <!-- 入札調整結果 -->
+          <div style="font-size:11px;font-weight:700;color:var(--text-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">📊 入札調整ログ（性別・年齢）</div>
+          ${adjHtml}
+
+          <!-- 改善推奨 -->
+          <div style="font-size:11px;font-weight:700;color:var(--text-3);margin-top:14px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">💡 AI改善提案</div>
+          ${recHtml}
+
+          ${(res.warnings||[]).length ? `
+            <div style="margin-top:10px;padding:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px">
+              ${res.warnings.map(w=>`<div style="font-size:11px;color:#f59e0b">⚠️ ${w}</div>`).join('')}
+            </div>` : ''}
+        </div>
+      `;
+    }
+
+    // トースト通知
+    if (adjList.length === 0 && recList.length === 0) {
+      toast('分析対象データが不足しています（患者数が少ないかキャンペーンが未設定）', 'warning', 5000);
     } else {
-      toast(`✅ ${res.adjustments_count}件の入札調整をGoogle Adsに反映しました`, 'success', 5000);
+      toast(`✅ 入札調整${res.adjustments_count}件 • 改善提案${res.recommendations_count}件`, 'success', 5000);
     }
     if (res.warnings?.length) {
-      res.warnings.forEach(w => toast('⚠️ ' + w, 'warning', 6000));
+      res.warnings.slice(0, 2).forEach(w => toast('⚠️ ' + w, 'warning', 6000));
     }
-    // ペルソナ更新をSettingsのフィールドに反映
-    await loadSettings();
-    toast('ペルソナ設定も自動更新されました', 'info');
+    // ペルソナ自動更新
+    if (res.persona_updated) {
+      await loadSettings().catch(() => {});
+    }
+
   } catch(e) {
-    toast('適用失敗: ' + e.message, 'error');
+    toast('適用失敗: ' + (e.message || '不明なエラー'), 'error');
+    if (resultPanel) {
+      resultPanel.style.display = 'block';
+      resultPanel.innerHTML = `<div style="padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-size:12px;color:#ef4444;margin-top:10px">❌ ${e.message || '不明なエラー'}</div>`;
+    }
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Google Adsに入札調整を反映（LTVベース）`; }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 再最適化を実行`;
+    }
   }
 }
 window.loadLogictionAnalysis = loadLogictionAnalysis;
