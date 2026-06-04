@@ -481,7 +481,8 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
 def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
-    api_campaigns = client.list_campaigns()
+    # 削除済み（REMOVED）のキャンペーンは一覧から除外し、同期の対象外にする
+    api_campaigns = [c for c in client.list_campaigns() if c.get("status") != "REMOVED"]
     
     # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート/更新）
     db_campaigns = db.list_campaigns(clinic_id)
@@ -573,8 +574,14 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
             client.update_campaign_status(g_id, "REMOVED")
     except Exception as e:
         err_msg = str(e)
-        # 既にGoogle広告側で削除されている場合、または削除済みのリソースに対する操作エラーは無視（正常終了扱い）
-        if "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE" in err_msg or "RESOURCE_NOT_FOUND" in err_msg:
+        # 既にGoogle広告側で削除されている場合、動画広告などAPI経由の変更操作が許可されていない場合は無視（正常終了扱い）
+        ignorable_errors = [
+            "OPERATION_NOT_PERMITTED_FOR_REMOVED_RESOURCE",
+            "RESOURCE_NOT_FOUND",
+            "MUTATE_NOT_ALLOWED",
+            "MUTATION_NOT_ALLOWED"
+        ]
+        if any(err in err_msg for err in ignorable_errors):
             pass
         else:
             api_warning = f"Google Ads APIでの削除に失敗しました（ローカルDBからは削除済み）: {err_msg}"
