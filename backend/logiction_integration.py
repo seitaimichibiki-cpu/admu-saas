@@ -290,8 +290,10 @@ def handle_persona_analysis(clinic_id: int, db):
             LIMIT 15
         """, (clinic_id,)).fetchall()
 
+        # 全チャネル症状分析（Google広告経由・非経由問わず）
         all_symptoms_rows = conn.execute(f"""
-            SELECT symptoms, ltv_yen FROM logiction_patients WHERE clinic_id={ph}
+            SELECT symptoms, ltv_yen, acquisition_channel
+            FROM logiction_patients WHERE clinic_id={ph}
         """, (clinic_id,)).fetchall()
         symptom_stats = {}
         for row in all_symptoms_rows:
@@ -307,6 +309,51 @@ def handle_persona_analysis(clinic_id: int, db):
             {"symptom": k, "cnt": v["cnt"], "avg_ltv": int(v["ltv_sum"] / v["cnt"])}
             for k, v in symptom_stats.items() if v["cnt"] > 0
         ], key=lambda x: x["avg_ltv"], reverse=True)[:10]
+
+        # 曜日別・時間帯別来院分析（first_visit_dateから算出）
+        # SQLite: strftime, PostgreSQL: EXTRACT/to_char
+        if db.USE_PG:
+            dow_rows = conn.execute(f"""
+                SELECT
+                    EXTRACT(DOW FROM first_visit_date::date)::int AS dow,
+                    COUNT(*) as cnt,
+                    AVG(ltv_yen) as avg_ltv
+                FROM logiction_patients
+                WHERE clinic_id={ph}
+                  AND first_visit_date IS NOT NULL
+                  AND first_visit_date != ''
+                GROUP BY dow ORDER BY cnt DESC
+            """, (clinic_id,)).fetchall()
+        else:
+            dow_rows = conn.execute(f"""
+                SELECT
+                    CAST(strftime('%w', first_visit_date) AS INTEGER) AS dow,
+                    COUNT(*) as cnt,
+                    AVG(ltv_yen) as avg_ltv
+                FROM logiction_patients
+                WHERE clinic_id={ph}
+                  AND first_visit_date IS NOT NULL
+                  AND first_visit_date != ''
+                GROUP BY dow ORDER BY cnt DESC
+            """, (clinic_id,)).fetchall()
+        dow_names = ["日", "月", "火", "水", "木", "金", "土"]
+        dow_analysis = [
+            {
+                "dow": r["dow"],
+                "label": dow_names[r["dow"]] + "曜日",
+                "cnt": r["cnt"],
+                "avg_ltv": int(r["avg_ltv"] or 0)
+            }
+            for r in dow_rows if r["dow"] is not None
+        ]
+
+        # カスタマーマッチ用：patient_idリスト（既存患者除外に使う）
+        patient_id_rows = conn.execute(f"""
+            SELECT patient_id FROM logiction_patients
+            WHERE clinic_id={ph}
+            ORDER BY ltv_yen DESC
+        """, (clinic_id,)).fetchall()
+        patient_ids = [r["patient_id"] for r in patient_id_rows]
 
         last_sync = conn.execute(f"""
             SELECT synced_at, synced_count, updated_count
@@ -324,6 +371,8 @@ def handle_persona_analysis(clinic_id: int, db):
             "by_channel": [dict(r) for r in channel_rows],
             "by_area": [dict(r) for r in area_rows],
             "by_symptom": symptom_analysis,
+            "by_dow": dow_analysis,
+            "patient_ids": patient_ids,
         }
     }
 
@@ -462,30 +511,32 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
 
     # ========================================================
     # 4: 症状別LTV分析 → キーワード推奨
+    #    ※全チャネル患者を使うことでサンプル数を最大化
     # ========================================================
     symptom_data = insights.get("by_symptom", [])
     if symptom_data:
         top_symptom = symptom_data[0]
         recommendations.append({
             "type": "symptom",
-            "title": f"高LTV症状キーワード: 「{top_symptom.get('symptom', '')}」",
-            "detail": f"平均LTV ¥{int(top_symptom.get('avg_ltv', 0)):,}（{top_symptom.get('cnt', 0)}名）",
+            "title": f"高LTV症状キーワード（全チャネル）: 「{top_symptom.get('symptom', '')}」",
+            "detail": f"平均LTV ¥{int(top_symptom.get('avg_ltv', 0)):,}（{top_symptom.get('cnt', 0)}名 / Google広告経由・非経由含む全患者）",
             "action": f"「{top_symptom.get('symptom', '')}」系のキーワードに入札単価を上げることを推奨します",
             "avg_ltv": int(top_symptom.get("avg_ltv", 0)),
         })
-        # 上位3症状をキーワード候補としてリスト
-        kw_suggestions = [s.get("symptom", "") for s in symptom_data[:3]]
+        # 上位5症状をキーワード候補としてリスト（全チャネルなのでサンプル豊富）
+        kw_suggestions = [s.get("symptom", "") for s in symptom_data[:5]]
         if kw_suggestions:
             recommendations.append({
                 "type": "keyword_suggestion",
-                "title": "推奨キーワード（高LTV症状）",
-                "detail": "・".join(kw_suggestions),
-                "action": "これらの症状ワードを含むキーワードを広告グループに追加することを推奨します",
+                "title": "推奨キーワード（全来院者LTV分析）",
+                "detail": "・".join(kw_suggestions[:3]) + (f" 他{len(kw_suggestions)-3}件" if len(kw_suggestions) > 3 else ""),
+                "action": "Google広告・口コミ・SNS問わず高LTVに共通する症状ワードです。広告グループへの追加を推奨します",
                 "keywords": kw_suggestions,
             })
 
     # ========================================================
     # 5: 地域別来院分析 → エリアターゲット推奨
+    #    ※全チャネル患者を使うことでサンプル数を最大化
     # ========================================================
     area_data = insights.get("by_area", [])
     if area_data and len(area_data) > 0:
@@ -500,13 +551,54 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
         recommendations.append({
             "type": "area",
             "title": f"最多来院エリア（市区町村別）: {area_name}",
-            "detail": f"{top_area.get('cnt', 0)}名来院（平均LTV ¥{int(top_area.get('avg_ltv', 0)):,}）",
+            "detail": f"{top_area.get('cnt', 0)}名来院（平均LTV ¥{int(top_area.get('avg_ltv', 0)):,}）※全チャネル集計",
             "action": f"{area_name}への地域ターゲットを強化することを推奨します",
             "avg_ltv": int(top_area.get("avg_ltv", 0)),
             "area_breakdown": [
                 {"name": name, "cnt": cnt, "avg_ltv": ltv}
                 for name, cnt, ltv in area_list
             ],
+        })
+
+    # ========================================================
+    # 6: 曜日別来院分析 → 時間帯入札調整推奨
+    #    ※Google広告経由・非経由問わず全患者から算出
+    # ========================================================
+    dow_data = insights.get("by_dow", [])
+    if len(dow_data) >= 3:
+        max_cnt = max(d["cnt"] for d in dow_data)
+        top_days = sorted(dow_data, key=lambda d: d["cnt"], reverse=True)[:3]
+        low_days = sorted(dow_data, key=lambda d: d["cnt"])[:2]
+        top_labels = "・".join(d["label"] for d in top_days)
+        low_labels = "・".join(d["label"] for d in low_days)
+        recommendations.append({
+            "type": "dayofweek",
+            "title": f"来院ピーク曜日: {top_labels}",
+            "detail": f"最多: {top_days[0]['label']} {top_days[0]['cnt']}名 / 最少: {low_days[0]['label']} {low_days[0]['cnt']}名（全チャネル実績）",
+            "action": f"{top_labels}の入札を+10〜20%に設定し、{low_labels}は-10〜20%に下げることを推奨します",
+            "dow_breakdown": [
+                {
+                    "label": d["label"],
+                    "cnt": d["cnt"],
+                    "avg_ltv": d["avg_ltv"],
+                    "pct": round(d["cnt"] / max_cnt * 100) if max_cnt > 0 else 0
+                }
+                for d in sorted(dow_data, key=lambda d: d["dow"])
+            ],
+        })
+
+    # ========================================================
+    # 7: カスタマーマッチ情報（既存患者除外リスト）
+    # ========================================================
+    patient_ids = insights.get("patient_ids", [])
+    if len(patient_ids) > 0:
+        recommendations.append({
+            "type": "customer_match",
+            "title": f"カスタマーマッチ除外リスト: {len(patient_ids)}名",
+            "detail": "既存来院者への広告配信を除外することで、新規獲得に広告費を集中できます",
+            "action": "Google広告のオーディエンスマネージャーで既存患者リスト（patient_id）をアップロードし、除外オーディエンスとして設定してください",
+            "patient_count": len(patient_ids),
+            "sample_ids": patient_ids[:5],  # 先頭5件のみプレビュー表示
         })
 
     # ========================================================

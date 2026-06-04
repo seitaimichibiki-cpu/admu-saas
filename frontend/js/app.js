@@ -1849,11 +1849,13 @@ async function applyLogictionToAds() {
 
       // --- 改善推奨一覧 ---
       const typeConfig = {
-        channel:         { icon: '📡', color: '#10b981', label: 'チャネル戦略' },
-        channel_google:  { icon: '🎯', color: '#6366f1', label: 'Google広告LTV' },
-        symptom:         { icon: '🩺', color: '#f59e0b', label: '症状キーワード' },
-        keyword_suggestion: { icon: '🔑', color: '#a855f7', label: 'KW推奨' },
-        area:            { icon: '📍', color: '#3b82f6', label: 'エリア戦略（市区町村）' },
+        channel:          { icon: '📡', color: '#10b981', label: 'チャネル戦略' },
+        channel_google:   { icon: '🎯', color: '#6366f1', label: 'Google広告LTV' },
+        symptom:          { icon: '🩺', color: '#f59e0b', label: '症状KW（全チャネル）' },
+        keyword_suggestion: { icon: '🔑', color: '#a855f7', label: 'KW推奨（全来院者）' },
+        area:             { icon: '📍', color: '#3b82f6', label: 'エリア戦略（全チャネル）' },
+        dayofweek:        { icon: '📅', color: '#ec4899', label: '曜日別入札調整（全チャネル）' },
+        customer_match:   { icon: '🚫', color: '#64748b', label: 'カスタマーマッチ除外' },
       };
       const recHtml = recList.length === 0
         ? `<div style="font-size:12px;color:var(--text-3);padding:8px 0">推奨事項なし</div>`
@@ -1886,6 +1888,46 @@ async function applyLogictionToAds() {
             // キーワードタグ
             if (r.keywords) {
               extraHtml += `<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px">${r.keywords.map(k=>`<span style="background:rgba(168,85,247,0.15);color:#a855f7;padding:2px 7px;border-radius:10px;font-size:10px;border:1px solid rgba(168,85,247,0.25)">${k}</span>`).join('')}</div>`;
+            }
+
+            // 曜日別来院バーグラフ
+            if (r.type === 'dayofweek' && r.dow_breakdown && r.dow_breakdown.length > 0) {
+              const maxCnt = Math.max(...r.dow_breakdown.map(d => d.cnt), 1);
+              const peakDow = r.dow_breakdown.reduce((a, b) => b.cnt > a.cnt ? b : a, r.dow_breakdown[0]);
+              extraHtml += `
+                <div style="margin-top:10px">
+                  <div style="font-size:10px;color:#ec4899;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em">📊 曜日別来院数（全チャネル実績）</div>
+                  <div style="display:flex;align-items:flex-end;gap:5px;height:52px">
+                    ${r.dow_breakdown.map(d => {
+                      const h = Math.round((d.cnt / maxCnt) * 44);
+                      const isPeak = d.cnt === peakDow.cnt;
+                      return `
+                        <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">
+                          <div style="font-size:9px;color:${isPeak ? '#ec4899' : 'var(--text-3)'}">${d.cnt}</div>
+                          <div style="width:100%;height:${h}px;background:${isPeak ? 'linear-gradient(180deg,#ec4899,#be185d)' : 'rgba(255,255,255,0.1)'};border-radius:3px 3px 0 0;transition:height 0.4s ease;min-height:2px"></div>
+                          <div style="font-size:10px;color:${isPeak ? '#ec4899' : 'var(--text-3)'};font-weight:${isPeak ? 700 : 400}">${d.label.replace('曜日','')}</div>
+                        </div>`;
+                    }).join('')}
+                  </div>
+                  <div style="margin-top:6px;font-size:10px;color:var(--text-3)">
+                    💡 ピーク: <span style="color:#ec4899;font-weight:700">${peakDow.label}</span> +10〜20%入札を推奨
+                  </div>
+                </div>`;
+            }
+
+            // カスタマーマッチ: IDプレビュー表示
+            if (r.type === 'customer_match' && r.sample_ids && r.sample_ids.length > 0) {
+              extraHtml += `
+                <div style="margin-top:8px">
+                  <div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:5px">🔍 患者IDサンプル（先頭5件）</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:4px">
+                    ${r.sample_ids.map(id => `<span style="background:rgba(100,116,139,0.15);color:#94a3b8;padding:2px 8px;border-radius:6px;font-size:10px;font-family:monospace;border:1px solid rgba(100,116,139,0.25)">${id}</span>`).join('')}
+                    ${r.patient_count > 5 ? `<span style="color:var(--text-3);font-size:10px;padding:2px 6px">他 ${r.patient_count - 5}名...</span>` : ''}
+                  </div>
+                  <div style="margin-top:6px;font-size:10px;color:var(--text-3)">
+                    📤 Google広告 → オーディエンスマネージャー → カスタマーリスト → アップロード
+                  </div>
+                </div>`;
             }
 
             return `
