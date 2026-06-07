@@ -3531,6 +3531,126 @@ def admin_performance_analysis_export(
     )
 
 
+@app.get("/api/admin/jobs/status")
+def admin_jobs_status(
+    request: Request,
+    password: str = "",
+    authorization: Optional[str] = Header(None)
+):
+    """全クリニックの広告データ自動収集ジョブの稼働状況を取得（管理者専用）"""
+    _check_admin(password, authorization, request)
+
+    import monitor
+    scheduler_status = monitor.get_status()
+
+    # 各クリニックごとのperformance_logsの蓄積状況を取得
+    ph = "%s" if db.USE_PG else "?"
+    clinics_status = []
+
+    with db.get_conn() as conn:
+        clinics = conn.execute("SELECT id, name, plan_status FROM clinics ORDER BY id").fetchall()
+
+        for c in clinics:
+            cid = c["id"]
+            # 最終収集日とレコード数をカウント
+            stats = conn.execute(f"""
+                SELECT MAX(date) as last_date, COUNT(*) as record_count 
+                FROM performance_logs 
+                WHERE clinic_id={ph}
+            """, (cid,)).fetchone()
+
+            # 直近3件の収集履歴（デバッグ用）
+            recent_rows = conn.execute(f"""
+                SELECT date, impressions, clicks, cost_micros, conversions 
+                FROM performance_logs 
+                WHERE clinic_id={ph} 
+                ORDER BY date DESC LIMIT 3
+            """, (cid,)).fetchall()
+
+            recent_logs = []
+            for r in recent_rows:
+                recent_logs.append({
+                    "date": r["date"],
+                    "impressions": r["impressions"],
+                    "clicks": r["clicks"],
+                    "cost_yen": round((r["cost_micros"] or 0) / 1_000_000),
+                    "conversions": r["conversions"]
+                })
+
+            # ads_accountのmock_mode設定を確認
+            acc = conn.execute(f"SELECT mock_mode, customer_id FROM ads_accounts WHERE clinic_id={ph}", (cid,)).fetchone()
+            is_mock = True
+            customer_id = ""
+            if acc:
+                is_mock = str(acc["mock_mode"]) != "0"
+                customer_id = acc["customer_id"] or ""
+
+            clinics_status.append({
+                "clinic_id": cid,
+                "clinic_name": c["name"],
+                "plan_status": c["plan_status"],
+                "last_collect_date": stats["last_date"] if stats and stats["last_date"] else "未収集",
+                "total_records": stats["record_count"] if stats else 0,
+                "recent_logs": recent_logs,
+                "is_mock_mode": is_mock,
+                "customer_id": customer_id
+            })
+
+    # スケジューラのジョブ情報をダンプ
+    active_jobs = []
+    if monitor._scheduler and monitor._scheduler.running:
+        for job in monitor._scheduler.get_jobs():
+            active_jobs.append({
+                "id": job.id,
+                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else "なし"
+            })
+
+    return {
+        "success": True,
+        "scheduler_running": scheduler_status.get("running", False),
+        "scheduler_status": scheduler_status,
+        "active_jobs_count": len(active_jobs),
+        "active_jobs": active_jobs,
+        "clinics_status": clinics_status
+    }
+
+
+@app.post("/api/admin/jobs/collect-now")
+def admin_jobs_collect_now(
+    clinic_id: int,
+    request: Request,
+    password: str = "",
+    authorization: Optional[str] = Header(None)
+):
+    """指定したクリニックの広告データ自動収集を今すぐ手動実行（管理者専用デバッグ機能）"""
+    _check_admin(password, authorization, request)
+
+    import monitor
+    try:
+        # 同期的実行
+        monitor._collect_performance_data(clinic_id)
+
+        # 実行後の最終レコードを確認
+        ph = "%s" if db.USE_PG else "?"
+        with db.get_conn() as conn:
+            stats = conn.execute(f"""
+                SELECT MAX(date) as last_date, COUNT(*) as record_count 
+                FROM performance_logs 
+                WHERE clinic_id={ph}
+            """, (clinic_id,)).fetchone()
+
+        db.add_audit_log(clinic_id, "admin", "手動実績データ収集実行（管理者）", entity="performance_logs")
+
+        return {
+            "success": True,
+            "message": f"クリニック#{clinic_id} の実績データを手動で収集しました。",
+            "last_collect_date": stats["last_date"] if stats and stats["last_date"] else "未収集",
+            "total_records": stats["record_count"] if stats else 0
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"手動データ収集エラー: {str(e)}")
+
+
 @app.get("/api/admin/aggregated-stats")
 def admin_aggregated_stats(request: Request, password: str = "", authorization: Optional[str] = Header(None)):
     """全テナントのKPIを集計（管理者専用・ベンチマーク用）"""

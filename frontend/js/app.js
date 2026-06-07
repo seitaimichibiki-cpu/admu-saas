@@ -3086,12 +3086,115 @@ async function loadAdminPerformance() {
         </div>`;
     }
 
+    // ── 4. 自動収集ジョブ稼働ステータス ──
+    const jobContainer = document.getElementById('adminJobStatusContainer');
+    if (jobContainer) {
+      try {
+        const jobData = await fetch(`${API}/admin/jobs/status`, {
+          headers: authHeaders()
+        }).then(r => r.json());
+
+        if (jobData.success) {
+          const clinicsStatus = jobData.clinics_status || [];
+          const schedulerRunning = jobData.scheduler_running;
+          const statusText = schedulerRunning
+            ? '<span style="color:#10b981;font-weight:bold">● 稼働中 (Tokyo Time)</span>'
+            : '<span style="color:#f87171;font-weight:bold">● 停止中</span>';
+
+          const rows = clinicsStatus.map(c => {
+            const mockLabel = c.is_mock_mode
+              ? '<span style="font-size:10px;padding:2px 6px;background:rgba(245,158,11,0.15);color:#f59e0b;border-radius:4px">Mock</span>'
+              : '<span style="font-size:10px;padding:2px 6px;background:rgba(16,185,129,0.15);color:#10b981;border-radius:4px">本番</span>';
+
+            const planLabel = c.plan_status === 'active'
+              ? '<span style="color:#10b981">契約中</span>'
+              : '<span style="color:var(--text-3)">' + c.plan_status + '</span>';
+
+            const recentText = c.recent_logs && c.recent_logs.length > 0
+              ? c.recent_logs.map(log => `${log.date.slice(5)} (CV:${log.conversions})`).join(', ')
+              : '履歴なし';
+
+            return `
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                <td style="padding:10px 8px;font-size:12px">${c.clinic_id}</td>
+                <td style="padding:10px 8px;font-size:12px;font-weight:600">${c.clinic_name}</td>
+                <td style="padding:10px 8px;font-size:12px">${planLabel}</td>
+                <td style="padding:10px 8px;font-size:12px">${mockLabel}</td>
+                <td style="padding:10px 8px;font-size:12px;font-family:monospace">${c.last_collect_date}</td>
+                <td style="padding:10px 8px;font-size:12px;text-align:right">${c.total_records}件</td>
+                <td style="padding:10px 8px;font-size:11px;color:var(--text-3)">${recentText}</td>
+                <td style="padding:10px 8px;text-align:right">
+                  <button class="btn btn-secondary" onclick="collectPerformanceNow(${c.clinic_id}, this)" style="font-size:10px;padding:4px 8px;border-radius:4px" ${c.is_mock_mode ? 'disabled title="Mockモードの院は手動収集不可"' : ''}>
+                    今すぐ収集
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+
+          jobContainer.innerHTML = `
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:12px">
+              システムスケジューラ: ${statusText} • 登録ジョブ数: ${jobData.active_jobs_count}件
+            </div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;text-align:left">
+                <thead>
+                  <tr style="border-bottom:1px solid rgba(255,255,255,0.08);color:var(--text-3);font-size:11px">
+                    <th style="padding:8px;font-weight:500">ID</th>
+                    <th style="padding:8px;font-weight:500">クリニック名</th>
+                    <th style="padding:8px;font-weight:500">契約プラン</th>
+                    <th style="padding:8px;font-weight:500">APIモード</th>
+                    <th style="padding:8px;font-weight:500">最終収集日</th>
+                    <th style="padding:8px;font-weight:500;text-align:right">累積件数</th>
+                    <th style="padding:8px;font-weight:500">直近のログ (日付・CV)</th>
+                    <th style="padding:8px;font-weight:500;text-align:right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+            </div>
+          `;
+        } else {
+          jobContainer.innerHTML = `<div style="color:var(--red);font-size:12px">ジョブステータスの取得に失敗: ${jobData.detail || '不明'}</div>`;
+        }
+      } catch (err) {
+        console.error(err);
+        jobContainer.innerHTML = `<div style="color:var(--red);font-size:12px">ジョブステータスの通信エラー</div>`;
+      }
+    }
 
   } catch(e) {
     if (tableEl) tableEl.innerHTML = `<div style="color:var(--red);padding:16px;font-size:12px">⚠️ 読み込み失敗: ${e.message}</div>`;
     [trendEl, cvEl].forEach(el => { if (el) el.innerHTML = ''; });
   }
 }
+
+window.collectPerformanceNow = async function(clinicId, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '収集中...';
+  }
+  try {
+    const res = await api(`/admin/jobs/collect-now?clinic_id=${clinicId}`, {
+      method: 'POST'
+    });
+    if (res.success) {
+      alert(res.message);
+      loadAdminPerformance();
+    } else {
+      throw new Error(res.detail || '手動収集に失敗しました');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('エラー: ' + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '今すぐ収集';
+    }
+  }
+};
 
 function _renderAdminBarChart(container, trend, key, color, fmtVal) {
   if (!container || !trend.length) {
