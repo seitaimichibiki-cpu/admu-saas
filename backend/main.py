@@ -1012,6 +1012,56 @@ def delete_negative_keyword(nkw_id: int, clinic_id: int = 1):
     db.delete_negative_keyword(nkw_id, clinic_id)
     return {"success": True}
 
+@app.post("/api/negative-keywords/push-to-google")
+async def push_negative_keywords_to_google(clinic_id: int = 1):
+    """
+    DBに登録済みの除外キーワードをGoogle Ads（SharedSet）に一括送信し、
+    成功した件数分だけ applied フラグを 1 に更新する。
+    """
+    acc = db.get_ads_account(clinic_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Google広告アカウント設定が見つかりません")
+
+    # 未適用のキーワードを取得
+    all_nkws = db.list_negative_keywords(clinic_id)
+    pending = [n for n in all_nkws if not n.get("applied")]
+
+    if not pending:
+        return {"success": True, "message": "未適用の除外キーワードはありません", "added": 0, "skipped": 0}
+
+    # Google Adsに送信
+    client_ads = AdsClient(acc)
+    result = client_ads.push_negative_keywords(
+        [{"keyword": n["keyword"], "match_type": n.get("match_type", "BROAD")} for n in pending]
+    )
+
+    # 成功した場合、DBのappliedフラグを一括更新
+    if result.get("success") or result.get("added", 0) > 0:
+        applied_ids = [n["id"] for n in pending]
+        with db.get_conn() as conn:
+            for nkw_id in applied_ids:
+                conn.execute(
+                    "UPDATE negative_keywords SET applied=1 WHERE id=? AND clinic_id=?",
+                    (nkw_id, clinic_id)
+                )
+            conn.commit()
+
+    errors = result.get("errors", [])
+    return {
+        "success": result.get("success", False),
+        "added": result.get("added", 0),
+        "skipped": result.get("skipped", 0),
+        "pending_count": len(pending),
+        "errors": errors,
+        "mock": result.get("mock", False),
+        "message": (
+            f"✅ {result.get('added', 0)}件をGoogle広告に追加しました"
+            + (f"（{result.get('skipped', 0)}件は既登録のためスキップ）" if result.get('skipped') else "")
+            + (f"\n⚠️ エラー: {errors[0]}" if errors else "")
+        )
+    }
+
+
 # ---- API: ペルソナ管理 ----
 class PersonaReq(BaseModel):
     clinic_id: int = 1

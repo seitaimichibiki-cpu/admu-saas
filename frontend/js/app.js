@@ -2505,6 +2505,32 @@ document.getElementById('nkwInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('addNkwBtn').click();
 });
 
+window.pushNegativeKeywordsToGoogle = async function() {
+  const btn = document.getElementById('pushNkwToGoogleBtn');
+  if (!btn) return;
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 送信中...';
+  try {
+    const res = await api(`/negative-keywords/push-to-google?clinic_id=${currentClinicId}`, {
+      method: 'POST'
+    });
+    if (res.mock) {
+      toast(`📋 [モードモード] ${res.added}件を擬似的にGoogle広告へ送信しました`, 'info');
+    } else if (res.success) {
+      toast(`✅ ${res.added}件をGoogle広告に追加しました` + (res.skipped ? `（${res.skipped}件スキップ）` : ''), 'success');
+    } else {
+      toast('❌ 送信失敗: ' + (res.errors?.[0] || '不明なエラー'), 'error');
+    }
+    await loadNegativeKeywords();
+  } catch(e) {
+    toast('Push失敗: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+};
+
 // ============================================================
 // A/Bテスト: 廃案ボタン
 // ============================================================

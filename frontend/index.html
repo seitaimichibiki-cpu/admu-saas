@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="css/main.css?v=20260607-tabs-v3">
+  <link rel="stylesheet" href="css/main.css?v=20260607-nkw-push-v4">
   <style>
     .platform-switcher{display:flex;gap:6px;margin:12px 16px 4px;padding:4px;background:rgba(255,255,255,0.05);border-radius:10px;border:1px solid rgba(255,255,255,0.07)}
     .platform-btn{flex:1;padding:7px 0;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:1px;transition:all 0.2s;background:transparent;color:rgba(255,255,255,0.4)}
@@ -545,14 +545,19 @@
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   除外追加
                 </button>
+                <button class="btn btn-primary" id="pushNkwToGoogleBtn" onclick="pushNegativeKeywordsToGoogle()" style="background:linear-gradient(135deg,#1a73e8,#1557b0);border:none;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  Google広告に一括適用
+                </button>
               </div>
             </div>
             <div id="nkwList"></div>
             <div class="card" style="margin-top:20px;padding:16px;border-left:4px solid var(--warning)">
-              <h4 style="margin:0 0 8px;color:var(--warning)">💡 機能について</h4>
-              <p style="font-size:13px;color:var(--text-2);margin:0;">Google Ads API本番接続前は、除外KWはDBに記録されます。本番接続後に自動適用されます。「過去データ解析」の除外推奨タグをクリックすると、ここに自動で追加されます。</p>
+              <h4 style="margin:0 0 8px;color:var(--warning)">💡 使い方</h4>
+              <p style="font-size:13px;color:var(--text-2);margin:0;">キーワードを入力して「除外追加」でDBに保存されます。保存後、<strong>「Google広告に一括適用」</strong>ボタンを押すと、全件まとめてGoogle広告の共有除外リスト（SharedSet）に送信され、すべてのキャンペーンに自動適用されます。</p>
             </div>
           </div>
+
         </div>
       </section>
 
@@ -1859,7 +1864,7 @@
 
   <!-- Sentry Error Tracking -->
   <script src="https://browser.sentry-cdn.com/7.100.0/bundle.min.js" crossorigin="anonymous"></script>
-  <script src="js/app.js?v=20260607-tabs-v3"></script>
+  <script src="js/app.js?v=20260607-nkw-push-v4"></script>
 
   <!-- ① AIアドバイザーチャット フローティングウィジェット -->
   <style>

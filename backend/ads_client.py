@@ -543,6 +543,178 @@ class AdsClient:
             print(f"[AdsClient] デモグラフィック入札調整エラー: {err}")
             return {"success": False, "applied": False, "error": err}
 
+    # ---- 除外キーワード 一括Push ----
+    def push_negative_keywords(self, keywords: list) -> dict:
+        """
+        除外キーワードをGoogle Adsに一括登録する。
+
+        アカウント共有除外リスト（SharedSet）を使用し、全キャンペーンに適用する。
+        同名のSharedSetが既に存在する場合は再利用する。
+
+        Args:
+            keywords: [{ "keyword": str, "match_type": str ("BROAD"/"PHRASE"/"EXACT") }, ...]
+
+        Returns:
+            dict: { "success": bool, "added": int, "skipped": int, "errors": list }
+        """
+        if self.mock_mode:
+            print(f"[MOCK] 除外KW一括Push: {len(keywords)}件")
+            return {
+                "success": True,
+                "added": len(keywords),
+                "skipped": 0,
+                "errors": [],
+                "mock": True
+            }
+
+        SHARED_SET_NAME = "AdMu 除外キーワードリスト"
+        added = 0
+        skipped = 0
+        errors = []
+
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            shared_set_service = self._client.get_service("SharedSetService")
+            shared_criterion_service = self._client.get_service("SharedCriterionService")
+            campaign_shared_set_service = self._client.get_service("CampaignSharedSetService")
+
+            # ① 既存のSharedSetを検索（同名があれば再利用）
+            shared_set_resource = None
+            try:
+                query = f"""
+                    SELECT shared_set.resource_name, shared_set.id, shared_set.name
+                    FROM shared_set
+                    WHERE shared_set.type = 'NEGATIVE_KEYWORDS'
+                      AND shared_set.name = '{SHARED_SET_NAME}'
+                      AND shared_set.status = 'ENABLED'
+                """
+                resp = ga_service.search(customer_id=self.customer_id, query=query)
+                for row in resp:
+                    shared_set_resource = row.shared_set.resource_name
+                    shared_set_id = str(row.shared_set.id)
+                    print(f"[AdsClient] 既存SharedSet発見: {shared_set_resource}")
+                    break
+            except Exception as e:
+                print(f"[AdsClient] SharedSet検索エラー（新規作成します）: {e}")
+
+            # ② 既存がなければ新規作成
+            if not shared_set_resource:
+                op = self._client.get_type("SharedSetOperation")
+                shared_set = op.create
+                shared_set.name = SHARED_SET_NAME
+                shared_set.type_ = self._client.enums.SharedSetTypeEnum.NEGATIVE_KEYWORDS
+                resp = shared_set_service.mutate_shared_sets(
+                    customer_id=self.customer_id, operations=[op]
+                )
+                shared_set_resource = resp.results[0].resource_name
+                shared_set_id = shared_set_resource.split("/")[-1]
+                print(f"[AdsClient] SharedSet新規作成: {shared_set_resource}")
+
+            # ③ 既存の除外KWを取得してスキップ判定
+            existing_kws = set()
+            try:
+                q = f"""
+                    SELECT shared_criterion.keyword.text, shared_criterion.keyword.match_type
+                    FROM shared_criterion
+                    WHERE shared_set.resource_name = '{shared_set_resource}'
+                """
+                resp = ga_service.search(customer_id=self.customer_id, query=q)
+                for row in resp:
+                    existing_kws.add(row.shared_criterion.keyword.text.lower())
+            except Exception as e:
+                print(f"[AdsClient] 既存除外KW取得エラー（全件追加します）: {e}")
+
+            # ④ SharedCriterion（除外KW本体）を一括追加
+            match_type_map = {
+                "BROAD":  self._client.enums.KeywordMatchTypeEnum.BROAD,
+                "PHRASE": self._client.enums.KeywordMatchTypeEnum.PHRASE,
+                "EXACT":  self._client.enums.KeywordMatchTypeEnum.EXACT,
+            }
+
+            operations = []
+            for kw_data in keywords:
+                kw_text = kw_data["keyword"].strip()
+                if kw_text.lower() in existing_kws:
+                    skipped += 1
+                    continue
+                match_type = match_type_map.get(
+                    kw_data.get("match_type", "BROAD").upper(),
+                    self._client.enums.KeywordMatchTypeEnum.BROAD
+                )
+                op = self._client.get_type("SharedCriterionOperation")
+                criterion = op.create
+                criterion.shared_set = shared_set_resource
+                criterion.keyword.text = kw_text
+                criterion.keyword.match_type = match_type
+                operations.append(op)
+
+            # Google Ads APIは1リクエスト最大2000件制限
+            BATCH = 2000
+            for i in range(0, len(operations), BATCH):
+                batch = operations[i:i + BATCH]
+                try:
+                    resp = shared_criterion_service.mutate_shared_criteria(
+                        customer_id=self.customer_id,
+                        operations=batch,
+                        partial_failure=True
+                    )
+                    added += len([r for r in resp.results if r.resource_name])
+                    if resp.partial_failure_error and resp.partial_failure_error.message:
+                        errors.append(resp.partial_failure_error.message[:200])
+                except Exception as e:
+                    errors.append(str(e)[:200])
+                    print(f"[AdsClient] SharedCriterion追加エラー: {e}")
+
+            # ⑤ SharedSetを全キャンペーンに紐付け（未紐付けのキャンペーンのみ）
+            try:
+                # 現在紐付け済みのキャンペーンを取得
+                q = f"""
+                    SELECT campaign_shared_set.campaign, campaign_shared_set.shared_set
+                    FROM campaign_shared_set
+                    WHERE campaign_shared_set.shared_set = '{shared_set_resource}'
+                """
+                linked_resp = ga_service.search(customer_id=self.customer_id, query=q)
+                linked_campaigns = set(row.campaign_shared_set.campaign for row in linked_resp)
+
+                # 全有効キャンペーンを取得
+                q2 = """
+                    SELECT campaign.resource_name
+                    FROM campaign
+                    WHERE campaign.status IN ('ENABLED', 'PAUSED')
+                """
+                campaign_resp = ga_service.search(customer_id=self.customer_id, query=q2)
+                link_ops = []
+                for row in campaign_resp:
+                    camp_rn = row.campaign.resource_name
+                    if camp_rn not in linked_campaigns:
+                        op = self._client.get_type("CampaignSharedSetOperation")
+                        css = op.create
+                        css.campaign = camp_rn
+                        css.shared_set = shared_set_resource
+                        link_ops.append(op)
+
+                if link_ops:
+                    campaign_shared_set_service.mutate_campaign_shared_sets(
+                        customer_id=self.customer_id, operations=link_ops
+                    )
+                    print(f"[AdsClient] SharedSetを{len(link_ops)}キャンペーンに紐付け完了")
+            except Exception as e:
+                print(f"[AdsClient] キャンペーン紐付けエラー（除外KW自体は追加済み）: {e}")
+                errors.append(f"キャンペーン紐付けエラー: {str(e)[:100]}")
+
+            print(f"[AdsClient] 除外KW Push完了: 追加={added}件, スキップ={skipped}件, エラー={len(errors)}件")
+            return {
+                "success": len(errors) == 0 or added > 0,
+                "added": added,
+                "skipped": skipped,
+                "errors": errors,
+                "mock": False
+            }
+
+        except Exception as e:
+            print(f"[AdsClient] 除外KW Push 致命的エラー: {e}")
+            return {"success": False, "added": 0, "skipped": 0, "errors": [str(e)], "mock": False}
+
     # ---- コンバージョン送信 (OCT) ----
     def upload_offline_conversion(self, gclid: str, conversion_name: str, conversion_value: float, conversion_time: str):
         if self.mock_mode:
