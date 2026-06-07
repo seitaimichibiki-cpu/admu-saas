@@ -655,14 +655,11 @@ class AdsClient:
                 try:
                     resp = shared_criterion_service.mutate_shared_criteria(
                         customer_id=self.customer_id,
-                        operations=batch,
-                        partial_failure=True
+                        operations=batch
                     )
-                    added += len([r for r in resp.results if r.resource_name])
-                    if resp.partial_failure_error and resp.partial_failure_error.message:
-                        errors.append(resp.partial_failure_error.message[:200])
+                    added += len(resp.results)
                 except Exception as e:
-                    errors.append(str(e)[:200])
+                    errors.append(str(e)[:300])
                     print(f"[AdsClient] SharedCriterion追加エラー: {e}")
 
             # ⑤ SharedSetを全キャンペーンに紐付け（未紐付けのキャンペーンのみ）
@@ -676,11 +673,11 @@ class AdsClient:
                 linked_resp = ga_service.search(customer_id=self.customer_id, query=q)
                 linked_campaigns = set(row.campaign_shared_set.campaign for row in linked_resp)
 
-                # 全有効キャンペーンを取得
+                # 全有効・停止中キャンペーンを取得（REMOVEDを除外）
                 q2 = """
                     SELECT campaign.resource_name
                     FROM campaign
-                    WHERE campaign.status IN ('ENABLED', 'PAUSED')
+                    WHERE campaign.status != 'REMOVED'
                 """
                 campaign_resp = ga_service.search(customer_id=self.customer_id, query=q2)
                 link_ops = []
@@ -699,8 +696,8 @@ class AdsClient:
                     )
                     print(f"[AdsClient] SharedSetを{len(link_ops)}キャンペーンに紐付け完了")
             except Exception as e:
+                # キャンペーン紐付けはベストエフォート（KW追加成功はそのまま返す）
                 print(f"[AdsClient] キャンペーン紐付けエラー（除外KW自体は追加済み）: {e}")
-                errors.append(f"キャンペーン紐付けエラー: {str(e)[:100]}")
 
             print(f"[AdsClient] 除外KW Push完了: 追加={added}件, スキップ={skipped}件, エラー={len(errors)}件")
             return {
