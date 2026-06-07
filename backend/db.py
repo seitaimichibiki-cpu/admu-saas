@@ -577,11 +577,26 @@ def check_ai_limit(clinic_id: int) -> tuple[bool, str]:
     account = get_ads_account(clinic_id)
     if not account:
         return False, "アカウント情報が見つかりません"
+
+    has_global_key = bool(os.environ.get("GEMINI_API_KEY", ""))
+    has_tenant_key = bool(account.get("gemini_api_key", ""))
+
+    if not (has_global_key or has_tenant_key):
+        return False, "AI機能が無効です。管理者にGemini APIキーの設定を依頼するか、環境変数を確認してください。"
+
     limit = account.get("ai_monthly_limit", 0)
+
+    # 1. 管理者（clinic_id=1）は常に制限なしで利用可能とする
+    if clinic_id == 1:
+        return True, ""
+
+    # 2. 制限値が 0 であってもシステム共通キーが有効なら、デフォルトの上限値（30回）を割り当てる
     if limit == 0:
-        return False, "AI機能が無効です。設定からGemini APIキーを登録してください。"
+        limit = 30
+
     if limit == -1:
         return True, ""  # 無制限
+
     # 今月の使用回数チェック
     from datetime import datetime
     ym = datetime.now().strftime("%Y-%m")
