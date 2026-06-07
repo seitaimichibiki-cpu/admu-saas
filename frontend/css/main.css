@@ -737,52 +737,56 @@ select.form-input { cursor: pointer; }
 .grade-D { background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
 
 /* ============================================================
-   ★ キャンペーン管理 タブUI スタイル
+   ★ キャンペーン管理 タブUI スタイル（プレミアム化）
    ============================================================ */
 .tabs-header {
   display: flex;
-  gap: 6px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  padding-bottom: 2px;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 0px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .tab-btn {
-  background: none;
-  border: none;
-  color: var(--text-3);
-  padding: 10px 16px;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 8px 8px 0 0;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255,255,255,0.4) !important;
+  padding: 12px 20px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  border-bottom: 3px solid transparent !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  white-space: nowrap !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
 }
 
 .tab-btn:hover {
-  background: rgba(255,255,255,0.04);
-  color: var(--text-2);
+  color: rgba(255,255,255,0.8) !important;
+  background: rgba(255,255,255,0.02) !important;
 }
 
 .tab-btn.active {
-  background: rgba(200, 169, 122, 0.1);
-  color: var(--accent);
-  border-bottom: 2px solid var(--accent);
+  color: var(--accent) !important;
+  border-bottom: 3px solid var(--accent) !important;
+  font-weight: 700 !important;
+  background: linear-gradient(to bottom, transparent, rgba(200, 169, 122, 0.05)) !important;
 }
 
 .tab-pane {
-  display: none;
+  display: none !important;
 }
 
 .tab-pane.active {
-  display: block;
-  animation: tabFadeIn 0.3s ease-in-out;
+  display: block !important;
+  animation: tabFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes tabFadeIn {
