@@ -3123,6 +3123,46 @@ function _renderAdminBarChart(container, trend, key, color, fmtVal) {
 
 window.loadAdminPerformance = loadAdminPerformance;
 
+window.exportAdminPerformanceCSV = async function() {
+  try {
+    const headers = authHeaders();
+    const res = await fetch(`${API}/admin/performance-analysis/export?days=${_adminPerfDays}`, {
+      headers: headers
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      alert("管理者権限が必要です。再ログインしてください。");
+      return;
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'CSVエクスポートに失敗しました。');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    const disp = res.headers.get('Content-Disposition');
+    let filename = `admin_performance_${_adminPerfDays}days.csv`;
+    if (disp && disp.indexOf('filename=') !== -1) {
+      const matches = /filename="?([^"]+)"?/.exec(disp);
+      if (matches != null && matches[1]) filename = matches[1];
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error(err);
+    alert('エラーが発生しました: ' + err.message);
+  }
+};
+
+
 // ============================================================
 // お知らせ管理
 // ============================================================

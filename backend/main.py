@@ -3394,11 +3394,14 @@ def admin_performance_analysis(
             """, (f"-{days}",)).fetchall()
 
         # ── 3. ログ蓄積件数（データ品質確認） ──
-        total_log_count = conn.execute(
-            f"SELECT COUNT(*) as c FROM performance_logs WHERE date >= {'(CURRENT_DATE - INTERVAL ' + repr(str(days) + ' days') + ')' if db.USE_PG else \"date('now', ? || ' days', 'localtime')\"}"
-            if db.USE_PG else "SELECT COUNT(*) as c FROM performance_logs WHERE date >= date('now', ? || ' days', 'localtime')",
-            () if db.USE_PG else (f"-{days}",)
-        ).fetchone()["c"]
+        if db.USE_PG:
+            count_query = f"SELECT COUNT(*) as c FROM performance_logs WHERE date >= (CURRENT_DATE - INTERVAL '{days} days')"
+            count_params = ()
+        else:
+            count_query = "SELECT COUNT(*) as c FROM performance_logs WHERE date >= date('now', ? || ' days', 'localtime')"
+            count_params = (f"-{days}",)
+
+        total_log_count = conn.execute(count_query, count_params).fetchone()["c"]
 
     # クリニック別KPI計算
     clinic_stats = []
@@ -3459,6 +3462,73 @@ def admin_performance_analysis(
         "trend": trend,
         "generated_at": _dt.datetime.now().isoformat(),
     }
+
+
+@app.get("/api/admin/performance-analysis/export")
+def admin_performance_analysis_export(
+    request: Request,
+    days: int = 30,
+    password: str = "",
+    authorization: Optional[str] = Header(None)
+):
+    """
+    全クリニックの広告実績データをまとめたCSVエクスポート（管理者専用）。
+    """
+    _check_admin(password, authorization, request)
+
+    # 既存の分析ロジックを実行してデータを取得
+    analysis = admin_performance_analysis(
+        request=request,
+        days=days,
+        password=password,
+        authorization=authorization
+    )
+
+    clinic_stats = analysis.get("clinic_stats", [])
+
+    from fastapi.responses import StreamingResponse
+    import csv
+    import io
+    import datetime as _dt
+
+    # CSVの作成
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "クリニックID", "クリニック名", "データ収集日数", "インプレッション(表示回数)", 
+        "クリック数", "総広告費(円)", "コンバージョン数(CV)", "平均CTR(%)", 
+        "平均CVR(%)", "平均CPA(円)", "平均CPC(円)"
+    ])
+
+    for c in clinic_stats:
+        writer.writerow([
+            c["clinic_id"],
+            c["clinic_name"],
+            c["data_days"],
+            c["impressions"],
+            c["clicks"],
+            c["cost_yen"],
+            c["conversions"],
+            c["ctr"],
+            c["cvr"],
+            c["cpa_yen"] if c["cpa_yen"] is not None else "",
+            c["cpc_yen"] if c["cpc_yen"] is not None else ""
+        ])
+
+    csv_content = output.getvalue()
+    output.close()
+
+    today = _dt.datetime.now().strftime("%Y%m%d")
+    filename = f"admin_performance_{days}days_{today}.csv"
+
+    return StreamingResponse(
+        iter([csv_content.encode("utf-8-sig")]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Clinic-Count": str(len(clinic_stats)),
+        }
+    )
 
 
 @app.get("/api/admin/aggregated-stats")
