@@ -110,6 +110,7 @@
     <div class="nav-section">
       <div class="nav-title">追加情報</div>
       <a class="nav-item" href="#google-link">Google広告連携手順</a>
+      <a class="nav-item" href="#ga4-link">GA4連携と最適化の仕組み</a>
       <a class="nav-item" href="#limits">機能の注意事項</a>
     </div>
     <div class="nav-section">
@@ -322,6 +323,45 @@
 
       <div class="tip">
         💡 リクエストが届かない場合は、「設定」→「Google Ads API設定」の「🔗 Google広告にリンクリクエストを送信」ボタンから手動で再送できます。
+      </div>
+    </section>
+
+    <section id="ga4-link">
+      <h2>📊 GA4連携と広告最適化の仕組み</h2>
+      <p>Googleアナリティクス（GA4）をAdMuと連携することで、Google広告のAIおよびAdMuの最適化AIが本来の精度を発揮し、<strong>獲得単価（CPA）を抑えながら予約数を最大化</strong>することができます。</p>
+      
+      <div class="warn">
+        ⚠️ <strong>【重要】タグ設置は手動で行う必要があります</strong><br>
+        セキュリティおよび権限の関係上、AdMuが自動的に患者様のホームページやLP（ランディングページ）にGA4タグを埋め込むことはできません。<br>
+        必ずご自身（またはホームページ制作会社など）で、LP側にGA4のトラッキングコードを埋め込んでください。
+      </div>
+
+      <h3>⚙️ 連携の手順</h3>
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">LPにGA4の計測タグを埋め込む</div>
+        <div class="step-desc">ご自身のホームページやLP of HTMLに、GA4の「グローバルサイトタグ（gtag.js）」を手動で貼り付けます。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">AdMuに測定IDを入力</div>
+        <div class="step-desc">AdMuの「設定」画面 → 「外部システム・目標設定」の「GA4 測定ID」欄に、<strong>G-XXXXXX</strong> 形式の測定IDを入力して保存します。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">Google広告とGA4をリンク</div>
+        <div class="step-desc">AdMuがAPIを介して、Google広告アカウントとご自身のGA4プロパティをリンクさせ、コンバージョン（予約完了）データをGoogle広告側へ自動で転送（インポート）するように設定します。</div>
+      </div>
+
+      <h3>🧠 なぜGA4連携で広告が最適化されるのか？</h3>
+      <ul>
+        <li><strong>正確なCV（予約）計測:</strong> 整体院のホームページからの「ネット予約完了」や「LINE登録」など、Google広告タグだけでは追いづらい成果をGA4で簡単に計測できます。</li>
+        <li><strong>Google広告のAI学習:</strong> GA4のコンバージョンデータがGoogle広告に送られることで、「どの検索キーワードや曜日に広告を出せば予約に繋がるか」をGoogleのAIが学習します。</li>
+        <li><strong>AdMuのAI自動調整:</strong> AdMuの予算配分AIや入札自動調整機能もこのデータを参照するため、より予約に繋がりやすいキャンペーンへ予算を多く回したり、入札単価を自動調整したりする「超絶最適化」が可能になります。</li>
+      </ul>
+      <div class="tip">
+        💡 <strong>測定結果の確認について</strong><br>
+        現在、AdMuのダッシュボード自体にはGA4単体の解析データを表示する画面はありません。アクセス数やページビュー（PV）などの詳細な測定結果は、ご自身の<strong>Google Analytics (GA4) 管理画面</strong>に直接ログインしてご確認ください。
       </div>
     </section>
 
