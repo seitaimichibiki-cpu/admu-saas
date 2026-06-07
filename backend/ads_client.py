@@ -577,7 +577,7 @@ class AdsClient:
             query = """
                 SELECT campaign.id, campaign.resource_name, campaign.status
                 FROM campaign
-                WHERE campaign.status != REMOVED
+                WHERE campaign.status != 'REMOVED'
             """
             resp = ga_service.search(customer_id=self.customer_id, query=query)
             campaigns = [(row.campaign.resource_name, str(row.campaign.id)) for row in resp]
@@ -599,13 +599,13 @@ class AdsClient:
             existing_per_camp = {}
             for camp_rn, camp_id in campaigns:
                 try:
-                    q = f"""
-                        SELECT campaign_criterion.keyword.text
-                        FROM campaign_criterion
-                        WHERE campaign.resource_name = \'{camp_rn}\'
-                          AND campaign_criterion.type = KEYWORD
-                          AND campaign_criterion.negative = TRUE
-                    """
+                    q = (
+                        "SELECT campaign_criterion.keyword.text "
+                        "FROM campaign_criterion "
+                        f"WHERE campaign.resource_name = '{camp_rn}' "
+                        "AND campaign_criterion.type = 'KEYWORD' "
+                        "AND campaign_criterion.negative = TRUE"
+                    )
                     cr = ga_service.search(customer_id=self.customer_id, query=q)
                     existing_per_camp[camp_rn] = set(
                         row.campaign_criterion.keyword.text.lower() for row in cr
