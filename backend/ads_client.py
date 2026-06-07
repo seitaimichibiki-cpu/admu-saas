@@ -187,22 +187,202 @@ class AdsClient:
 
     def create_campaign(self, name: str, budget_micros: int, target_region: str = "",
                         campaign_type: str = "SEARCH") -> str:
+        """後方互換用。新規はcreate_full_campaign_setupを使うこと。"""
         if self.mock_mode:
             mock_id = f"MOCK-{self.customer_id}-{random.randint(2000,9999)}"
             print(f"[MOCK] キャンペーン作成: {name} id={mock_id}")
             return mock_id
-        # 実API実装（簡略版）
+        # バジェット作成
+        budget_service = self._client.get_service("CampaignBudgetService")
+        b_op = self._client.get_type("CampaignBudgetOperation")
+        b = b_op.create
+        b.name = f"{name}_budget_{random.randint(1000,9999)}"
+        b.amount_micros = budget_micros
+        b.delivery_method = self._client.enums.BudgetDeliveryMethodEnum.STANDARD
+        b_resp = budget_service.mutate_campaign_budgets(customer_id=self.customer_id, operations=[b_op])
+        budget_rn = b_resp.results[0].resource_name
+        # キャンペーン作成
         campaign_service = self._client.get_service("CampaignService")
         campaign_op = self._client.get_type("CampaignOperation")
         campaign = campaign_op.create
         campaign.name = name
-        campaign.status = self._client.enums.CampaignStatusEnum.ENABLED
+        campaign.status = self._client.enums.CampaignStatusEnum.PAUSED
         campaign.advertising_channel_type = self._client.enums.AdvertisingChannelTypeEnum.SEARCH
         campaign.manual_cpc.enhanced_cpc_enabled = True
-        campaign.campaign_budget = f"customers/{self.customer_id}/campaignBudgets/{budget_micros}"
+        campaign.campaign_budget = budget_rn
+        campaign.network_settings.target_google_search = True
+        campaign.network_settings.target_search_network = True
+        campaign.network_settings.target_content_network = False
         resp = campaign_service.mutate_campaigns(
             customer_id=self.customer_id, operations=[campaign_op])
         return resp.results[0].resource_name.split("/")[-1]
+
+    def create_full_campaign_setup(self, config: dict) -> dict:
+        """
+        キャンペーン・広告グループ・キーワード・RSA広告文を一括作成。
+        config = {
+            "campaign_name": str,
+            "daily_budget_yen": int,
+            "final_url": str,
+            "status": "PAUSED" | "ENABLED",
+            "lat": float, "lon": float, "radius_km": int,  # 位置ターゲティング
+            "ad_groups": [
+                {
+                    "name": str,
+                    "keywords": [{"text": str, "match_type": "PHRASE"|"EXACT"|"BROAD"}],
+                    "headlines": [str],   # max 15本・各30文字以内
+                    "descriptions": [str] # max 4本・各90文字以内
+                }
+            ]
+        }
+        """
+        if self.mock_mode:
+            cid = f"MOCK-{self.customer_id}-{random.randint(3000,9999)}"
+            result = {
+                "campaign_id": cid,
+                "campaign_name": config["campaign_name"],
+                "status": "PAUSED",
+                "mock": True,
+                "ad_groups": []
+            }
+            for ag in config.get("ad_groups", []):
+                ag_id = f"MOCK-AG-{random.randint(1000,9999)}"
+                result["ad_groups"].append({
+                    "name": ag["name"],
+                    "id": ag_id,
+                    "keywords_added": len(ag.get("keywords", [])),
+                    "ad_created": True,
+                })
+            print(f"[MOCK] create_full_campaign_setup: {result}")
+            return result
+
+        cid = self.customer_id
+        client = self._client
+
+        # ① バジェット作成
+        daily_micros = config["daily_budget_yen"] * 1_000_000
+        budget_service = client.get_service("CampaignBudgetService")
+        b_op = client.get_type("CampaignBudgetOperation")
+        b = b_op.create
+        b.name = f"{config['campaign_name']}_budget_{random.randint(1000,9999)}"
+        b.amount_micros = daily_micros
+        b.delivery_method = client.enums.BudgetDeliveryMethodEnum.STANDARD
+        b_resp = budget_service.mutate_campaign_budgets(customer_id=cid, operations=[b_op])
+        budget_rn = b_resp.results[0].resource_name
+        print(f"[AdsClient] バジェット作成: {budget_rn}")
+
+        # ② キャンペーン作成（PAUSED）
+        campaign_service = client.get_service("CampaignService")
+        c_op = client.get_type("CampaignOperation")
+        c = c_op.create
+        c.name = config["campaign_name"]
+        c.status = client.enums.CampaignStatusEnum[config.get("status", "PAUSED")]
+        c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
+        c.campaign_budget = budget_rn
+        c.maximize_clicks.target_spend_micros = 0  # 上限なし（日予算で制御）
+        c.network_settings.target_google_search = True
+        c.network_settings.target_search_network = True
+        c.network_settings.target_content_network = False
+        c.network_settings.target_partner_search_network = False
+        c_resp = campaign_service.mutate_campaigns(customer_id=cid, operations=[c_op])
+        campaign_rn = c_resp.results[0].resource_name
+        campaign_id = campaign_rn.split("/")[-1]
+        print(f"[AdsClient] キャンペーン作成: {campaign_rn}")
+
+        # ③ 位置ターゲティング（半径指定）
+        if config.get("lat") and config.get("lon"):
+            cc_service = client.get_service("CampaignCriterionService")
+            loc_op = client.get_type("CampaignCriterionOperation")
+            loc = loc_op.create
+            loc.campaign = campaign_rn
+            loc.proximity.geo_point.longitude_in_micro_degrees = int(config["lon"] * 1_000_000)
+            loc.proximity.geo_point.latitude_in_micro_degrees = int(config["lat"] * 1_000_000)
+            loc.proximity.radius = config.get("radius_km", 20)
+            loc.proximity.radius_units = client.enums.ProximityRadiusUnitsEnum.KILOMETERS
+            try:
+                cc_service.mutate_campaign_criteria(customer_id=cid, operations=[loc_op])
+                print(f"[AdsClient] 位置ターゲティング設定完了")
+            except Exception as e:
+                print(f"[AdsClient] 位置ターゲティング設定エラー（続行）: {e}")
+
+        # ④ 広告グループ・キーワード・RSA作成
+        ag_service = client.get_service("AdGroupService")
+        kw_service = client.get_service("AdGroupCriterionService")
+        ad_service = client.get_service("AdGroupAdService")
+        ad_groups_result = []
+
+        for ag_config in config.get("ad_groups", []):
+            # 広告グループ作成
+            ag_op = client.get_type("AdGroupOperation")
+            ag = ag_op.create
+            ag.name = ag_config["name"]
+            ag.campaign = campaign_rn
+            ag.status = client.enums.AdGroupStatusEnum.ENABLED
+            ag.type_ = client.enums.AdGroupTypeEnum.SEARCH_STANDARD
+            ag_resp = ag_service.mutate_ad_groups(customer_id=cid, operations=[ag_op])
+            ag_rn = ag_resp.results[0].resource_name
+            ag_id = ag_rn.split("/")[-1]
+            print(f"[AdsClient] 広告グループ作成: {ag_config['name']} ({ag_id})")
+
+            # キーワード追加
+            kw_ops = []
+            for kw in ag_config.get("keywords", []):
+                kw_op = client.get_type("AdGroupCriterionOperation")
+                kc = kw_op.create
+                kc.ad_group = ag_rn
+                kc.status = client.enums.AdGroupCriterionStatusEnum.ENABLED
+                kc.keyword.text = kw["text"]
+                mt = kw.get("match_type", "PHRASE").upper()
+                kc.keyword.match_type = client.enums.KeywordMatchTypeEnum[mt]
+                kw_ops.append(kw_op)
+            kw_added = 0
+            if kw_ops:
+                kw_resp = kw_service.mutate_ad_group_criteria(
+                    customer_id=cid, operations=kw_ops,
+                    partial_failure=True
+                )
+                kw_added = sum(1 for r in kw_resp.results if r.resource_name)
+                print(f"[AdsClient] キーワード追加: {kw_added}/{len(kw_ops)}件")
+
+            # RSA広告文作成
+            ad_op = client.get_type("AdGroupAdOperation")
+            aga = ad_op.create
+            aga.ad_group = ag_rn
+            aga.status = client.enums.AdGroupAdStatusEnum.ENABLED
+            aga.ad.final_urls.append(config["final_url"])
+
+            for hl_text in ag_config.get("headlines", [])[:15]:
+                hl = client.get_type("AdTextAsset")
+                hl.text = hl_text[:30]
+                aga.ad.responsive_search_ad.headlines.append(hl)
+
+            for desc_text in ag_config.get("descriptions", [])[:4]:
+                desc = client.get_type("AdTextAsset")
+                desc.text = desc_text[:90]
+                aga.ad.responsive_search_ad.descriptions.append(desc)
+
+            try:
+                ad_service.mutate_ad_group_ads(customer_id=cid, operations=[ad_op])
+                ad_created = True
+                print(f"[AdsClient] RSA広告文作成完了: {ag_config['name']}")
+            except Exception as e:
+                ad_created = False
+                print(f"[AdsClient] RSA広告文作成エラー: {e}")
+
+            ad_groups_result.append({
+                "name": ag_config["name"],
+                "id": ag_id,
+                "keywords_added": kw_added,
+                "ad_created": ad_created,
+            })
+
+        return {
+            "campaign_id": campaign_id,
+            "campaign_name": config["campaign_name"],
+            "status": config.get("status", "PAUSED"),
+            "mock": False,
+            "ad_groups": ad_groups_result,
+        }
 
     def update_campaign_status(self, google_campaign_id: str, status: str):
         if self.mock_mode:
@@ -222,6 +402,8 @@ class AdsClient:
             campaign_op.update_mask.paths.append("status")
             
         campaign_service.mutate_campaigns(customer_id=self.customer_id, operations=[campaign_op])
+
+
 
     # ---- パフォーマンス ----
     def get_performance_series(self, days: str = "7", start_date: str = None, end_date: str = None):

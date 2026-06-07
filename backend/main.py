@@ -1014,6 +1014,127 @@ def delete_negative_keyword(nkw_id: int, clinic_id: int = 1):
     db.delete_negative_keyword(nkw_id, clinic_id)
     return {"success": True}
 
+
+@app.post("/api/campaigns/create-full-setup")
+async def create_full_campaign_setup(clinic_id: int = 1, request: Request = None):
+    """キャンペーン・広告グループ・キーワード・RSA広告文を一括作成"""
+    try:
+        acc = db.get_ads_account(clinic_id)
+        if not acc:
+            raise HTTPException(status_code=404, detail="広告アカウントが設定されていません")
+
+        client_ads = AdsClient(acc)
+
+        config = {
+            "campaign_name": "整体院導_Search_藤枝商圏",
+            "daily_budget_yen": 1000,
+            "final_url": "https://michibiki-seitai.com",
+            "status": "PAUSED",
+            "lat": 34.8472,
+            "lon": 138.2539,
+            "radius_km": 25,
+            "ad_groups": [
+                {
+                    "name": "腰痛×地域",
+                    "keywords": [
+                        {"text": "腰痛 整体 藤枝",   "match_type": "PHRASE"},
+                        {"text": "腰痛 接骨院 藤枝", "match_type": "PHRASE"},
+                        {"text": "腰痛 藤枝",        "match_type": "PHRASE"},
+                        {"text": "ぎっくり腰 藤枝",  "match_type": "PHRASE"},
+                        {"text": "腰痛 整体 焼津",   "match_type": "PHRASE"},
+                        {"text": "腰痛 焼津",        "match_type": "PHRASE"},
+                        {"text": "藤枝 整体院",      "match_type": "PHRASE"},
+                        {"text": "藤枝 整体",        "match_type": "PHRASE"},
+                        {"text": "腰痛 整体 藤枝",   "match_type": "EXACT"},
+                        {"text": "ぎっくり腰 藤枝",  "match_type": "EXACT"},
+                    ],
+                    "headlines": [
+                        "腰痛専門｜藤枝市の整体院",
+                        "藤枝駅徒歩3分・完全予約制",
+                        "土日祝も夜20時まで営業",
+                        "腰痛｜藤枝・焼津エリア対応",
+                        "医学誌掲載の整体技術",
+                        "LINEで簡単予約OK",
+                        "完全予約制で待ち時間なし",
+                        "また薬か…と思っている方へ",
+                        "旅行を断り続けた腰痛が変わった",
+                        "整形外科で「異常なし」の腰痛",
+                        "痛み止めが効かなくなってきた",
+                        "手術を断って正解でした",
+                        "歩けなかった方が山に行けました",
+                        "10年の腰痛が変わる整体院",
+                        "手術宣告を受けた方こそ来て",
+                    ],
+                    "descriptions": [
+                        "藤枝駅から徒歩3分。腰痛・ぎっくり腰・慢性腰痛など重症例も歓迎。施術後のセルフケア指導まで一貫サポート。LINEまたはWebから簡単予約。",
+                        "「旅行に誘われても歩けないから断り続けている」そんな腰痛の方へ。痛みの本当の原因を見つけ、根本から向き合います。土日祝も夜20時まで。",
+                        "整形外科で「異常なし」と言われた。薬を飲んでも気休めにしかならない。そんな方が当院でどう変化したか、まずはご相談を。",
+                        "痛み止めに頼る生活を終わりにしませんか。医学誌掲載の技術で原因から向き合い、痛みがなかった頃の日常を目指します。完全予約制・待ち時間なし。",
+                    ],
+                },
+                {
+                    "name": "重症特化",
+                    "keywords": [
+                        {"text": "脊柱管狭窄症 整体",     "match_type": "PHRASE"},
+                        {"text": "椎間板ヘルニア 整体",   "match_type": "PHRASE"},
+                        {"text": "坐骨神経痛 整体",       "match_type": "PHRASE"},
+                        {"text": "ヘルニア 手術したくない","match_type": "PHRASE"},
+                        {"text": "脊柱管狭窄症 手術しない","match_type": "PHRASE"},
+                        {"text": "慢性腰痛 整体",         "match_type": "PHRASE"},
+                        {"text": "腰痛 根本改善",         "match_type": "PHRASE"},
+                        {"text": "ぎっくり腰 整体",       "match_type": "PHRASE"},
+                        {"text": "脊柱管狭窄症 整体",     "match_type": "EXACT"},
+                        {"text": "椎間板ヘルニア 整体",   "match_type": "EXACT"},
+                    ],
+                    "headlines": [
+                        "重症専門整体｜藤枝市",
+                        "ヘルニア・脊柱管狭窄症専門",
+                        "手術せず根本改善を目指す整体",
+                        "坐骨神経痛の根本改善",
+                        "医学誌掲載の施術技術",
+                        "完全予約制・土日祝営業",
+                        "椎間板ヘルニアの整体",
+                        "「もう手術しかない」と言われた",
+                        "病院では変わらなかった腰痛へ",
+                        "ヘルニア、手術しない選択肢がある",
+                        "坐骨神経痛、歩けない方が来る",
+                        "手術せずに変化した方がいます",
+                        "諦めが早すぎます、その腰痛",
+                        "重症ほど来院してほしい整体院",
+                        "脊柱管狭窄症、手術しない選択をした",
+                    ],
+                    "descriptions": [
+                        "「もう手術しかない」と言われた方が来ます。脊柱管狭窄症・椎間板ヘルニア・坐骨神経痛など、重症ほど真剣に向き合います。藤枝駅徒歩3分・完全予約制。",
+                        "病院では変わらなかった方、整形外科で「異常なし」と言われた方、そんな方が当院に来ます。痛みの本当の原因を一緒に探しましょう。",
+                        "「どこに行っても変わらない」と諦めていた重症腰痛・ヘルニアの方へ。施術だけでなく再発しない体づくりまで一貫サポート。土日祝・夜20時まで。",
+                        "手術を勧められても、すぐに決断しなくていいです。根本原因を追及し、手術なしで改善を目指せるか一緒に確認しましょう。LINEで予約。",
+                    ],
+                },
+            ],
+        }
+
+        result = client_ads.create_full_campaign_setup(config)
+        return {
+            "success": True,
+            "mock": result.get("mock", False),
+            "campaign_id": result["campaign_id"],
+            "campaign_name": result["campaign_name"],
+            "status": result["status"],
+            "ad_groups": result["ad_groups"],
+            "message": (
+                f"✅ キャンペーン「{result['campaign_name']}」を作成しました（PAUSED）。"
+                f"Google広告管理画面で確認後、有効化してください。"
+                if not result.get("mock") else
+                f"📋 [モック] キャンペーン「{result['campaign_name']}」を擬似作成しました。"
+            )
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[create-full-setup] エラー: {tb}")
+        raise HTTPException(status_code=500, detail=f"キャンペーン作成エラー: {str(e)}")
+
 @app.post("/api/negative-keywords/push-to-google")
 async def push_negative_keywords_to_google(clinic_id: int = 1):
     """
