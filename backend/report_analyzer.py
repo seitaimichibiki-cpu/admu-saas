@@ -61,7 +61,7 @@ class ReportAnalyzer:
 }}
 """
             # 解析実行
-            response = self._client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+            response = self._client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
             
             # JSONパース
             try:
