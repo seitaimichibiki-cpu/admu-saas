@@ -646,8 +646,9 @@ class AdsClient:
                         )
                         added += len(result_resp.results)
                     except Exception as e:
-                        errors.append(f"Campaign {camp_id}: {str(e)[:200]}")
-                        print(f"[AdsClient] キャンペーン {camp_id} 除外KW追加エラー: {e}")
+                        full_err = str(e)
+                        errors.append(f"Campaign {camp_id}: {full_err}")
+                        print(f"[AdsClient] キャンペーン {camp_id} 除外KW追加エラー FULL: {full_err}")
 
             print(f"[AdsClient] 除外KW Push完了: 追加={added}件, スキップ={skipped}件, エラー={len(errors)}件")
             return {
