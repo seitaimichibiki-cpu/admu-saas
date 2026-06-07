@@ -184,307 +184,320 @@
 </header>
 
 <div class="tab-nav">
-  <button class="tab-btn active" onclick="showTab('terms')">利用規約</button>
-  <button class="tab-btn" onclick="showTab('privacy')">プライバシーポリシー</button>
-  <button class="tab-btn" onclick="showTab('tokusho')">特定商取引法</button>
+  <button class="tab-btn active" id="btn-terms" onclick="showTab('terms')">利用規約</button>
+  <button class="tab-btn" id="btn-privacy" onclick="showTab('privacy')">プライバシーポリシー</button>
+  <button class="tab-btn" id="btn-tokusho" onclick="showTab('tokusho')">特定商取引法</button>
 </div>
 
-<!-- ===== 利用規約 ===== -->
 <main>
-<div id="tab-terms" class="tab-panel active">
-  <h1 class="page-title">利用規約</h1>
-  <p class="page-subtitle">AdMu サービス利用規約（Terms of Service）</p>
-  <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
+  <!-- ===== 利用規約 ===== -->
+  <div id="tab-terms" class="tab-panel active">
+    <h1 class="page-title">利用規約</h1>
+    <p class="page-subtitle">AdMu サービス利用規約（Terms of Service）</p>
+    <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
 
-  <div class="section">
-    <h2>第1条（目的）</h2>
-    <p>本利用規約（以下「本規約」）は、AdMu（以下「本サービス」）の提供条件および利用者との権利義務関係を定めるものです。本サービスをご利用いただく前に、必ず本規約をお読みください。本サービスのご利用をもって、本規約に同意したものとみなします。</p>
-  </div>
+    <div class="section">
+      <h2>第1条（目的）</h2>
+      <p>本利用規約（以下「本規約」）は、AdMu（以下「本サービス」）の提供条件および利用者との権利義務関係を定めるものです。本サービスをご利用いただく前に、必ず本規約をお読みください。本サービスのご利用をもって, 本規約に同意したものとみなします。</p>
+    </div>
 
-  <div class="section">
-    <h2>第2条（サービスの内容）</h2>
-    <p>本サービスは、整体院・治療院等の医療・健康系クライアントを主な対象として、以下の機能を提供するAI搭載型Google広告自動運用プラットフォームです。</p>
-    <ul>
-      <li>Google広告キャンペーンの自動生成・管理</li>
-      <li>AIによる入札調整・最適化（ルールベース）</li>
-      <li>AI広告文（RSA）の自動生成（Gemini AI利用）</li>
-      <li>週次・日次レポートのメール・LINE自動送信</li>
-      <li>Google Analytics連携によるアクセス解析</li>
-      <li>A/Bテスト自動発動・分析機能</li>
-      <li>その他付随するダッシュボード・管理機能</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第2条（サービスの内容）</h2>
+      <p>本サービスは、整体院・治療院等の医療・健康系クライアントを主な対象として、以下の機能を提供するAI搭載型Google広告自動運用プラットフォームです。</p>
+      <ul>
+        <li>Google広告キャンペーンの自動生成・管理</li>
+        <li>AIによる入札調整・最適化（ルールベース）</li>
+        <li>AI広告文（RSA）の自動生成（Gemini AI利用）</li>
+        <li>週次・日次レポートのメール・LINE自動送信</li>
+        <li>Google Analytics連携によるアクセス解析</li>
+        <li>A/Bテスト自動発動・分析機能</li>
+        <li>その他付随するダッシュボード・管理機能</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第3条（利用資格）</h2>
-    <p>本サービスは、弊社が発行したライセンスキーを取得した法人または個人事業主のみご利用いただけます。以下に該当する場合、ご利用をお断りする場合があります。</p>
-    <ul>
-      <li>虚偽の情報を提供した場合</li>
-      <li>本規約に違反したことがある場合</li>
-      <li>反社会的勢力等と関係がある場合</li>
-      <li>その他、弊社が不適切と判断した場合</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第3条（利用資格）</h2>
+      <p>本サービスは、弊社が発行したライセンスキーを取得した法人または個人事業主のみご利用いただけます。以下に該当する場合、ご利用をお断りする場合があります。</p>
+      <ul>
+        <li>虚偽の情報を提供した場合</li>
+        <li>本規約に違反したことがある場合</li>
+        <li>反社会的勢力等と関係がある場合</li>
+        <li>その他、弊社が不適切と判断した場合</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第4条（広告費・Google Ads APIについて）</h2>
-    <p><strong>重要：</strong>本サービスはGoogle Ads APIを通じて広告を配信しますが、以下の点をご理解ください。</p>
-    <ul>
-      <li>広告費用はお客様のGoogleアカウントに直接課金されます。本サービスの管理費とは別途です。</li>
-      <li>AIによる入札調整はあくまで補助ツールであり、効果を保証するものではありません。</li>
-      <li>本番APIへの接続には、Googleの開発者トークン審査通過が別途必要です。</li>
-      <li>モックモード運用中は実際の広告配信は行われません。</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第4条（広告費・Google Ads APIについて）</h2>
+      <p><strong>重要：</strong>本サービスはGoogle Ads APIを通じて広告を配信しますが、以下の点をご理解ください。</p>
+      <ul>
+        <li>広告費用はお客様のGoogleアカウントに直接課金されます。本サービスの管理費とは別途です。</li>
+        <li>AIによる入札調整はあくまで補助ツールであり、効果を保証するものではありません。</li>
+        <li>本番APIへの接続には、Googleの開発者トークン審査通過が別途必要です。</li>
+        <li>モックモード運用中は実際の広告配信は行われません。</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第5条（禁止事項）</h2>
-    <p>利用者は、以下の行為を行ってはなりません。</p>
-    <ol>
-      <li>本サービスを通じて、虚偽・誇大広告など法令に違反するコンテンツを配信すること</li>
-      <li>本サービスのソースコードのリバースエンジニアリング・複製・再販</li>
-      <li>他のユーザーのデータへの不正アクセス</li>
-      <li>サービスの安定運営を妨げる大量リクエスト・攻撃行為</li>
-      <li>ライセンスキーの第三者への譲渡・共有</li>
-      <li>その他、法令または公序良俗に違反する一切の行為</li>
-    </ol>
-  </div>
+    <div class="section">
+      <h2>第5条（禁止事項）</h2>
+      <p>利用者は、以下の行為を行ってはなりません。</p>
+      <ol>
+        <li>本サービスを通じて、虚偽・誇大広告など法令に違反するコンテンツを配信すること</li>
+        <li>本サービスのソースコードのリバースエンジニアリング・複製・再販</li>
+        <li>他のユーザーのデータへの不正アクセス</li>
+        <li>サービスの安定運営を妨げる大量リクエスト・攻撃行為</li>
+        <li>ライセンスキーの第三者への譲渡・共有</li>
+        <li>その他、法令または公序良俗に違反する一切の行為</li>
+      </ol>
+    </div>
 
-  <div class="section">
-    <h2>第6条（免責事項）</h2>
-    <p>弊社は以下の事項について責任を負いません。</p>
-    <ul>
-      <li>AIによる自動最適化の効果・成果（広告費の回収・患者獲得等）</li>
-      <li>利用者のGoogle広告アカウントの設定ミスによる損害</li>
-      <li>Googleのポリシー変更・APIの仕様変更による機能変化</li>
-      <li>天災・通信障害・第三者の行為によるサービス停止</li>
-      <li>利用者が配信した広告コンテンツの内容に関する紛争</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第6条（免責事項）</h2>
+      <p>弊社は以下の事項について責任を負いません。</p>
+      <ul>
+        <li>AIによる自動最適化の効果・成果（広告費の回収・患者獲得等）</li>
+        <li>利用者のGoogle広告アカウントの設定ミスによる損害</li>
+        <li>Googleのポリシー変更・APIの仕様変更による機能変化</li>
+        <li>天災・通信障害・第三者の行為によるサービス停止</li>
+        <li>利用者が配信した広告コンテンツの内容に関する紛争</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第7条（契約解除・サービス停止）</h2>
-    <p>弊社は、利用者が本規約に違反した場合、または以下の理由に該当すると判断した場合、事前通知なくサービスを停止・ライセンスを失効させることができます。</p>
-    <ul>
-      <li>月額料金の支払い遅延（14日以上）</li>
-      <li>Google広告ポリシーへの重大な違反</li>
-      <li>不正利用・サービスへの攻撃行為</li>
-    </ul>
-    <p>お客様からの解約は、解約希望月の月末10日前までにご連絡ください。</p>
-  </div>
+    <div class="section">
+      <h2>第7条（契約解除・サービス停止）</h2>
+      <p>弊社は、利用者が本規約に違反した場合、または以下の理由に該当すると判断した場合、事前通知なくサービスを停止・ライセンスを失効させることができます。</p>
+      <ul>
+        <li>月額料金の支払い遅延（14日以上）</li>
+        <li>Google広告ポリシーへの重大な違反</li>
+        <li>不正利用・サービスへの攻撃行為</li>
+      </ul>
+      <p>お客様からの解約は、解約希望月の月末10日前までにご連絡ください。</p>
+    </div>
 
-  <div class="section">
-    <h2>第8条（準拠法・管轄）</h2>
-    <p>本規約は日本法に準拠し、本サービスに関する紛争については、弊社所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします。</p>
-  </div>
+    <div class="section">
+      <h2>第8条（準拠法・管轄）</h2>
+      <p>本規約は日本法に準拠し、本サービスに関する紛争については、弊社所在地を管轄する裁判所を第一審の専属的合意管轄裁判所とします。</p>
+    </div>
 
-  <div class="section">
-    <div class="contact-box">
-      <p>規約に関するお問い合わせ</p>
-      <a href="mailto:support@admu.jp">support@admu.jp</a>
+    <div class="section">
+      <div class="contact-box">
+        <p>規約に関するお問い合わせ</p>
+        <a href="mailto:support@admu.jp">support@admu.jp</a>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ===== プライバシーポリシー ===== -->
-<div id="tab-privacy" class="tab-panel">
-  <h1 class="page-title">プライバシーポリシー</h1>
-  <p class="page-subtitle">AdMu プライバシーポリシー（Privacy Policy）</p>
-  <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
+  <!-- ===== プライバシーポリシー ===== -->
+  <div id="tab-privacy" class="tab-panel">
+    <h1 class="page-title">プライバシーポリシー</h1>
+    <p class="page-subtitle">AdMu プライバシーポリシー（Privacy Policy）</p>
+    <div class="effective-date">📅 最終更新日：2026年4月1日　／　施行日：2026年4月1日</div>
 
-  <div class="section">
-    <h2>第1条（基本方針）</h2>
-    <p>AdMu（以下「本サービス」）は、利用者の個人情報の保護を最重要課題と認識し、個人情報保護法その他関連法令を遵守するとともに、適切な管理・保護に努めます。</p>
-  </div>
+    <div class="section">
+      <h2>第1条（基本方針）</h2>
+      <p>AdMu（以下「本サービス」）は、利用者の個人情報の保護を最重要課題と認識し、個人情報保護法その他関連法令を遵守するとともに、適切な管理・保護に努めます。</p>
+    </div>
 
-  <div class="section">
-    <h2>第2条（収集する情報）</h2>
-    <p>本サービスでは、以下の情報を収集・管理します。</p>
-    <ul>
-      <li><strong>アカウント情報：</strong>クリニック名、管理者名、メールアドレス</li>
-      <li><strong>広告設定情報：</strong>Google広告の顧客ID、APIキー類（暗号化保管）</li>
-      <li><strong>広告パフォーマンスデータ：</strong>クリック数・表示回数・費用・CV数等（Google Ads APIから取得）</li>
-      <li><strong>通知設定：</strong>LINE Channel Token、通知先メールアドレス</li>
-      <li><strong>利用ログ：</strong>IPアドレス、操作ログ（セキュリティ・不正利用防止目的）</li>
-    </ul>
-    <p>患者個人の氏名・住所・診療情報など医療個人情報は本サービスでは<strong>一切収集しません</strong>。</p>
-  </div>
+    <div class="section">
+      <h2>第2条（収集する情報）</h2>
+      <p>本サービスでは、以下の情報を収集・管理します。</p>
+      <ul>
+        <li><strong>アカウント情報：</strong>クリニック名、管理者名、メールアドレス</li>
+        <li><strong>広告設定情報：</strong>Google広告の顧客ID、APIキー類（暗号化保管）</li>
+        <li><strong>広告パフォーマンスデータ：</strong>クリック数・表示回数・費用・CV数等（Google Ads APIから取得）</li>
+        <li><strong>通知設定：</strong>LINE Channel Token、通知先メールアドレス</li>
+        <li><strong>利用ログ：</strong>IPアドレス、操作ログ（セキュリティ・不正利用防止目的）</li>
+      </ul>
+      <p>患者個人の氏名・住所・診療情報など医療個人情報は本サービスでは<strong>一切収集しません</strong>。</p>
+    </div>
 
-  <div class="section">
-    <h2>第3条（情報の利用目的）</h2>
-    <p>収集した情報は、以下の目的にのみ使用します。</p>
-    <ul>
-      <li>本サービスの提供・維持・改善</li>
-      <li>広告キャンペーンの自動管理・最適化</li>
-      <li>週次・日次レポートの送信</li>
-      <li>不正利用の検知・防止</li>
-      <li>お客様サポート対応</li>
-    </ul>
-    <p>お客様の事前同意なく、上記以外の目的に使用することはありません。</p>
-  </div>
+    <div class="section">
+      <h2>第3条（情報の利用目的）</h2>
+      <p>収集した情報は、以下の目的にのみ使用します。</p>
+      <ul>
+        <li>本サービスの提供・維持・改善</li>
+        <li>広告キャンペーンの自動管理・最適化</li>
+        <li>週次・日次レポートの送信</li>
+        <li>不正利用の検知・防止</li>
+        <li>お客様サポート対応</li>
+      </ul>
+      <p>お客様の事前同意なく、上記以外の目的に使用することはありません。</p>
+    </div>
 
-  <div class="section">
-    <h2>第4条（第三者提供）</h2>
-    <p>以下の場合を除き、お客様の情報を第三者に提供することはありません。</p>
-    <ul>
-      <li>法令に基づく開示が必要な場合</li>
-      <li>お客様の同意がある場合</li>
-    </ul>
-    <p>なお、本サービスは以下の外部サービスと連携しており、各社のプライバシーポリシーが適用されます。</p>
-    <ul>
-      <li><strong>Google LLC</strong>（Google Ads API、Gemini AI、Google Analytics）</li>
-      <li><strong>LINE株式会社</strong>（LINE Messaging API）</li>
-      <li><strong>Render Inc.</strong>（サーバーホスティング）</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第4条（第三者提供）</h2>
+      <p>以下の場合を除き、お客様の情報を第三者に提供することはありません。</p>
+      <ul>
+        <li>法令に基づく開示が必要な場合</li>
+        <li>お客様の同意がある場合</li>
+      </ul>
+      <p>なお、本サービスは以下の外部サービスと連携しており、各社のプライバシーポリシーが適用されます。</p>
+      <ul>
+        <li><strong>Google LLC</strong>（Google Ads API、Gemini AI、Google Analytics）</li>
+        <li><strong>LINE株式会社</strong>（LINE Messaging API）</li>
+        <li><strong>Render Inc.</strong>（サーバーホスティング）</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第5条（セキュリティ）</h2>
-    <p>本サービスは、情報の安全管理のために以下の措置を講じています。</p>
-    <ul>
-      <li>APIキー・パスワードの暗号化保存</li>
-      <li>HTTPS通信による通信の暗号化</li>
-      <li>管理者パネルへのパスワード認証</li>
-      <li>システム間通信のHMAC署名検証</li>
-      <li>Google OAuth2による認証（本番モード時）</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第5条（セキュリティ）</h2>
+      <p>本サービスは、情報の安全管理のために以下の措置を講じています。</p>
+      <ul>
+        <li>APIキー・パスワードの暗号化保存</li>
+        <li>HTTPS通信による通信の暗号化</li>
+        <li>管理者パネルへのパスワード認証</li>
+        <li>システム間通信のHMAC署名検証</li>
+        <li>Google OAuth2による認証（本番モード時）</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第6条（データの保存期間）</h2>
-    <ul>
-      <li>広告パフォーマンスデータ：契約終了後90日間保持</li>
-      <li>アラート・ログデータ：最大6ヶ月</li>
-      <li>アカウント情報：解約手続き完了後30日で削除</li>
-    </ul>
-  </div>
+    <div class="section">
+      <h2>第6条（データの保存期間）</h2>
+      <ul>
+        <li>広告パフォーマンスデータ：契約終了後90日間保持</li>
+        <li>アラート・ログデータ：最大6ヶ月</li>
+        <li>アカウント情報：解約手続き完了後30日で削除</li>
+      </ul>
+    </div>
 
-  <div class="section">
-    <h2>第7条（Cookie・アクセス解析）</h2>
-    <p>本サービスのフロントエンドでは、LocalStorageを用いてクリニックIDや設定情報を保存しています。サーバー側のアクセスログは不正利用防止のため一時的に保存されますが、個人を特定する目的では使用しません。</p>
-  </div>
+    <div class="section">
+      <h2>第7条（Cookie・アクセス解析）</h2>
+      <p>本サービスでは、LocalStorageを用いてクリニックIDや設定情報を保存しています。サーバー側のアクセスログは不正利用防止のため一時的に保存されますが、個人を特定する目的では使用しません。</p>
+    </div>
 
-  <div class="section">
-    <h2>第8条（開示・訂正・削除の請求）</h2>
-    <p>お客様は、弊社が保有するご自身の情報について、開示・訂正・削除・利用停止を請求する権利を有します。お問い合わせフォームまたは下記メールアドレスよりご連絡ください。本人確認を行った上で、合理的な期間内に対応いたします。</p>
-  </div>
+    <div class="section">
+      <h2>第8条（開示・訂正・削除の請求）</h2>
+      <p>お客様は、弊社が保有するご自身の情報について、開示・訂正・削除・利用停止を請求する権利を有します。お問い合わせフォームまたは下記メールアドレスよりご連絡ください。本人確認を行った上で、合理的な期間内に対応いたします。</p>
+    </div>
 
-  <div class="section">
-    <h2>第9条（ポリシーの変更）</h2>
-    <p>本ポリシーは、法令の変更やサービス内容の変更に伴い、予告なく改訂する場合があります。重要な変更は本ページおよびメールにてお知らせします。</p>
-  </div>
+    <div class="section">
+      <h2>第9条（ポリシーの変更）</h2>
+      <p>本ポリシーは、法令の変更やサービス内容の変更に伴い、予告なく改訂する場合があります。重要な変更は本ページおよびメールにてお知らせします。</p>
+    </div>
 
-  <div class="section">
-    <div class="contact-box">
-      <p>プライバシーに関するお問い合わせ先</p>
-      <a href="mailto:privacy@admu.jp">privacy@admu.jp</a>
-      <p style="margin-top: 10px; font-size: 12px; color: var(--text-3);">
-        AdMu プライバシー担当窓口<br>
-        受付時間：平日 10:00〜18:00
-      </p>
+    <div class="section">
+      <div class="contact-box">
+        <p>プライバシーに関するお問い合わせ先</p>
+        <a href="mailto:privacy@admu.jp">privacy@admu.jp</a>
+        <p style="margin-top: 10px; font-size: 12px; color: var(--text-3);">
+          AdMu プライバシー担当窓口<br>
+          受付時間：平日 10:00〜18:00
+        </p>
+      </div>
     </div>
   </div>
-</div>
+
+  <!-- ===== 特定商取引法 ===== -->
+  <div id="tab-tokusho" class="tab-panel">
+    <h1 class="page-title">特定商取引法に基づく表記</h1>
+    <p class="page-subtitle">特定商取引法（通信販売）に基づく表記</p>
+    <div class="effective-date">📅 最終更新日：2026年4月1日</div>
+
+    <div class="section">
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <tbody>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;width:40%;vertical-align:top"><strong style="color:#f1f5f9">販売業者名</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">（株）アイオイ ／ AdMu 取扱事業者</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">運営責任者</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">石川康一郎</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">所在地</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">請求に応じて郵便にて速やかにお知らせいたします</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">電話番号</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">請求に応じて適宜お知らせいたします</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">メールアドレス</strong></td>
+            <td style="padding:14px 0;color:#94a3b8"><a href="mailto:support@admu.jp" style="color:#3b82f6">support@admu.jp</a></td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス名</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">AdMu （AI搭載型自動広告運用プラットフォーム）</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">販売価格</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">別途料金表に定める月額プラン料金（別途にご提示）。Google広告費用は別途でお客様のアカウントに請求されます。</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払方法</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">銀行振込（請求書発行後14日以内） / クレジットカード（Stripe利用）</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払時期</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">当月後払い（翌月末払い）またはクレジットカード自動決済</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス開始時期</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">ライセンス発行後、翌営業日以内</td>
+          </tr>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">返品・キャンセル</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">ソフトウェア・クラウドサービスの性質上、返品・返金はお断りしておりません。解約は解約希望月の月末10日前までにご連絡ください。翌月末有効で解約処理いたします。</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">動作環境</strong></td>
+            <td style="padding:14px 0;color:#94a3b8">ブラウザー（Chrome 推奨）でインターネット接続が必要です</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="contact-box">
+        <p>特定商取引法に関するお問い合わせ</p>
+        <a href="mailto:support@admu.jp">support@admu.jp</a>
+      </div>
+    </div>
+  </div>
 </main>
-
-<!-- ===== 特定商取引法 ===== -->
-<div id="tokusho-panel" style="display:none">
-<main>
-<div id="tab-tokusho" class="tab-panel">
-  <h1 class="page-title">特定商取引法に基づく表記</h1>
-  <p class="page-subtitle">特定商取引法（通信販売）に基づく表記</p>
-  <div class="effective-date">📅 最終更新日：2026年4月1日</div>
-
-  <div class="section">
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
-      <tbody>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;width:40%;vertical-align:top"><strong style="color:#f1f5f9">販売業者名</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">（株）アイオイ ／ AdMu 取扱事業者</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">運営責任者</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">石川康一郎</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">所在地</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">请求に応じて郵便にて頑身にお知らせいたします</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">電話番号</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">请求に応じて適宜お知らせいたします</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">メールアドレス</strong></td>
-          <td style="padding:14px 0;color:#94a3b8"><a href="mailto:support@admu.jp" style="color:#3b82f6">support@admu.jp</a></td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス名</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">AdMu （AI搭載型自動広告運用プラットフォーム）</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">販売価格</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">別途料金表に定める月額プラン料金（別途にゴ提示）。Google広告費用は別途でお客様のアカウントに誷求されます。</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払方法</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">銀行振込（請求書発行後14日以内） / クレジットカード（Stripe礎用予定）</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">支払時期</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">月準後払い（翌月末払い）</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">サービス開始時期</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">ライセンス発行後、翌営業日以内</td>
-        </tr>
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">返品・キャンセル</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">ソフトウェア・クラウドサービスの性質上、返品・返金はお断りしておりません。解約は解約希望月の月末10日前までにご連絡ください。翻月末有効で解約処理いたします。</td>
-        </tr>
-        <tr>
-          <td style="padding:14px 0;color:#94a3b8;vertical-align:top"><strong style="color:#f1f5f9">動作環境</strong></td>
-          <td style="padding:14px 0;color:#94a3b8">ブラウザー（Chrome 推奨）でインターネット接続が必要です</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="section">
-    <div class="contact-box">
-      <p>特定商取引法に関するお問い合わせ</p>
-      <a href="mailto:support@admu.jp">support@admu.jp</a>
-    </div>
-  </div>
-</div>
-</main>
-</div>
 
 <footer>
   <p>&copy; 2026 AdMu. All rights reserved.</p>
   <nav style="margin-top: 12px;">
-    <a href="/legal">利用規約</a>
-    <a href="/legal">プライバシーポリシー</a>
+    <a href="#" onclick="showTab('terms');return false;">利用規約</a>
+    <a href="#" onclick="showTab('privacy');return false;">プライバシーポリシー</a>
+    <a href="#" onclick="showTab('tokusho');return false;">特定商取引法</a>
     <a href="/">ダッシュボード</a>
   </nav>
 </footer>
 
 <script>
   function showTab(name) {
-    // メインパネルを切り替え
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    // 特定商取引法は別パネル
-    const tokushoPanelDiv = document.getElementById('tokusho-panel');
-    if (name === 'tokusho') {
-      tokushoPanelDiv.style.display = 'block';
-      document.querySelector('.tab-panel')?.closest('main')?.parentElement?.querySelectorAll('main')[0]?.setAttribute('style', 'display:none');
-    } else {
-      tokushoPanelDiv.style.display = 'none';
-      document.getElementById('tab-' + name)?.classList.add('active');
+    // すべてのパネルを非表示
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.remove('active');
+    });
+    // すべてのボタンの active クラスを解除
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('active');
+    });
+
+    // 目的のパネルを表示
+    const targetPanel = document.getElementById('tab-' + name);
+    if (targetPanel) {
+      targetPanel.classList.add('active');
     }
-    event.target.classList.add('active');
+
+    // 目的のボタンをアクティブに
+    const targetBtn = document.getElementById('btn-' + name);
+    if (targetBtn) {
+      targetBtn.classList.add('active');
+    }
   }
+
+  // クエリパラメータ (?tab=xxx) を確認して初期表示を設定
+  window.addEventListener('DOMContentLoaded', () => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['terms', 'privacy', 'tokusho'].includes(tabParam)) {
+      showTab(tabParam);
+    }
+  });
 </script>
 
 </body>
