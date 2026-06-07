@@ -1020,48 +1020,56 @@ async def push_negative_keywords_to_google(clinic_id: int = 1):
     DBに登録済みの除外キーワードをGoogle Ads（SharedSet）に一括送信し、
     成功した件数分だけ applied フラグを 1 に更新する。
     """
-    acc = db.get_ads_account(clinic_id)
-    if not acc:
-        raise HTTPException(status_code=404, detail="Google広告アカウント設定が見つかりません")
+    import traceback
+    try:
+        acc = db.get_ads_account(clinic_id)
+        if not acc:
+            raise HTTPException(status_code=404, detail="Google広告アカウント設定が見つかりません")
 
-    # 未適用のキーワードを取得
-    all_nkws = db.list_negative_keywords(clinic_id)
-    pending = [n for n in all_nkws if not n.get("applied")]
+        # 未適用のキーワードを取得
+        all_nkws = db.list_negative_keywords(clinic_id)
+        pending = [n for n in all_nkws if not n.get("applied")]
 
-    if not pending:
-        return {"success": True, "message": "未適用の除外キーワードはありません", "added": 0, "skipped": 0}
+        if not pending:
+            return {"success": True, "message": "未適用の除外キーワードはありません", "added": 0, "skipped": 0}
 
-    # Google Adsに送信
-    client_ads = AdsClient(acc)
-    result = client_ads.push_negative_keywords(
-        [{"keyword": n["keyword"], "match_type": n.get("match_type", "BROAD")} for n in pending]
-    )
-
-    # 成功した場合、DBのappliedフラグを一括更新
-    if result.get("success") or result.get("added", 0) > 0:
-        applied_ids = [n["id"] for n in pending]
-        with db.get_conn() as conn:
-            for nkw_id in applied_ids:
-                conn.execute(
-                    "UPDATE negative_keywords SET applied=1 WHERE id=? AND clinic_id=?",
-                    (nkw_id, clinic_id)
-                )
-            conn.commit()
-
-    errors = result.get("errors", [])
-    return {
-        "success": result.get("success", False),
-        "added": result.get("added", 0),
-        "skipped": result.get("skipped", 0),
-        "pending_count": len(pending),
-        "errors": errors,
-        "mock": result.get("mock", False),
-        "message": (
-            f"✅ {result.get('added', 0)}件をGoogle広告に追加しました"
-            + (f"（{result.get('skipped', 0)}件は既登録のためスキップ）" if result.get('skipped') else "")
-            + (f"\n⚠️ エラー: {errors[0]}" if errors else "")
+        # Google Adsに送信
+        client_ads = AdsClient(acc)
+        result = client_ads.push_negative_keywords(
+            [{"keyword": n["keyword"], "match_type": n.get("match_type", "BROAD")} for n in pending]
         )
-    }
+
+        # 成功した場合、DBのappliedフラグを一括更新
+        if result.get("success") or result.get("added", 0) > 0:
+            applied_ids = [n["id"] for n in pending]
+            with db.get_conn() as conn:
+                for nkw_id in applied_ids:
+                    conn.execute(
+                        "UPDATE negative_keywords SET applied=1 WHERE id=? AND clinic_id=?",
+                        (nkw_id, clinic_id)
+                    )
+                conn.commit()
+
+        errors = result.get("errors", [])
+        return {
+            "success": result.get("success", False),
+            "added": result.get("added", 0),
+            "skipped": result.get("skipped", 0),
+            "pending_count": len(pending),
+            "errors": errors,
+            "mock": result.get("mock", False),
+            "message": (
+                f"✅ {result.get('added', 0)}件をGoogle広告に追加しました"
+                + (f"（{result.get('skipped', 0)}件は既登録のためスキップ）" if result.get('skipped') else "")
+                + (f"\n⚠️ エラー: {errors[0]}" if errors else "")
+            )
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[push-to-google] 致命的エラー: {tb}")
+        raise HTTPException(status_code=500, detail=f"Push処理エラー: {str(e)}")
 
 
 # ---- API: ペルソナ管理 ----
