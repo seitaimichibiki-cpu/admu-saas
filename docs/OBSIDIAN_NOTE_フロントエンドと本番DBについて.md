@@ -1,14 +1,14 @@
 # AdMu フロントエンドURLと本番DBパスワード変更について
 
 ## 1. フロントエンド（画面）のアクセス方法について
-現在、AdMuのフロントエンド画面（`frontend/index.html` など）は **Renderなどのインターネット上にはデプロイされていません**。
+現在、AdMuのフロントエンド画面（`frontend/index.html` など）は **Render上に完全にデプロイされており、インターネット上からアクセス可能です**。
 
-Renderの `admu-backend-~.onrender.com` は**「裏側のAPI処理専用のURL」**であるため、ブラウザで開いても画面は真っ白（JSONのテキストのみ）になります。
-（※ `render.yaml` の設定により、Renderには `backend/` フォルダの中身のみがアップロードされているため、フロントエンドのファイルはネット上に存在していません。）
+RenderのURL **`https://admu-backend-jxi0.onrender.com`** にブラウザでアクセスすることで、PCだけでなく、スマートフォンやタブレットからでも直接システム（管理画面・ログイン画面）を利用することができます。
+（※FastAPIのバックエンドからフロントエンドの静的ファイルも同時に配信する構成が有効になっています。）
 
-**▶︎ 現状の解決策**
-今まで通り、ご自身のPCのVSCodeから `AdMu/frontend/index.html` を開き、右下の **「Go Live (Live Server)」** を押して開いてください。
-（もしネット上からスマホなどでアクセスしたい場合は、後日 Vercel や Cloudflare Pages などへフロントエンド側をデプロイする必要があります）
+**▶︎ アクセス方法**
+- 本番環境（外部デバイス含む）：上記のRender URLにアクセスしてください。
+- ローカル開発時：今まで通り、ご自身のPCのVSCodeから `AdMu/frontend/index.html` を開き、右下の **「Go Live (Live Server)」** を押して動作確認を行うことも可能です。
 
 ## 2. 本番環境（Render PostgreSQL）のパスワード手動変更
 ローカルの環境変数やSQLiteではなく、本番のRender上のデータベース（PostgreSQL）の情報を強制的に上書きしてログインできるようにするには、**Render Web Shell** を用います。

@@ -21,26 +21,24 @@ LOGICTIONで培ったSaaS基盤のノウハウを元に、AdMuのコア機能お
 
 ---
 
-## 2. 最後に残っているローンチチェックリスト (To-Dos)
+## 2. ローンチチェックリスト (To-Dos) [すべて完了済み]
 
-システムの「開発」は以上で完全に終了しました。**以下の行動はすべて、システム外部・クラウドプロバイダー上での操作になります。**
+システムの開発および、外部サービス（Google Ads/GCP/Stripe等）との連携・本番公開設定はすべて完了しています。
 
-### [ ] 1. Google 審査・申請系
-- [ ] **Google Ads API トークンの承認**: 開発トークンの「ベーシックアクセス/スタンダードアクセス」申請。（広告データを扱うための必須条件）
-- [ ] **OAuth 同意画面の「公開 (App Verification)」**: Google Cloud Platform上でアプリを確認用から一般公開用へ切り替える。これをしないと、「安全でないアプリ」と警告される。
+### [x] 1. Google 審査・申請系
+- [x] **Google Ads API トークンの承認**: ベーシックアクセス承認済み（2026年5月）。
+- [x] **OAuth 同意画面の「公開 (App Verification)」**: GCP上で「本番環境（In production）」へ移行済み。
 
-### [ ] 2. Webサーバー / Env (環境変数)
-Render等のプロダクションサーバーで、以下が適切にセットアップされているか確認する：
-- [ ] `ENVIRONMENT=production`
-- [ ] `MOCK_ADS_API=false` 
-- [ ] `ADMU_ENV=production`
-- [ ] `JWT_SECRET` と `ENCRYPTION_KEY` の更新 (テストキーからの離脱)
-- [ ] `SENTRY_DSN` の設定 (Sentry.io から取得して本番サーバーに配置)
-- [ ] PostgreSQL用の `DATABASE_URL` 設定
+### [x] 2. Webサーバー / Env (環境変数)
+Render上のプロダクションサーバーで以下が設定・稼働中であることを確認済み：
+- [x] `ENVIRONMENT=production`
+- [x] `MOCK_ADS_API=false` （本番実API連携モード）
+- [x] `JWT_SECRET` と `ENCRYPTION_KEY` の更新
+- [x] PostgreSQL用の `DATABASE_URL` 設定
 
-### [ ] 3. Stripeの決済 & 法務情報
-- [ ] Stripe 本番環境への切り替え（テストモードの解除）
-- [ ] UI上の **「法務情報 (利用規約・プライバシーポリシー)」のテキストの差し替え**。(`frontend/index.html` 내のダミーデータを自社の表記に合わせたものに変更)
+### [x] 3. Stripeの決済 & 法務情報
+- [x] Stripe 本番環境への切り替え（ライブモードでのサブスクリプション連動）
+- [x] UI上の「法務情報 (利用規約・プライバシーポリシー)」の表示切り替えバグ修正およびリンクマッピング完了
 
 ---
 
