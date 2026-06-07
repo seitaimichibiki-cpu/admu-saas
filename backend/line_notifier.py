@@ -43,7 +43,7 @@ def send_text(channel_token: str, user_id: str, message: str) -> bool:
 
 
 def send_daily_report(channel_token: str, user_id: str, summary: dict) -> bool:
-    """日次レポートをFlex Message風テキストで送信"""
+    """日次レポートを分かりやすく親切なテキストで送信"""
     today = datetime.now().strftime("%Y年%m月%d日")
     perf = summary.get("performance", {})
     alerts = summary.get("alerts", [])
@@ -59,20 +59,22 @@ def send_daily_report(channel_token: str, user_id: str, summary: dict) -> bool:
     alert_text = ""
     if alerts:
         alert_items = "\n".join([f"  ⚠️ {a['message']}" for a in alerts[:3]])
-        alert_text = f"\n\n📢 アラート ({len(alerts)}件)\n{alert_items}"
+        alert_text = f"\n\n📢 異常検知アラート ({len(alerts)}件)\n{alert_items}"
 
-    msg = f"""📊 Google広告 日次レポート
+    msg = f"""📊 AdMu 広告成果レポート
 {today}
+
+本日も広告運用を自動最適化しました。
+
+【本日の実績】
 ━━━━━━━━━━━━━━
-👁 表示回数: {impressions:,}
-🖱 クリック数: {clicks:,}
-📈 CTR: {ctr:.2f}%
-💰 費用: {_micros_to_yen(cost)}
-🎯 CV数: {conversions:.1f}
-✅ CVR: {cvr:.2f}%
+👁 表示回数: {impressions:,} 回
+🖱 クリック数: {clicks:,} 回 (CTR: {ctr:.2f}%)
+💰 消化費用: {_micros_to_yen(cost)}
+🎯 CV（来院）数: {conversions:.1f} 件 (CVR: {cvr:.2f}%)
 🔑 平均CPC: {_micros_to_yen(avg_cpc)}{alert_text}
 ━━━━━━━━━━━━━━
-by 広告運用システム"""
+※詳細な実績推移や各種レポートはダッシュボードでご確認ください。"""
     return send_text(channel_token, user_id, msg)
 
 
@@ -80,7 +82,7 @@ def send_alert(channel_token: str, user_id: str, level: str, message: str) -> bo
     """アラート通知を送信"""
     icons = {"ERROR": "🚨", "WARNING": "⚠️", "INFO": "ℹ️"}
     icon = icons.get(level, "📌")
-    text = f"{icon} 広告アラート [{level}]\n{message}\n\n{datetime.now().strftime('%H:%M')}"
+    text = f"{icon} AdMu 広告アラート [{level}]\n{message}\n\n{datetime.now().strftime('%H:%M')}"
     return send_text(channel_token, user_id, text)
 
 
@@ -89,12 +91,16 @@ def send_bid_adjustment_report(channel_token: str, user_id: str, logs: list) -> 
     if not logs:
         return True
     items = "\n".join([f"  • {l['rule_name']}: {l['result']}" for l in logs[:5]])
-    msg = f"""🤖 入札調整を実行しました
+    msg = f"""🤖 AdMu 広告AI入札調整
 {datetime.now().strftime('%H:%M')}
+
+Google広告の自動入札調整を実行しました。
+
+【調整内容】
 ━━━━━━━━━━━━━━
 {items}
 ━━━━━━━━━━━━━━
-by AdMu 広告AI"""
+※AIがLTVおよびCPAを分析し、最適な入札単価に調整しました。"""
     return send_text(channel_token, user_id, msg)
 
 

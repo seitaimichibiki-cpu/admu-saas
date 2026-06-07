@@ -177,10 +177,16 @@ def send_alert_email(to: str, subject: str, body: str) -> bool:
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
         <tr>
-          <td style="background:#1e293b;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.08);">
-            <h2 style="color:#f59e0b;font-size:18px;margin:0 0 16px;">⚡ 広告運用アラート</h2>
-            <div style="color:#94a3b8;font-size:14px;line-height:1.8;white-space:pre-wrap;">{body}</div>
-            <p style="color:#475569;font-size:12px;margin:20px 0 0;">{datetime.now().strftime('%Y-%m-%d %H:%M')} | AdMu 自動通知</p>
+          <td style="background:#1e293b;border-radius:16px;padding:36px;border:1px solid rgba(255,255,255,0.08);">
+            <div style="margin-bottom:20px;">
+              <span style="font-size:24px;vertical-align:middle;margin-right:6px;">⚡</span>
+              <span style="color:#f59e0b;font-size:18px;font-weight:700;vertical-align:middle;">AdMu 広告運用アラート</span>
+            </div>
+            <div style="color:#e2e8f0;font-size:14px;line-height:1.8;white-space:pre-wrap;background:#0f172a;border-radius:10px;padding:20px;border:1px solid rgba(255,255,255,0.04);">{body}</div>
+            <hr style="border:0;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0 20px;">
+            <p style="color:#475569;font-size:11px;margin:0;text-align:center;">
+              {datetime.now().strftime('%Y-%m-%d %H:%M')} | 本メールはAdMuシステムより自動送信されています。
+            </p>
           </td>
         </tr>
       </table>
