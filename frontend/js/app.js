@@ -655,9 +655,11 @@ function initCampaignTabs() {
 async function updateCampaignSelects() {
   try {
     const data = await api(`/campaigns?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
-    const local = (data.local_campaigns && data.local_campaigns.length)
-      ? data.local_campaigns
-      : (data.campaigns || []);
+    // 削除された(REMOVED)キャンペーンを除外し、アクティブなもののみを取得
+    const rawList = (data.campaigns && data.campaigns.length)
+      ? data.campaigns
+      : (data.local_campaigns || []);
+    const local = rawList.filter(c => c.status !== 'REMOVED');
       
     const acSelect = document.getElementById('acCampaignSelect');
     if (acSelect) {
@@ -1159,10 +1161,11 @@ document.getElementById('confirmNewCampaign')?.addEventListener('click', async (
 async function loadBudget() {
   try {
     const data = await api(`/campaigns?clinic_id=${currentClinicId}`);
-    // DBキャンペーンがない（モックモード等）場合はAPIキャンペーンデータで代替
-    const local = (data.local_campaigns && data.local_campaigns.length)
-      ? data.local_campaigns
-      : (data.campaigns || []);
+    // 削除された(REMOVED)キャンペーンを除外
+    const rawList = (data.campaigns && data.campaigns.length)
+      ? data.campaigns
+      : (data.local_campaigns || []);
+    const local = rawList.filter(c => c.status !== 'REMOVED');
     const wrap = document.getElementById('budgetList');
     if(!local.length) {
       wrap.innerHTML = '<div class="card"><p style="text-align:center;color:var(--text-3);padding:32px">まだキャンペーンがありません</p></div>';
