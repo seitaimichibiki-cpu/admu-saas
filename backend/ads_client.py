@@ -279,7 +279,7 @@ class AdsClient:
         c.status = client.enums.CampaignStatusEnum[config.get("status", "PAUSED")]
         c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
         c.campaign_budget = budget_rn
-        c.maximize_clicks.target_spend_micros = 0  # 上限なし（日予算で制御）
+        c.manual_cpc.enhanced_cpc_enabled = True
         c.network_settings.target_google_search = True
         c.network_settings.target_search_network = True
         c.network_settings.target_content_network = False
