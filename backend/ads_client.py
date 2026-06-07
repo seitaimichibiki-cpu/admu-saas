@@ -573,11 +573,13 @@ class AdsClient:
             ga_service = self._client.get_service("GoogleAdsService")
             campaign_criterion_service = self._client.get_service("CampaignCriterionService")
 
-            # ① REMOVED以外のキャンペーン一覧を取得
+            # ① Searchキャンペーンのみ取得（VideoやDisplayは除外KW設定不可）
             query = """
-                SELECT campaign.id, campaign.resource_name, campaign.status
+                SELECT campaign.id, campaign.resource_name, campaign.status,
+                       campaign.advertising_channel_type
                 FROM campaign
                 WHERE campaign.status != 'REMOVED'
+                  AND campaign.advertising_channel_type = 'SEARCH'
             """
             resp = ga_service.search(customer_id=self.customer_id, query=query)
             campaigns = [(row.campaign.resource_name, str(row.campaign.id)) for row in resp]
