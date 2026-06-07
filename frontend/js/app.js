@@ -1486,6 +1486,13 @@ async function loadSettings() {
     const budgetEl = document.getElementById('settMonthlyBudget');
     if (budgetEl) budgetEl.value = s.monthly_budget_yen || 300000;
     monthlyBudgetYen = s.monthly_budget_yen || 300000;
+
+    // Gemini APIキー
+    const geminiApiKeyEl = document.getElementById('settGeminiApiKey');
+    if (geminiApiKeyEl) {
+      geminiApiKeyEl.value = s.gemini_api_key === '***設定済み***' ? '' : (s.gemini_api_key || '');
+      geminiApiKeyEl.placeholder = s.gemini_api_key === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : 'AIzaSy...';
+    }
   } catch(e) {
     toast('設定読み込み失敗: ' + e.message, 'error');
   }
@@ -1513,12 +1520,14 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   const refreshToken = document.getElementById('settRefreshToken')?.value;
   const lineToken = document.getElementById('settLineToken').value;
   const smtpPass  = document.getElementById('settSmtpPass').value;
+  const geminiApiKey = document.getElementById('settGeminiApiKey')?.value;
   
   if(devToken)  body.developer_token  = devToken;
   if(clientSecret) body.client_secret = clientSecret;
   if(refreshToken) body.refresh_token = refreshToken;
   if(lineToken) body.line_channel_token = lineToken;
   if(smtpPass)  body.smtp_pass = smtpPass;
+  if(geminiApiKey) body.gemini_api_key = geminiApiKey;
 
   try {
     await api('/settings', { method:'POST', body: JSON.stringify(body) });
