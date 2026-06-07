@@ -21,6 +21,8 @@ from pydantic import BaseModel
 from typing import Optional
 import db, monitor, line_notifier, ad_copy_generator as adcopy, campaign_manager, email_notifier
 import auth
+from ads_client import AdsClient
+
 import urllib.request
 import stripe
 import sentry_sdk
