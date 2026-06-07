@@ -585,8 +585,14 @@ class AdsClient:
             campaigns = [(row.campaign.resource_name, str(row.campaign.id)) for row in resp]
 
             if not campaigns:
-                return {"success": False, "added": 0, "skipped": 0,
-                        "errors": ["有効なキャンペーンが見つかりません"], "mock": False}
+                return {
+                    "success": True,
+                    "added": 0,
+                    "skipped": 0,
+                    "errors": [],
+                    "mock": False,
+                    "message": "no_campaigns"
+                }
 
             print(f"[AdsClient] 対象キャンペーン: {len(campaigns)}件")
 

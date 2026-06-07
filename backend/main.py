@@ -1039,6 +1039,22 @@ async def push_negative_keywords_to_google(clinic_id: int = 1):
             [{"keyword": n["keyword"], "match_type": n.get("match_type", "BROAD")} for n in pending]
         )
 
+        errors = result.get("errors", [])
+        no_campaigns = result.get("message") == "no_campaigns"
+
+        # キャンペーンなし → 保存済みであることを伝える
+        if no_campaigns:
+            return {
+                "success": True,
+                "added": 0,
+                "skipped": 0,
+                "pending_count": len(pending),
+                "errors": [],
+                "mock": result.get("mock", False),
+                "no_campaigns": True,
+                "message": f"📋 {len(pending)}件の除外キーワードはDBに保存済みです。Google広告でキャンペーンを作成後、もう一度「Google広告に一括適用」を押してください。"
+            }
+
         # 成功した場合、DBのappliedフラグを一括更新
         if result.get("success") or result.get("added", 0) > 0:
             applied_ids = [n["id"] for n in pending]
@@ -1050,7 +1066,6 @@ async def push_negative_keywords_to_google(clinic_id: int = 1):
                     )
                 conn.commit()
 
-        errors = result.get("errors", [])
         return {
             "success": result.get("success", False),
             "added": result.get("added", 0),
@@ -1061,9 +1076,10 @@ async def push_negative_keywords_to_google(clinic_id: int = 1):
             "message": (
                 f"✅ {result.get('added', 0)}件をGoogle広告に追加しました"
                 + (f"（{result.get('skipped', 0)}件は既登録のためスキップ）" if result.get('skipped') else "")
-                + (f"\n⚠️ エラー: {errors[0]}" if errors else "")
+                + (f"\n⚠️ エラー: {errors[0][:100]}" if errors else "")
             )
         }
+
     except HTTPException:
         raise
     except Exception as e:

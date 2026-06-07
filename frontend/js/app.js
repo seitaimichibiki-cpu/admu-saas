@@ -2516,11 +2516,15 @@ window.pushNegativeKeywordsToGoogle = async function() {
       method: 'POST'
     });
     if (res.mock) {
-      toast(`📋 [モードモード] ${res.added}件を擬似的にGoogle広告へ送信しました`, 'info');
-    } else if (res.success) {
+      toast(`📋 [モックモード] ${res.added}件を擬似的にGoogle広告へ送信しました`, 'info');
+    } else if (res.no_campaigns) {
+      toast(`📋 ${res.pending_count}件の除外KWはDBに保存済みです。キャンペーン作成後に「Google広告に一括適用」を押してください。`, 'info');
+    } else if (res.success && res.added > 0) {
       toast(`✅ ${res.added}件をGoogle広告に追加しました` + (res.skipped ? `（${res.skipped}件スキップ）` : ''), 'success');
-    } else {
+    } else if (res.errors?.length > 0) {
       toast('❌ 送信失敗: ' + (res.errors?.[0] || '不明なエラー'), 'error');
+    } else {
+      toast(res.message || '処理完了', 'info');
     }
     await loadNegativeKeywords();
   } catch(e) {
