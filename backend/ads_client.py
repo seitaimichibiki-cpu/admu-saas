@@ -425,7 +425,32 @@ class AdsClient:
             return {"success": True, "applied_count": len(schedule_modifiers), "mock": True}
 
         try:
+            ga_service = self._client.get_service("GoogleAdsService")
             campaign_criterion_service = self._client.get_service("CampaignCriterionService")
+
+            # 競合重複を避けるため、既存のAD_SCHEDULEクライテリアを検索して一括削除
+            try:
+                query = f"""
+                    SELECT campaign_criterion.resource_name
+                    FROM campaign_criterion
+                    WHERE campaign.id = '{campaign_id}'
+                      AND campaign_criterion.type = 'AD_SCHEDULE'
+                """
+                search_response = ga_service.search(customer_id=self.customer_id, query=query)
+                remove_operations = []
+                for row in search_response:
+                    op = self._client.get_type("CampaignCriterionOperation")
+                    op.remove = row.campaign_criterion.resource_name
+                    remove_operations.append(op)
+
+                if remove_operations:
+                    campaign_criterion_service.mutate_campaign_criteria(
+                        customer_id=self.customer_id, operations=remove_operations
+                    )
+                    print(f"[AdsClient] 既存のスケジュールクライテリア {len(remove_operations)} 件を削除しました (Campaign: {campaign_id})")
+            except Exception as ex_del:
+                print(f"[AdsClient] 既存スケジュール削除中にエラーが発生しました（無視して続行）: {ex_del}")
+
             operations = []
             for slot in schedule_modifiers:
                 op = self._client.get_type("CampaignCriterionOperation")

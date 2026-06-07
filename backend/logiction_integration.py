@@ -406,13 +406,49 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
     warnings = []
 
     # ========================================================
-    # 1 & 2: Google Ads API経由の入札調整（性別・年齢）
+    # 1 & 2: Google Ads API経由の入札調整（性別・年齢・曜日）
     # ========================================================
     try:
         acc = _require_account(clinic_id)
         client = _get_ads_client(acc, platform)
         campaigns = db.list_campaigns(clinic_id)
         active_campaigns = [c for c in campaigns if c.get("status") in ("ENABLED", "PAUSED") and c.get("google_campaign_id")]
+
+        # 曜日別入札調整 (AdSchedule) の準備
+        dow_data = insights.get("by_dow", [])
+        schedule_modifiers = []
+        if len(dow_data) >= 3:
+            total_cnt = sum(d["cnt"] for d in dow_data)
+            avg_cnt = total_cnt / len(dow_data)
+
+            DOW_API_MAP = {
+                0: "SUNDAY", 1: "MONDAY", 2: "TUESDAY", 3: "WEDNESDAY",
+                4: "THURSDAY", 5: "FRIDAY", 6: "SATURDAY"
+            }
+
+            for d in dow_data:
+                dow_idx = d["dow"]
+                cnt = d["cnt"]
+                if dow_idx not in DOW_API_MAP:
+                    continue
+
+                ratio = cnt / max(avg_cnt, 1)
+                # 5%未満の差異は無視する
+                if abs(ratio - 1) < 0.05:
+                    continue
+
+                adj_pct = max(-20, min(20, int((ratio - 1) * 100)))
+                if adj_pct != 0:
+                    bid_mod = 1.0 + (adj_pct / 100.0)
+                    schedule_modifiers.append({
+                        "day_of_week": DOW_API_MAP[dow_idx],
+                        "start_hour": 0,
+                        "end_hour": 24,
+                        "bid_modifier": bid_mod,
+                        "adj_pct": adj_pct,
+                        "label": d["label"],
+                        "patient_count": cnt
+                    })
 
         for camp in active_campaigns:
             g_id = camp.get("google_campaign_id", "")
@@ -480,6 +516,25 @@ async def handle_apply_to_ads(clinic_id: int, platform: str, db, _require_accoun
                             })
                         except Exception as e:
                             warnings.append(f"年齢入札調整エラー ({a_data.get('age_group')}): {e}")
+
+            # 曜日別入札調整（AdSchedule）をAPI直接適用
+            if schedule_modifiers:
+                try:
+                    result = client.apply_ad_schedule_bid_modifiers(g_id, schedule_modifiers)
+                    for sm in schedule_modifiers:
+                        adjustments_applied.append({
+                            "type": "dayofweek",
+                            "label": sm["label"],
+                            "value": sm["day_of_week"],
+                            "adjustment_pct": sm["adj_pct"],
+                            "avg_ltv": 0,
+                            "patient_count": sm["patient_count"],
+                            "campaign": camp.get("name"),
+                            "campaign_id": g_id,
+                            "applied_to_api": result.get("success", False),
+                        })
+                except Exception as e:
+                    warnings.append(f"曜日スケジュール入札調整エラー: {e}")
 
     except Exception as e:
         warnings.append(f"Google Ads API接続エラー: {str(e)}")

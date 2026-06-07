@@ -1831,14 +1831,17 @@ async function applyLogictionToAds() {
         ? `<div style="font-size:12px;color:var(--text-3);padding:8px 0">入札調整の対象なし（データ不足または5%未満の差異）</div>`
         : adjList.map(a => {
             const isPos = a.adjustment_pct > 0;
-            const icon = a.type === 'gender' ? '👤' : '🎂';
+            const icon = a.type === 'gender' ? '👤' : (a.type === 'dayofweek' ? '📅' : '🎂');
             const apiIcon = a.applied_to_api ? '✅' : '⚙️';
+            const infoText = a.type === 'dayofweek'
+              ? `${a.campaign || '-'} • ${a.patient_count || 0}件の来院`
+              : `${a.campaign || '-'} • ${a.patient_count || 0}名 • LTV ¥${(a.avg_ltv||0).toLocaleString()}`;
             return `
               <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:6px">
                 <span style="font-size:16px">${icon}</span>
                 <div style="flex:1;min-width:0">
                   <div style="font-size:12px;font-weight:600;color:var(--text-1)">${a.label || a.value}</div>
-                  <div style="font-size:11px;color:var(--text-3)">${a.campaign || '-'} • ${a.patient_count || 0}名 • LTV ¥${(a.avg_ltv||0).toLocaleString()}</div>
+                  <div style="font-size:11px;color:var(--text-3)">${infoText}</div>
                 </div>
                 <div style="text-align:right;flex-shrink:0">
                   <div style="font-size:13px;font-weight:700;color:${isPos ? '#10b981' : '#f87171'}">${isPos ? '+' : ''}${a.adjustment_pct}%</div>
