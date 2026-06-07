@@ -1483,8 +1483,6 @@ async function loadSettings() {
       }
     }
     // 月予算
-    const budgetEl = document.getElementById('settMonthlyBudget');
-    if (budgetEl) budgetEl.value = s.monthly_budget_yen || 300000;
     monthlyBudgetYen = s.monthly_budget_yen || 300000;
 
     // Gemini APIキー
@@ -1513,7 +1511,6 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     notification_email: document.getElementById('settNotifyEmail').value || null,
     smtp_user: document.getElementById('settSmtpUser').value || null,
     ga4_property_id: document.getElementById('settGa4PropertyId')?.value || null,
-    monthly_budget_yen: parseInt(document.getElementById('settMonthlyBudget')?.value || '300000') || 300000,
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;
