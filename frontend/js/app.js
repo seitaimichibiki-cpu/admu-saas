@@ -565,6 +565,20 @@ window.showLoginLegal = function() {
 };
 
 function switchPage(page) {
+  // 以前のページ名からのリダイレクト（互換処理）
+  if (page === 'ad-copy') {
+    switchPage('campaigns');
+    const tabBtn = document.querySelector('.tab-btn[data-tab="campaign-adcopy"]');
+    if (tabBtn) tabBtn.click();
+    return;
+  }
+  if (page === 'negative-kw') {
+    switchPage('campaigns');
+    const tabBtn = document.querySelector('.tab-btn[data-tab="campaign-negative"]');
+    if (tabBtn) tabBtn.click();
+    return;
+  }
+
   document.querySelectorAll('.page').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const target = document.getElementById(`page-${page}`);
@@ -576,11 +590,19 @@ function switchPage(page) {
   // ページ別データ読み込み
   const loaders = {
     dashboard: loadDashboard,
-    campaigns: loadCampaigns,
+    campaigns: () => {
+      loadCampaigns();
+      // キャンペーンページが開かれたらアクティブなタブに応じてロード
+      const activeTab = document.querySelector('.tab-btn.active');
+      if (activeTab) {
+        const tabId = activeTab.dataset.tab;
+        if (tabId === 'campaign-list') loadCampaigns();
+        else if (tabId === 'campaign-adcopy') { loadAdCopyHistory(); updateCampaignSelects(); }
+        else if (tabId === 'campaign-negative') { loadNegativeKeywords(); updateCampaignSelects(); }
+      }
+    },
     budget: loadBudget,
     'bid-rules': loadBidRules,
-    'ad-copy': loadAdCopyHistory,
-    'negative-kw': loadNegativeKeywords,
     personas: loadPersonas,
     'lp-diagnosis': loadLpDiag,
     'kw-suggest': loadKwSuggest,
@@ -594,11 +616,79 @@ function switchPage(page) {
   toggleSidebar(true);
 }
 
+function initCampaignTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.tab;
+      
+      // ボタンのアクティブ切り替え
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // コンテンツのアクティブ切り替え
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      const activePane = document.getElementById(`tab-${tabId}`);
+      if (activePane) activePane.classList.add('active');
+      
+      // データのリロード
+      if (tabId === 'campaign-list') {
+        loadCampaigns();
+      } else if (tabId === 'campaign-adcopy') {
+        loadAdCopyHistory();
+        updateCampaignSelects();
+      } else if (tabId === 'campaign-negative') {
+        loadNegativeKeywords();
+        updateCampaignSelects();
+      }
+    });
+  });
+
+  // セレクトボックス変更時のイベントリスナー
+  document.getElementById('acCampaignSelect')?.addEventListener('change', () => {
+    loadAdCopyHistory();
+  });
+  document.getElementById('nkwCampaignSelect')?.addEventListener('change', () => {
+    loadNegativeKeywords();
+  });
+}
+
+async function updateCampaignSelects() {
+  try {
+    const data = await api(`/campaigns?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
+    const local = (data.local_campaigns && data.local_campaigns.length)
+      ? data.local_campaigns
+      : (data.campaigns || []);
+      
+    const acSelect = document.getElementById('acCampaignSelect');
+    if (acSelect) {
+      const val = acSelect.value;
+      acSelect.innerHTML = '<option value="">キャンペーンを選択してください...</option>' + 
+        local.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      acSelect.value = val;
+    }
+    
+    const nkwSelect = document.getElementById('nkwCampaignSelect');
+    if (nkwSelect) {
+      const val = nkwSelect.value;
+      nkwSelect.innerHTML = '<option value="">すべてのキャンペーン</option>' + 
+        local.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      nkwSelect.value = val;
+    }
+  } catch(e) {
+    console.error('Failed to update campaign selects:', e);
+  }
+}
+
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', e => {
     e.preventDefault();
     switchPage(item.dataset.page);
   });
+});
+
+// アプリ起動時のタブ初期化
+document.addEventListener('DOMContentLoaded', () => {
+  initCampaignTabs();
 });
 
 document.getElementById('mobileMenuBtn').addEventListener('click', () => {
@@ -930,6 +1020,7 @@ async function loadCampaigns() {
     const wrap = document.getElementById('campaignsList');
     if(!campaigns.length) {
       wrap.innerHTML = `<div class="card"><div class="loading-state"><p>まだキャンペーンがありません。「新規キャンペーン自動生成」から始めましょう！</p></div></div>`;
+      updateCampaignSelects();
       return;
     }
     wrap.innerHTML = campaigns.map(c => `
@@ -951,6 +1042,7 @@ async function loadCampaigns() {
         </div>
       </div>
     `).join('');
+    updateCampaignSelects();
   } catch(e) {
     toast('キャンペーンの読み込みに失敗: ' + e.message, 'error');
   }
@@ -1028,49 +1120,37 @@ async function deleteCampaign(id, name) {
 }
 window.deleteCampaign = deleteCampaign;
 
-document.getElementById('newCampaignBtn').addEventListener('click', () => {
-  const categories = ['腰痛', '肩こり', '産後骨盤', '姿勢矯正', 'スポーツ'];
-  showModal('新規キャンペーン自動生成', `
-    <div class="form-group">
-      <label>クリニック名</label>
-      <input type="text" id="newClinicName" class="form-input" placeholder="〇〇整体院">
-    </div>
-    <div class="form-group">
-      <label>地域</label>
-      <input type="text" id="newRegion" class="form-input" placeholder="渋谷区">
-    </div>
-    <div class="form-group">
-      <label>カテゴリ（訴求軸）</label>
-      <select id="newCategory" class="form-input">
-        ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-group">
-      <label>予算（円/日） ※後から変更可</label>
-      <input type="number" id="newBudget" class="form-input" value="3000" min="1000" step="500">
-    </div>
-  `, `
-    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
-    <button class="btn btn-primary" id="confirmNewCampaign">自動生成</button>
-  `);
-  document.getElementById('confirmNewCampaign').addEventListener('click', async () => {
-    const body = {
-      clinic_id: currentClinicId,
-      clinic_name: document.getElementById('newClinicName').value || '整体院',
-      region: document.getElementById('newRegion').value || '',
-      category: document.getElementById('newCategory').value,
-      budget_yen: parseInt(document.getElementById('newBudget').value)||3000,
-      platform: currentPlatform,
-    };
-    try {
-      const res = await api('/campaigns', { method:'POST', body: JSON.stringify(body) });
-      closeModal();
-      toast(`キャンペーン「${res.campaign.name}」を作成しました。入札ルールも自動設定済みです。`, 'success', 5000);
-      loadCampaigns();
-    } catch(e) {
-      toast('作成失敗: ' + e.message, 'error');
-    }
-  });
+document.getElementById('newCampaignBtn')?.addEventListener('click', () => {
+  const tabBtn = document.querySelector('.tab-btn[data-tab="campaign-new"]');
+  if (tabBtn) tabBtn.click();
+});
+
+// 静的な新規キャンペーン自動生成の確認ボタン処理
+document.getElementById('confirmNewCampaign')?.addEventListener('click', async () => {
+  const body = {
+    clinic_id: currentClinicId,
+    clinic_name: document.getElementById('newClinicName').value || '整体院',
+    region: document.getElementById('newRegion').value || '',
+    category: document.getElementById('newCategory').value,
+    budget_yen: parseInt(document.getElementById('newBudget').value)||3000,
+    platform: currentPlatform,
+  };
+  try {
+    const res = await api('/campaigns', { method:'POST', body: JSON.stringify(body) });
+    toast(`キャンペーン「${res.campaign.name}」を作成しました。入札ルールも自動設定済みです。`, 'success', 5000);
+    
+    // 入力欄をクリア
+    document.getElementById('newClinicName').value = '';
+    document.getElementById('newRegion').value = '';
+    document.getElementById('newCategory').value = '腰痛';
+    document.getElementById('newBudget').value = '3000';
+    
+    // 一覧タブに切り替えてロード
+    const tabBtn = document.querySelector('.tab-btn[data-tab="campaign-list"]');
+    if (tabBtn) tabBtn.click();
+  } catch(e) {
+    toast('作成失敗: ' + e.message, 'error');
+  }
 });
 
 // ============================================================
@@ -1297,8 +1377,10 @@ if (uploadArea && reportFileInput) {
 // AI広告文生成
 // ============================================================
 document.getElementById('generateAdCopyBtn').addEventListener('click', async () => {
+  const campaignId = document.getElementById('acCampaignSelect')?.value || null;
   const body = {
     clinic_id: currentClinicId,
+    campaign_id: campaignId ? parseInt(campaignId) : null,
     clinic_name: document.getElementById('acClinicName').value || '整体院',
     region: document.getElementById('acRegion').value || '',
     appeal_points: document.getElementById('acAppealPoints').value,
@@ -1361,7 +1443,12 @@ document.getElementById('applyAdCopyBtn').addEventListener('click', () => {
 
 async function loadAdCopyHistory() {
   try {
-    const data = await api(`/ad-copies?clinic_id=${currentClinicId}`);
+    const campaignId = document.getElementById('acCampaignSelect')?.value || '';
+    let url = `/ad-copies?clinic_id=${currentClinicId}`;
+    if (campaignId) {
+      url += `&campaign_id=${campaignId}`;
+    }
+    const data = await api(url);
     const copies = data.ad_copies || [];
     const histEl = document.getElementById('adCopyHistory');
     if (!copies.length) {
@@ -2337,7 +2424,12 @@ async function init() {
 // ============================================================
 async function loadNegativeKeywords() {
   try {
-    const data = await api(`/negative-keywords?clinic_id=${currentClinicId}`);
+    const campaignId = document.getElementById('nkwCampaignSelect')?.value || '';
+    let url = `/negative-keywords?clinic_id=${currentClinicId}`;
+    if (campaignId) {
+      url += `&campaign_id=${campaignId}`;
+    }
+    const data = await api(url);
     const kws = data.negative_keywords || [];
     const wrap = document.getElementById('nkwList');
     if (!kws.length) {
@@ -2368,10 +2460,17 @@ async function loadNegativeKeywords() {
 
 async function addNegativeKeyword(keyword, matchType='BROAD', source='manual') {
   if (!keyword.trim()) return;
+  const campaignId = document.getElementById('nkwCampaignSelect')?.value || null;
   try {
     const res = await api('/negative-keywords', {
       method: 'POST',
-      body: JSON.stringify({ clinic_id: currentClinicId, keyword: keyword.trim(), match_type: matchType, source })
+      body: JSON.stringify({ 
+        clinic_id: currentClinicId, 
+        keyword: keyword.trim(), 
+        match_type: matchType, 
+        source,
+        campaign_id: campaignId ? parseInt(campaignId) : null
+      })
     });
     toast(res.message || `「${keyword}」を除外リストに追加しました`, 'success');
     await loadNegativeKeywords();

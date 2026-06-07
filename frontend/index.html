@@ -251,10 +251,6 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 11-5.8-1.6"/></svg>
         <span>キャンペーン</span>
       </a>
-      <a href="#" class="nav-item" data-page="ad-copy">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        <span>A/Bテスト</span>
-      </a>
       <a href="#" class="nav-item" data-page="budget">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         <span>予算管理</span>
@@ -394,13 +390,170 @@
 
       <!-- Campaigns -->
       <section id="page-campaigns" class="page hidden">
-        <div class="page-actions">
-          <button class="btn btn-primary" id="newCampaignBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            新規キャンペーン自動生成
-          </button>
+        <!-- タブヘッダー -->
+        <div class="tabs-header">
+          <button class="tab-btn active" data-tab="campaign-list">📁 キャンペーン一覧</button>
+          <button class="tab-btn" data-tab="campaign-new">🆕 新規キャンペーン作成</button>
+          <button class="tab-btn" data-tab="campaign-adcopy">✍️ AI広告文作成 (A/Bテスト)</button>
+          <button class="tab-btn" data-tab="campaign-negative">🚫 除外キーワード管理</button>
         </div>
-        <div id="campaignsList"></div>
+
+        <!-- タブコンテンツ -->
+        <div class="tabs-content">
+          <!-- 1. キャンペーン一覧 -->
+          <div class="tab-pane active" id="tab-campaign-list">
+            <div class="page-actions" style="margin-bottom: 16px;">
+              <button class="btn btn-primary" id="newCampaignBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                新規キャンペーン自動生成
+              </button>
+            </div>
+            <div id="campaignsList"></div>
+          </div>
+
+          <!-- 2. 新規キャンペーン作成 -->
+          <div class="tab-pane" id="tab-campaign-new">
+            <div class="card" style="max-width: 600px; margin: 0 auto 24px;">
+              <h3 class="card-title">🆕 新規キャンペーン自動生成</h3>
+              <p style="font-size:12px; color:var(--text-3); margin-bottom:16px;">必要な情報を入力するだけで、AIが最適なキャンペーン構成とキーワード、入札ルールを自動で生成します。</p>
+              <div class="form-group">
+                <label>クリニック名</label>
+                <input type="text" id="newClinicName" class="form-input" placeholder="〇〇整体院">
+              </div>
+              <div class="form-group">
+                <label>地域</label>
+                <input type="text" id="newRegion" class="form-input" placeholder="渋谷区">
+              </div>
+              <div class="form-group">
+                <label>カテゴリ（訴求軸）</label>
+                <select id="newCategory" class="form-input">
+                  <option value="腰痛">腰痛</option>
+                  <option value="肩こり">肩こり</option>
+                  <option value="産後骨盤">産後骨盤</option>
+                  <option value="姿勢矯正">姿勢矯正</option>
+                  <option value="スポーツ">スポーツ</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>予算（円/日） ※後から変更可</label>
+                <input type="number" id="newBudget" class="form-input" value="3000" min="1000" step="500">
+              </div>
+              <div style="display:flex; justify-content: flex-end; margin-top: 20px;">
+                <button class="btn btn-primary" id="confirmNewCampaign" style="padding:10px 24px;">🤖 キャンペーン自動生成</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. AI広告文作成 (A/Bテスト) -->
+          <div class="tab-pane" id="tab-campaign-adcopy">
+            <div class="ad-copy-layout">
+              <div class="ad-copy-form-col">
+                <div class="card">
+                  <h3 class="card-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 00-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+                    AI広告文生成
+                  </h3>
+                  <div class="form-group">
+                    <label>対象キャンペーン</label>
+                    <select id="acCampaignSelect" class="form-input">
+                      <option value="">キャンペーンを選択してください...</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>クリニック名</label>
+                    <input type="text" id="acClinicName" placeholder="〇〇整体院" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label>地域</label>
+                    <input type="text" id="acRegion" placeholder="渋谷区" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label>訴求ポイント</label>
+                    <input type="text" id="acAppealPoints" placeholder="国家資格保有・完全個室・当日予約OK" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label>ターゲットの悩み</label>
+                    <input type="text" id="acTargetIssues" placeholder="腰痛、肩こり、産後骨盤矯正" class="form-input">
+                  </div>
+                  <div class="form-group">
+                    <label>追加指示（任意）</label>
+                    <textarea id="acExtra" placeholder="夜間診療もアピールして" class="form-input" rows="2"></textarea>
+                  </div>
+                  <button class="btn btn-primary btn-full" id="generateAdCopyBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Gemini AIで広告文を生成
+                  </button>
+                </div>
+              </div>
+              <div class="ad-copy-preview-col">
+                <div class="card" id="adCopyResult" style="display:none">
+                  <h3 class="card-title">生成結果</h3>
+                  <div class="ad-preview-box" id="adPreviewBox"></div>
+                  <button class="btn btn-success btn-full" id="applyAdCopyBtn" style="margin-top:16px">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Google広告に反映
+                  </button>
+                  <!-- ★ 心理トリガースコア指標 -->
+                  <div id="psychScorePanel" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                      <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
+                        🧠 心理トリガースコア
+                        <span id="psychGradeBadge" style="font-size:11px;padding:2px 8px;border-radius:99px;font-weight:800"></span>
+                      </div>
+                      <span id="psychTotalScore" style="font-size:20px;font-weight:900"></span>
+                    </div>
+                    <div id="psychScoreBars" style="display:flex;flex-direction:column;gap:6px"></div>
+                    <div id="psychTopImprovement" style="margin-top:12px;padding:10px 14px;background:rgba(200,169,122,0.1);border:1px solid rgba(200,169,122,0.3);border-radius:8px;font-size:12px;display:none">
+                      <span style="color:#c8a97a;font-weight:700">★ TOP改善提案: </span>
+                      <span id="psychTopImprovementText" style="color:var(--text-2)"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="card" id="adCopyLoading" style="display:none">
+                  <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Gemini AIが広告文を生成中...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="margin-top:24px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+                <h3 class="card-title" style="margin-bottom:0">生成履歴 (A/Bテスト)</h3>
+                <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="runAutoAbScore(this)">
+                  🤖 AI自動判定
+                </button>
+              </div>
+              <div id="adCopyHistory"></div>
+            </div>
+          </div>
+
+          <!-- 4. 除外キーワード管理 -->
+          <div class="tab-pane" id="tab-campaign-negative">
+            <div class="page-actions" style="margin-bottom: 16px;">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="nkwCampaignSelect" class="form-input" style="width:220px">
+                  <option value="">すべてのキャンペーン</option>
+                </select>
+                <input type="text" id="nkwInput" placeholder="除外キーワードを入力..." class="form-input" style="width:260px;">
+                <select id="nkwMatchType" class="form-input" style="width:120px">
+                  <option value="BROAD">部分一致</option>
+                  <option value="PHRASE">フレーズ一致</option>
+                  <option value="EXACT">完全一致</option>
+                </select>
+                <button class="btn btn-danger" id="addNkwBtn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  除外追加
+                </button>
+              </div>
+            </div>
+            <div id="nkwList"></div>
+            <div class="card" style="margin-top:20px;padding:16px;border-left:4px solid var(--warning)">
+              <h4 style="margin:0 0 8px;color:var(--warning)">💡 機能について</h4>
+              <p style="font-size:13px;color:var(--text-2);margin:0;">Google Ads API本番接続前は、除外KWはDBに記録されます。本番接続後に自動適用されます。「過去データ解析」の除外推奨タグをクリックすると、ここに自動で追加されます。</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Budget -->
@@ -506,83 +659,7 @@
 
 
 
-      <!-- Ad Copy -->
-      <section id="page-ad-copy" class="page hidden">
-        <div class="ad-copy-layout">
-          <div class="ad-copy-form-col">
-            <div class="card">
-              <h3 class="card-title">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.24 12.24a6 6 0 00-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
-                AI広告文生成
-              </h3>
-              <div class="form-group">
-                <label>クリニック名</label>
-                <input type="text" id="acClinicName" placeholder="〇〇整体院" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>地域</label>
-                <input type="text" id="acRegion" placeholder="渋谷区" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>訴求ポイント</label>
-                <input type="text" id="acAppealPoints" placeholder="国家資格保有・完全個室・当日予約OK" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>ターゲットの悩み</label>
-                <input type="text" id="acTargetIssues" placeholder="腰痛、肩こり、産後骨盤矯正" class="form-input">
-              </div>
-              <div class="form-group">
-                <label>追加指示（任意）</label>
-                <textarea id="acExtra" placeholder="夜間診療もアピールして" class="form-input" rows="2"></textarea>
-              </div>
-              <button class="btn btn-primary btn-full" id="generateAdCopyBtn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Gemini AIで広告文を生成
-              </button>
-            </div>
-          </div>
-          <div class="ad-copy-preview-col">
-            <div class="card" id="adCopyResult" style="display:none">
-              <h3 class="card-title">生成結果</h3>
-              <div class="ad-preview-box" id="adPreviewBox"></div>
-              <button class="btn btn-success btn-full" id="applyAdCopyBtn" style="margin-top:16px">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                Google広告に反映
-              </button>
-              <!-- ★ 心理トリガースコア指標 -->
-              <div id="psychScorePanel" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                  <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
-                    🧠 心理トリガースコア
-                    <span id="psychGradeBadge" style="font-size:11px;padding:2px 8px;border-radius:99px;font-weight:800"></span>
-                  </div>
-                  <span id="psychTotalScore" style="font-size:20px;font-weight:900"></span>
-                </div>
-                <div id="psychScoreBars" style="display:flex;flex-direction:column;gap:6px"></div>
-                <div id="psychTopImprovement" style="margin-top:12px;padding:10px 14px;background:rgba(200,169,122,0.1);border:1px solid rgba(200,169,122,0.3);border-radius:8px;font-size:12px;display:none">
-                  <span style="color:#c8a97a;font-weight:700">★ TOP改善提案: </span>
-                  <span id="psychTopImprovementText" style="color:var(--text-2)"></span>
-                </div>
-              </div>
-            </div>
-            <div class="card" id="adCopyLoading" style="display:none">
-              <div class="loading-state">
-                <div class="spinner"></div>
-                <p>Gemini AIが広告文を生成中...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="card" style="margin-top:24px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-            <h3 class="card-title" style="margin-bottom:0">生成履歴 (A/Bテスト)</h3>
-            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="runAutoAbScore(this)">
-              🤖 AI自動判定
-            </button>
-          </div>
-          <div id="adCopyHistory"></div>
-        </div>
-      </section>
+
 
 
 
@@ -646,28 +723,7 @@
         <div id="alertsList"></div>
       </section>
 
-      <!-- Negative Keywords -->
-      <section id="page-negative-kw" class="page hidden">
-        <div class="page-actions">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <input type="text" id="nkwInput" placeholder="除外キーワードを入力..." class="form-input" style="width:260px;">
-            <select id="nkwMatchType" class="form-input" style="width:120px">
-              <option value="BROAD">部分一致</option>
-              <option value="PHRASE">フレーズ一致</option>
-              <option value="EXACT">完全一致</option>
-            </select>
-            <button class="btn btn-danger" id="addNkwBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              除外追加
-            </button>
-          </div>
-        </div>
-        <div id="nkwList"></div>
-        <div class="card" style="margin-top:20px;padding:16px;border-left:4px solid var(--warning)">
-          <h4 style="margin:0 0 8px;color:var(--warning)">💡 機能について</h4>
-          <p style="font-size:13px;color:var(--text-2);margin:0;">Google Ads API本番接続前は、除外KWはDBに記録されます。本番接続後に自動適用されます。「過去データ解析」の除外推奨タグをクリックすると、ここに自動で追加されます。</p>
-        </div>
-      </section>
+
 
       <!-- Personas -->
       <section id="page-personas" class="page hidden">
@@ -844,8 +900,8 @@
               外部システム・目標設定
             </h3>
             <div class="form-group">
-              <label>GA4 プロパティID <span style="font-size:11px;color:var(--text-3);font-weight:400">（コンバージョン連携用）</span></label>
-              <input type="text" id="settGa4PropertyId" placeholder="例: 123456789" class="form-input">
+              <label>GA4 測定ID <span style="font-size:11px;color:var(--text-3);font-weight:400">（LP埋め込み・トラッキング用）</span></label>
+              <input type="text" id="settGa4PropertyId" placeholder="例: G-XXXXXX" class="form-input">
             </div>
 
           </div>

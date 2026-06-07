@@ -735,3 +735,58 @@ select.form-input { cursor: pointer; }
 .grade-B { background: linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; }
 .grade-C { background: linear-gradient(135deg,#8b5cf6,#7c3aed); color:#fff; }
 .grade-D { background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
+
+/* ============================================================
+   ★ キャンペーン管理 タブUI スタイル
+   ============================================================ */
+.tabs-header {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--text-2);
+}
+
+.tab-btn.active {
+  background: rgba(200, 169, 122, 0.1);
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+  animation: tabFadeIn 0.3s ease-in-out;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
