@@ -952,3 +952,105 @@ class AdsClient:
             return {"success": True, "mock": False, "resource": action_resource}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def suggest_geo_target_constants(self, location_names: list[str]) -> list[str]:
+        """地名(例: '藤枝市')からGeoTargetConstantリソース名を解決する"""
+        if self.mock_mode:
+            return [f"geoTargetConstants/{random.randint(100000, 999999)}" for _ in location_names]
+
+        gtc_service = self._client.get_service("GeoTargetConstantService")
+        request = self._client.get_type("SuggestGeoTargetConstantsRequest")
+        request.locale = "ja"
+        request.country_code = "JP"
+        for name in location_names:
+            request.location_names.names.append(name)
+
+        try:
+            response = gtc_service.suggest_geo_target_constants(request=request)
+            resource_names = []
+            for suggestion in response.geo_target_constant_suggestions:
+                constant = suggestion.geo_target_constant
+                print(f"[AdsClient] GeoTarget解決: {constant.canonical_name} ({constant.resource_name})")
+                resource_names.append(constant.resource_name)
+            return resource_names
+        except Exception as e:
+            print(f"[AdsClient] GeoTarget解決エラー: {e}")
+            return []
+
+    def update_campaign_location(self, campaign_id: str, loc_config: dict) -> dict:
+        """
+        キャンペーンの位置情報（配信半径、地域）を更新する。
+        既存のLOCATION/PROXIMITYを削除し、新しいターゲットを追加する。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] 位置情報更新: campaign={campaign_id} config={loc_config}")
+            return {"success": True, "mock": True}
+
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            campaign_criterion_service = self._client.get_service("CampaignCriterionService")
+
+            # 1. 既存の LOCATION または PROXIMITY を検索して削除
+            remove_operations = []
+            try:
+                query = f"""
+                    SELECT campaign_criterion.resource_name
+                    FROM campaign_criterion
+                    WHERE campaign.id = '{campaign_id}'
+                      AND campaign_criterion.type IN ('LOCATION', 'PROXIMITY')
+                      AND campaign_criterion.status != 'REMOVED'
+                """
+                search_response = ga_service.search(customer_id=self.customer_id, query=query)
+                for row in search_response:
+                    op = self._client.get_type("CampaignCriterionOperation")
+                    op.remove = row.campaign_criterion.resource_name
+                    remove_operations.append(op)
+
+                if remove_operations:
+                    campaign_criterion_service.mutate_campaign_criteria(
+                        customer_id=self.customer_id, operations=remove_operations
+                    )
+                    print(f"[AdsClient] 既存の位置ターゲティング {len(remove_operations)} 件を削除しました (Campaign: {campaign_id})")
+            except Exception as ex_del:
+                print(f"[AdsClient] 既存位置ターゲット削除中にエラー（無視して続行）: {ex_del}")
+
+            # 2. 新しい位置ターゲットを追加
+            create_operations = []
+            loc_type = loc_config.get("type", "proximity")
+
+            if loc_type == "proximity":
+                lat = loc_config.get("lat")
+                lon = loc_config.get("lon")
+                radius = loc_config.get("radius_km", 8)
+                if lat is not None and lon is not None:
+                    op = self._client.get_type("CampaignCriterionOperation")
+                    criterion = op.create
+                    criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
+                    criterion.proximity.geo_point.latitude_in_micro_degrees = int(lat * 1_000_000)
+                    criterion.proximity.geo_point.longitude_in_micro_degrees = int(lon * 1_000_000)
+                    criterion.proximity.radius = float(radius)
+                    criterion.proximity.radius_units = self._client.enums.ProximityRadiusUnitsEnum.KILOMETERS
+                    create_operations.append(op)
+            elif loc_type == "geo_target":
+                geo_targets = loc_config.get("geo_targets", [])
+                if geo_targets:
+                    resource_names = self.suggest_geo_target_constants(geo_targets)
+                    for r_name in resource_names:
+                        op = self._client.get_type("CampaignCriterionOperation")
+                        criterion = op.create
+                        criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
+                        criterion.location.geo_target_constant = r_name
+                        create_operations.append(op)
+
+            if create_operations:
+                resp = campaign_criterion_service.mutate_campaign_criteria(
+                    customer_id=self.customer_id, operations=create_operations
+                )
+                print(f"[AdsClient] 新しい位置ターゲティング {len(create_operations)} 件を追加しました")
+                return {"success": True, "added_count": len(resp.results), "mock": False}
+            else:
+                return {"success": False, "error": "追加する位置情報が指定されていません", "mock": False}
+
+        except Exception as e:
+            print(f"[AdsClient] 位置情報更新エラー: {e}")
+            return {"success": False, "error": str(e), "mock": False}

@@ -1065,9 +1065,14 @@ window.toggleCampaign = toggleCampaign;
 // ============================================================
 // キャンペーン詳細ドロワー
 // ============================================================
+let _drawerCampaignId = null;         // ローカルDB上のID
+let _drawerGoogleCampaignId = null;   // Google AdsのキャンペーンID
+
 function openCampDrawer(campaignId, campaignName, status, event) {
   // ボタン類のクリックはドロワーを開かない
   if (event && event.target.closest('button')) return;
+
+  _drawerCampaignId = campaignId;
 
   const drawer = document.getElementById('campDrawer');
   const overlay = document.getElementById('campDrawerOverlay');
@@ -1085,7 +1090,10 @@ function openCampDrawer(campaignId, campaignName, status, event) {
 
   // API取得
   api(`/campaigns/${campaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
-    .then(d => renderCampDrawer(d))
+    .then(d => {
+      _drawerGoogleCampaignId = d.google_campaign_id;
+      renderCampDrawer(d);
+    })
     .catch(e => {
       body.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">取得に失敗しました<br><small>${e.message}</small></div>`;
     });
@@ -1174,16 +1182,294 @@ function renderCampDrawer(d) {
       `).join('')}
     </div>` : '';
 
-  body.innerHTML = budgetHtml + kwHtml + locationHtml + adsHtml;
-  if (!body.innerHTML.trim()) {
-    body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>';
+  // ⑤ AI自動化アクションパネル
+  const aiActionsHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">🤖 AI自動化</div>
+      <div class="drawer-ai-actions">
+        <button class="drawer-ai-btn" id="btnSmartKeywords" onclick="runSmartKeywords()">
+          <div class="drawer-ai-btn-icon">✨</div>
+          <div>
+            <div class="drawer-ai-btn-label">患者データからキーワード提案</div>
+            <div class="drawer-ai-btn-sub">実際の来院症状×AIで最適キーワードを生成</div>
+          </div>
+        </button>
+        <button class="drawer-ai-btn" id="btnRecommendRadius" onclick="runRecommendRadius()">
+          <div class="drawer-ai-btn-icon">📡</div>
+          <div>
+            <div class="drawer-ai-btn-label">最適配信半径を自動計算</div>
+            <div class="drawer-ai-btn-sub">患者の住所分布から80%カバー半径を算出</div>
+          </div>
+        </button>
+      </div>
+      <div id="drawerAiResult"></div>
+    </div>`;
+
+  body.innerHTML = budgetHtml + kwHtml + locationHtml + adsHtml + aiActionsHtml;
+  if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml) {
+    body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 }
+
+// --- AIキーワード提案 ---
+async function runSmartKeywords() {
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+  const btn = document.getElementById('btnSmartKeywords');
+  const result = document.getElementById('drawerAiResult');
+  btn.disabled = true;
+  btn.querySelector('.drawer-ai-btn-label').textContent = '生成中...';
+  result.innerHTML = '<div class="camp-drawer-loading" style="padding:20px">✨ Gemini AIが患者データを分析中...</div>';
+
+  try {
+    const data = await api('/campaigns/smart-keywords', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        google_campaign_id: _drawerGoogleCampaignId,
+        area: '藤枝市・焼津市',
+      })
+    });
+
+    if (!data.success || !data.keywords?.length) {
+      result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">キーワード生成失敗</div>`;
+      return;
+    }
+
+    // 症状サマリー
+    const symHtml = data.symptom_summary ? `
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.04);border-radius:6px">
+        📊 来院患者の主訴: ${Object.entries(data.symptom_summary).slice(0,5).map(([k,v])=>`${k}(${v}件)`).join(' / ')}
+      </div>` : '';
+
+    const kwListHtml = data.keywords.map((kw, i) => `
+      <div class="drawer-kw-suggest-item" id="kwSuggest_${i}">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;width:100%">
+          <input type="checkbox" class="kw-suggest-check" value="${i}" checked style="width:16px;height:16px;flex-shrink:0">
+          <span style="flex:1;font-size:13px;color:var(--text-1)">${kw.text}</span>
+          <span class="drawer-kw-badge ${kw.match_type?.toLowerCase()==='broad'?'broad':kw.match_type?.toLowerCase()==='exact'?'exact':'phrase'}">${kw.match_type||'BROAD'}</span>
+          <span style="font-size:10px;color:${kw.priority==='高'?'#10b981':kw.priority==='中'?'#f59e0b':'#64748b'}">${kw.priority||''}</span>
+        </label>
+        ${kw.reason ? `<div style="font-size:11px;color:var(--text-3);margin-top:2px;padding-left:24px">${kw.reason}</div>` : ''}
+      </div>
+    `).join('');
+
+    result.innerHTML = `
+      <div style="margin-top:12px">
+        <div class="drawer-section-title" style="margin-bottom:10px">✨ AI提案キーワード（${data.keywords.length}件）</div>
+        ${symHtml}
+        <div style="display:flex;flex-direction:column;gap:6px">${kwListHtml}</div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" style="flex:1" onclick="applySelectedKeywords(${JSON.stringify(data.keywords).replace(/'/g,"&#39;")})">
+            ✅ 選択したキーワードをキャンペーンに追加
+          </button>
+          <button class="btn btn-secondary" onclick="document.getElementById('drawerAiResult').innerHTML=''">キャンセル</button>
+        </div>
+      </div>`;
+
+    // Store keywords for apply function
+    window._suggestedKeywords = data.keywords;
+  } catch(e) {
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">エラー: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.querySelector('.drawer-ai-btn-label').textContent = '患者データからキーワード提案';
+  }
+}
+window.runSmartKeywords = runSmartKeywords;
+
+async function applySelectedKeywords(keywords) {
+  const checks = document.querySelectorAll('.kw-suggest-check:checked');
+  const selected = Array.from(checks).map(c => keywords[parseInt(c.value)]).filter(Boolean).map(kw => ({
+    text: kw.text,
+    match_type: kw.match_type || 'BROAD',
+  }));
+  if (!selected.length) { toast('キーワードを選択してください', 'error'); return; }
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+
+  const result = document.getElementById('drawerAiResult');
+  result.innerHTML = '<div class="camp-drawer-loading">キャンペーンに追加中...</div>';
+
+  try {
+    const data = await api('/campaigns/add-keywords', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        platform: currentPlatform,
+        google_campaign_id: _drawerGoogleCampaignId,
+        keywords: selected,
+      })
+    });
+    toast(`✅ ${data.added}件のキーワードを追加しました`, 'success');
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#10b981">✅ ${data.added}件追加完了${data.failed?` / ${data.failed}件失敗`:''}</div>`;
+    // ドロワーを更新
+    setTimeout(() => {
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => renderCampDrawer(d)).catch(()=>{});
+    }, 1500);
+  } catch(e) {
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">追加失敗: ${e.message}</div>`;
+  }
+}
+window.applySelectedKeywords = applySelectedKeywords;
+
+// --- 最適配信半径計算 ---
+async function runRecommendRadius() {
+  const btn = document.getElementById('btnRecommendRadius');
+  const result = document.getElementById('drawerAiResult');
+  btn.disabled = true;
+  btn.querySelector('.drawer-ai-btn-label').textContent = '計算中...';
+  result.innerHTML = '<div class="camp-drawer-loading" style="padding:20px">📡 患者住所をジオコーディング中...<br><small style="color:var(--text-3)">※住所の件数によって数秒かかります</small></div>';
+
+  try {
+    const data = await api(`/analytics/recommend-radius?clinic_id=${currentClinicId}`);
+    if (!data.success) {
+      result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">${data.error}</div>`;
+      return;
+    }
+
+    const bands = data.distance_bands || {};
+    const total = data.geocoded_count || 1;
+    const bandHtml = Object.entries(bands).map(([label, cnt]) => {
+      const pct = Math.round(cnt / total * 100);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:11px;color:var(--text-3);width:60px;flex-shrink:0">${label}</span>
+          <div style="flex:1;background:rgba(255,255,255,0.07);border-radius:4px;height:8px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:#6366f1;border-radius:4px;transition:width 0.6s ease"></div>
+          </div>
+          <span style="font-size:11px;color:var(--text-2);width:40px;text-align:right">${cnt}名(${pct}%)</span>
+        </div>`;
+    }).join('');
+
+    // 最も来院しやすいエリア（市区町村）
+    const topAreas = data.top_areas || [];
+    const areaHtml = topAreas.length ? topAreas.map(a => `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:4px">
+        <span style="color:var(--text-2)">📍 ${a.area}</span>
+        <span style="color:var(--text-3)">${a.count}名 (${a.percentage}%)</span>
+      </div>
+    `).join('') : '<div style="font-size:11px;color:var(--text-3)">エリアデータがありません</div>';
+
+    // 適用ボタンの作成
+    const applyButtonsHtml = `
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="applyRadiusTarget(${data.recommended_radius_km})">
+          🎯 推奨半径 (${data.recommended_radius_km}km) を適用
+        </button>
+        ${topAreas.length ? `
+        <button class="btn btn-secondary" style="flex:1;font-size:12px;padding:8px" onclick='applyAreaTarget(${JSON.stringify(topAreas.slice(0, 2).map(a => a.area))})'>
+          🗺️ 主要エリアを適用
+        </button>` : ''}
+      </div>`;
+
+    result.innerHTML = `
+      <div style="margin-top:12px;padding:16px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px">
+        <div class="drawer-section-title" style="margin-bottom:12px">📡 最適配信半径レポート</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+          <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:8px;border:1px solid rgba(16,185,129,0.2)">
+            <div style="font-size:22px;font-weight:800;color:#10b981">${data.p80_km}km</div>
+            <div style="font-size:10px;color:var(--text-3)">80%カバー</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(99,102,241,0.15);border-radius:8px;border:2px solid rgba(99,102,241,0.4)">
+            <div style="font-size:22px;font-weight:800;color:#818cf8">${data.recommended_radius_km}km</div>
+            <div style="font-size:10px;color:#a5b4fc">🎯 推奨設定値</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:22px;font-weight:800;color:var(--text-2)">${data.p95_km}km</div>
+            <div style="font-size:10px;color:var(--text-3)">95%カバー</div>
+          </div>
+        </div>
+        
+        <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-bottom:6px">【院との距離分布】</div>
+        <div style="margin-bottom:12px">${bandHtml}</div>
+        
+        <div style="font-size:12px;font-weight:700;color:var(--text-1);margin-top:10px;margin-bottom:6px">【最も来院しやすいエリア】</div>
+        <div style="margin-bottom:12px;padding:10px;background:rgba(0,0,0,0.2);border-radius:6px">${areaHtml}</div>
+
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:12px">
+          ジオコーディング済み: ${data.geocoded_count}名 / 総患者: ${data.total_patients}名
+          ${data.failed_count ? ` (住所不明: ${data.failed_count}名)` : ''}
+        </div>
+        <div style="padding:10px;background:rgba(99,102,241,0.1);border-radius:8px;border:1px solid rgba(99,102,241,0.2);font-size:12px;color:#a5b4fc;margin-bottom:12px">
+          💡 推奨値 <strong>${data.recommended_radius_km}km</strong> または患者が最も来院している <strong>主要エリア</strong> をキャンペーンの位置ターゲットとして自動設定できます。
+        </div>
+        ${applyButtonsHtml}
+      </div>`;
+  } catch(e) {
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">計算失敗: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.querySelector('.drawer-ai-btn-label').textContent = '最適配信半径を自動計算';
+  }
+}
+window.runRecommendRadius = runRecommendRadius;
+
+async function applyRadiusTarget(radiusKm) {
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+  const result = document.getElementById('drawerAiResult');
+  result.innerHTML = '<div class="camp-drawer-loading">推奨配信半径をキャンペーンに適用中...</div>';
+  
+  try {
+    const data = await api('/campaigns/update-location', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        platform: currentPlatform,
+        google_campaign_id: _drawerGoogleCampaignId,
+        type: 'proximity',
+        lat: 34.868,
+        lon: 138.257,
+        radius_km: radiusKm
+      })
+    });
+    toast('✅ 配信半径を更新しました', 'success');
+    result.innerHTML = '<div class="camp-drawer-loading" style="color:#10b981">✅ 配信半径の更新完了</div>';
+    
+    setTimeout(() => {
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => renderCampDrawer(d)).catch(()=>{});
+    }, 1500);
+  } catch(e) {
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">適用失敗: ${e.message}</div>`;
+  }
+}
+window.applyRadiusTarget = applyRadiusTarget;
+
+async function applyAreaTarget(areas) {
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+  if (!areas || !areas.length) { toast('適用可能なエリアデータがありません', 'error'); return; }
+  const result = document.getElementById('drawerAiResult');
+  result.innerHTML = '<div class="camp-drawer-loading">主要来院エリアをキャンペーンに適用中...</div>';
+  
+  try {
+    const data = await api('/campaigns/update-location', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        platform: currentPlatform,
+        google_campaign_id: _drawerGoogleCampaignId,
+        type: 'geo_target',
+        geo_targets: areas
+      })
+    });
+    toast('✅ 主要エリアのターゲティングを設定しました', 'success');
+    result.innerHTML = '<div class="camp-drawer-loading" style="color:#10b981">✅ 地域ターゲティングの適用完了</div>';
+    
+    setTimeout(() => {
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => renderCampDrawer(d)).catch(()=>{});
+    }, 1500);
+  } catch(e) {
+    result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">適用失敗: ${e.message}</div>`;
+  }
+}
+window.applyAreaTarget = applyAreaTarget;
 
 // Escキーでドロワーを閉じる
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeCampDrawer();
 });
+
 
 async function deleteCampaign(id, name) {
   if (!confirm(`キャンペーン「${name}」を削除しますか？\n\nこの操作は元に戻せません。Google Ads上のキャンペーンも削除（REMOVED）されます。`)) return;

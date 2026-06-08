@@ -5511,6 +5511,345 @@ def serve_spa(path: str = ""):
         )
     return {"message": "Google広告自動運用システム API サーバー稼働中", "docs": "/docs"}
 
+# ============================================================
+# ---- AI自動化: 最適配信半径 & キーワード一括投入 ----
+# ============================================================
+
+@app.get("/api/analytics/recommend-radius")
+def recommend_radius(clinic_id: int = 1):
+    """
+    患者の住所データをジオコーディングして院との距離分布を計算し、
+    80%カバー半径・95%カバー半径を返す。
+    院の座標: 藤枝市田沼1-19-7 (lat=34.868, lon=138.257)
+    """
+    import json, math, re, requests as rq
+
+    CLINIC_LAT = 34.868
+    CLINIC_LON = 138.257
+
+    def haversine_km(lat1, lon1, lat2, lon2):
+        R = 6371
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.asin(math.sqrt(a))
+
+    def geocode_address(address: str) -> tuple:
+        """国土交通省ジオコーディングAPI（無料・無制限）を使用"""
+        try:
+            url = f"https://msearch.gsi.go.jp/address-search/AddressSearch?q={rq.utils.quote(address)}"
+            resp = rq.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and len(data) > 0:
+                    coords = data[0].get('geometry', {}).get('coordinates', [])
+                    if len(coords) >= 2:
+                        return float(coords[1]), float(coords[0])  # lat, lon
+        except Exception:
+            pass
+        return None, None
+
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT address_pref, address_city FROM logiction_patients "
+            "WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''",
+            (clinic_id,)
+        ).fetchall()
+
+    distances = []
+    geocoded = []
+    failed = 0
+    area_counts = {}
+
+    for pref, city in rows:
+        if not city:
+            continue
+        full_addr = f"{pref or '静岡県'}{city}"
+        
+        # 最も来院しやすいエリアの逆算（市区町村の集集計）
+        m = re.match(r'^(.*?[市区町村])', full_addr)
+        city_name = m.group(1) if m else full_addr
+        area_counts[city_name] = area_counts.get(city_name, 0) + 1
+
+        lat, lon = geocode_address(full_addr)
+        if lat and lon:
+            dist = haversine_km(CLINIC_LAT, CLINIC_LON, lat, lon)
+            distances.append(round(dist, 2))
+            geocoded.append({"address": full_addr, "lat": lat, "lon": lon, "dist_km": round(dist, 2)})
+        else:
+            failed += 1
+
+    if not distances:
+        return {
+            "success": False,
+            "error": "ジオコーディングできた住所がありません",
+            "total_patients": len(rows),
+            "geocoded_count": 0,
+        }
+
+    distances.sort()
+    n = len(distances)
+    p50_idx = int(n * 0.50)
+    p80_idx = int(n * 0.80)
+    p95_idx = int(n * 0.95)
+    p50_km = distances[min(p50_idx, n-1)]
+    p80_km = distances[min(p80_idx, n-1)]
+    p95_km = distances[min(p95_idx, n-1)]
+
+    # 距離帯ごとの患者数
+    bands = {"〜3km": 0, "3〜5km": 0, "5〜8km": 0, "8〜15km": 0, "15km以上": 0}
+    for d in distances:
+        if d <= 3:   bands["〜3km"] += 1
+        elif d <= 5: bands["3〜5km"] += 1
+        elif d <= 8: bands["5〜8km"] += 1
+        elif d <= 15: bands["8〜15km"] += 1
+        else:         bands["15km以上"] += 1
+
+    recommended_km = round(p80_km + 1)  # 80%ライン+1km余裕
+
+    # 主要来院エリアランキング（最大5件）
+    total_with_areas = sum(area_counts.values()) or 1
+    sorted_areas = sorted(area_counts.items(), key=lambda x: -x[1])
+    top_areas = [
+        {
+            "area": area,
+            "count": cnt,
+            "percentage": round(cnt / total_with_areas * 100, 1)
+        } for area, cnt in sorted_areas[:5]
+    ]
+
+    return {
+        "success": True,
+        "total_patients": len(rows),
+        "geocoded_count": n,
+        "failed_count": failed,
+        "recommended_radius_km": recommended_km,
+        "p50_km": p50_km,
+        "p80_km": p80_km,
+        "p95_km": p95_km,
+        "distance_bands": bands,
+        "geocoded_sample": geocoded[:10],
+        "top_areas": top_areas,
+    }
+
+
+class UpdateLocationReq(BaseModel):
+    clinic_id: int = 1
+    platform: str = "google"
+    google_campaign_id: str
+    type: str  # "proximity" or "geo_target"
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    radius_km: Optional[int] = None
+    geo_targets: Optional[list[str]] = None
+
+
+@app.post("/api/campaigns/update-location")
+def update_campaign_location_endpoint(req: UpdateLocationReq):
+    """キャンペーンの位置ターゲティング（半径または地域）を更新する。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, req.platform)
+    
+    loc_config = {
+        "type": req.type,
+        "lat": req.lat,
+        "lon": req.lon,
+        "radius_km": req.radius_km,
+        "geo_targets": req.geo_targets,
+    }
+    
+    res = client.update_campaign_location(req.google_campaign_id, loc_config)
+    if not res.get("success"):
+        raise HTTPException(500, f"位置情報更新エラー: {res.get('error')}")
+
+    # ローカルDB上のキャンペーンデータも更新する
+    region_str = ""
+    if req.type == "proximity":
+        region_str = f"半径{req.radius_km}km"
+    elif req.type == "geo_target" and req.geo_targets:
+        region_str = "・".join(req.geo_targets)
+
+    if region_str:
+        from datetime import datetime
+        with db.get_conn() as conn:
+            conn.execute(
+                "UPDATE campaigns SET target_region=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                (region_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), req.google_campaign_id, req.clinic_id)
+            )
+            conn.commit()
+
+    return res
+
+
+class AddKeywordsReq(BaseModel):
+    clinic_id: int = 1
+    platform: str = "google"
+    google_campaign_id: str
+    keywords: list  # [{"text": str, "match_type": "BROAD"|"PHRASE"|"EXACT"}, ...]
+
+
+@app.post("/api/campaigns/add-keywords")
+def add_keywords_to_campaign(req: AddKeywordsReq):
+    """
+    指定キャンペーンにキーワードを一括追加する。
+    内部でad_groupを自動検索して追加する。
+    HealthポリシーはexemptPolicyViolationKeysで回避。
+    """
+    import requests as rq
+
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, req.platform)
+
+    if client.mock_mode:
+        return {
+            "success": True,
+            "added": len(req.keywords),
+            "failed": 0,
+            "mock": True,
+        }
+
+    try:
+        token = client._get_rest_access_token()
+    except Exception as e:
+        raise HTTPException(500, f"認証エラー: {e}")
+
+    CID = client.customer_id
+    BASE = f"https://googleads.googleapis.com/v23/customers/{CID}"
+    headers_rest = {
+        "Authorization": f"Bearer {token}",
+        "developer-token": client._developer_token,
+        "login-customer-id": client._login_customer_id,
+        "Content-Type": "application/json",
+    }
+
+    # キャンペーン内の最初のad_groupを取得
+    gid = req.google_campaign_id
+    query_resp = rq.post(
+        f"{BASE}/googleAds:searchStream",
+        headers=headers_rest,
+        json={"query": f"SELECT ad_group.resource_name FROM ad_group WHERE campaign.id = {gid} AND ad_group.status != REMOVED LIMIT 1"}
+    )
+    ag_rn = None
+    for batch in query_resp.json():
+        for row in batch.get("results", []):
+            ag_rn = row.get("adGroup", {}).get("resourceName")
+            break
+        if ag_rn:
+            break
+
+    if not ag_rn:
+        raise HTTPException(404, "キャンペーン内に広告グループが見つかりません")
+
+    kw_ops = [{
+        "create": {
+            "adGroup": ag_rn,
+            "status": "ENABLED",
+            "keyword": {
+                "text": kw["text"],
+                "matchType": kw.get("match_type", "BROAD").upper(),
+            },
+        },
+        "exemptPolicyViolationKeys": [{
+            "policyName": "HEALTH_IN_PERSONALIZED_ADS",
+            "violatingText": kw["text"],
+        }]
+    } for kw in req.keywords]
+
+    resp = rq.post(
+        f"{BASE}/adGroupCriteria:mutate",
+        headers=headers_rest,
+        json={"operations": kw_ops, "partialFailure": True}
+    )
+
+    if resp.status_code == 200:
+        data = resp.json()
+        results = data.get("results", [])
+        added = sum(1 for r in results if r.get("resourceName"))
+        return {"success": True, "added": added, "failed": len(kw_ops) - added, "mock": False}
+    else:
+        raise HTTPException(500, f"キーワード追加エラー: {resp.text[:300]}")
+
+
+class SmartKeywordReq(BaseModel):
+    clinic_id: int = 1
+    google_campaign_id: str
+    area: Optional[str] = "藤枝市・焼津市"
+
+
+@app.post("/api/campaigns/smart-keywords")
+async def smart_keywords_for_campaign(req: SmartKeywordReq):
+    """
+    患者の症状データ×AIでキャンペーン向けキーワードを自動生成する。
+    symptomデータの上位症状をGeminiに渡してキーワードを生成。
+    """
+    import json as _json
+
+    gemini_key = db.get_gemini_api_key(req.clinic_id)
+    if not gemini_key:
+        raise HTTPException(400, "GEMINI_API_KEYが設定されていません")
+
+    # 患者の症状分布を取得
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT symptoms FROM logiction_patients WHERE clinic_id=? AND symptoms IS NOT NULL",
+            (req.clinic_id,)
+        ).fetchall()
+
+    symptom_cnt = {}
+    for row in rows:
+        try:
+            syms = _json.loads(row[0])
+            for s in syms:
+                s = s.strip()
+                if s:
+                    symptom_cnt[s] = symptom_cnt.get(s, 0) + 1
+        except Exception:
+            pass
+
+    top_symptoms = sorted(symptom_cnt.items(), key=lambda x: -x[1])[:10]
+    symptom_text = "\n".join([f"  ・{s}: {c}件" for s, c in top_symptoms])
+
+    # 除外KW
+    nkws = db.list_negative_keywords(req.clinic_id)
+    nkw_list = [n["keyword"] for n in nkws]
+
+    import google.genai as genai
+    gc = genai.Client(api_key=gemini_key)
+
+    prompt = f"""あなたは整体院のGoogle広告キーワード戦略の専門家です。
+
+【実際の来院患者の症状データ（{len(rows)}名分）】
+{symptom_text}
+
+【配信エリア】{req.area}
+【現在の除外キーワード】{', '.join(nkw_list[:20]) if nkw_list else 'なし'}
+
+上記の「実際の来院患者の症状」を最優先に考慮し、このエリアで効果的な検索広告キーワードを提案してください。
+
+重要な方針:
+- 実際の患者の主症状（腰・膝・坐骨神経痛など）に関連するキーワードを中心にすること
+- エリア名（藤枝・焼津・島田）を組み合わせた地域×症状キーワードを必ず含めること
+- 除外KWと重複しないこと
+- 「整体院導」という院名を含む指名系は不要
+
+以下のJSON形式のみで返してください（説明文不要）:
+[
+  {{"text": "キーワード", "match_type": "BROAD", "reason": "患者データに基づく理由", "priority": "高"}},
+  ...
+]
+15〜20件提案してください。match_typeはBROAD/PHRASE/EXACTのいずれか。"""
+
+    try:
+        resp = gc.models.generate_content(model='gemini-2.0-flash', contents=prompt)
+        text = resp.text.strip()
+        import re
+        m = re.search(r'\[.*\]', text, re.DOTALL)
+        keywords = _json.loads(m.group(0)) if m else []
+        return {"success": True, "keywords": keywords, "symptom_summary": dict(top_symptoms)}
+    except Exception as e:
+        raise HTTPException(500, f"AI生成エラー: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
