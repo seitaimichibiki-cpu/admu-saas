@@ -1092,15 +1092,16 @@ class AdsClient:
                 return {"success": False, "error": "キャンペーン内に広告グループが見つかりません"}
 
             # 2. 既存の RSA 広告を検索
+            # 2. 既存の RSA 広告を検索
             ad_query = (
-                f"SELECT ad_group_ad.ad.resource_name, ad_group_ad.ad.final_urls, "
+                f"SELECT ad_group_ad.resource_name, ad_group_ad.ad.final_urls, "
                 f"ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions "
                 f"FROM ad_group_ad "
                 f"WHERE ad_group.resource_name = '{ag_rn}' AND ad_group_ad.status != 'REMOVED' "
                 f"AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD' LIMIT 1"
             )
             ad_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=_rest_headers, json={"query": ad_query})
-            ad_rn = None
+            ad_rn = None  # ad_group_ad の resourceName
             existing_final_urls = []
             existing_headlines = []
             existing_descriptions = []
@@ -1108,8 +1109,8 @@ class AdsClient:
                 for batch in ad_resp.json():
                     for row in batch.get("results", []):
                         ad_group_ad = row.get("adGroupAd", {})
+                        ad_rn = ad_group_ad.get("resourceName")
                         ad = ad_group_ad.get("ad", {})
-                        ad_rn = ad.get("resourceName")
                         existing_final_urls = ad.get("finalUrls", [])
                         
                         rsa = ad.get("responsiveSearchAd", {})
@@ -1158,51 +1159,52 @@ class AdsClient:
                 }
             }
 
+            # 4. ミューテーションの作成（Google Ads APIでは広告の中身はUPDATE不可のため、REMOVEして再作成する）
+            ops = []
             if ad_rn:
-                op = {
-                    "update": {
-                        "resourceName": ad_rn,
-                        "ad": ad_payload
-                    },
-                    "updateMask": "ad.responsive_search_ad.headlines,ad.responsive_search_ad.descriptions,ad.final_urls"
+                ops.append({
+                    "remove": ad_rn
+                })
+            
+            ops.append({
+                "create": {
+                    "adGroup": ag_rn,
+                    "status": "ENABLED",
+                    "ad": ad_payload
                 }
-                url = f"{BASE}/adGroupAds:mutate"
-                resp = _rq.post(url, headers=_rest_headers, json={"operations": [op]})
-                if resp.status_code == 200:
-                    print(f"[AdsClient] 既存のRSA広告を上書き更新しました: {ad_rn}")
-                    return {"success": True, "updated": True, "resource": ad_rn}
-                else:
-                    try:
-                        err_json = resp.json()
-                        fail_details = err_json.get("error", {}).get("details", [{}])[0].get("errors", [])
-                        err_msgs = [e.get("message", "") for e in fail_details if e.get("message")]
-                        err_code = ""
-                        if fail_details:
-                            # エラータイプやコードを詳細にダンプ
-                            err_code = str(fail_details[0].get("errorCode", "")) or str(fail_details[0].get("errorType", ""))
-                        err_desc = f"{err_code}: {', '.join(err_msgs)}" if err_msgs else resp.text[:1000]
-                    except Exception:
-                        err_desc = resp.text[:1000]
-                    print(f"[AdsClient] 既存RSA更新失敗詳細: {err_desc}")
-                    return {"success": False, "error": f"既存RSA更新エラー: {err_desc}"}
+            })
 
-            else:
-                op = {
-                    "create": {
-                        "adGroup": ag_rn,
-                        "status": "ENABLED",
-                        "ad": ad_payload
-                    }
-                }
-                url = f"{BASE}/adGroupAds:mutate"
-                resp = _rq.post(url, headers=_rest_headers, json={"operations": [op]})
-                if resp.status_code == 200:
-                    new_ad_rn = resp.json().get("results", [{}])[0].get("resourceName")
+            url = f"{BASE}/adGroupAds:mutate"
+            resp = _rq.post(url, headers=_rest_headers, json={"operations": ops})
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                new_ad_rn = ""
+                for r in results:
+                    ref_name = r.get("resourceName", "")
+                    if ref_name and "adGroupAds" in ref_name:
+                        new_ad_rn = ref_name
+                
+                if ad_rn:
+                    print(f"[AdsClient] 既存のRSA広告 {ad_rn} を削除し、新規に作成しました: {new_ad_rn}")
+                    return {"success": True, "updated": True, "resource": new_ad_rn}
+                else:
                     print(f"[AdsClient] 新規にRSA広告を作成しました: {new_ad_rn}")
                     return {"success": True, "created": True, "resource": new_ad_rn}
-                else:
-                    return {"success": False, "error": f"新規RSA作成エラー: {resp.text[:300]}"}
+            else:
+                try:
+                    err_json = resp.json()
+                    fail_details = err_json.get("error", {}).get("details", [{}])[0].get("errors", [])
+                    err_msgs = [e.get("message", "") for e in fail_details if e.get("message")]
+                    err_code = ""
+                    if fail_details:
+                        err_code = str(fail_details[0].get("errorCode", "")) or str(fail_details[0].get("errorType", ""))
+                    err_desc = f"{err_code}: {', '.join(err_msgs)}" if err_msgs else resp.text[:1000]
+                except Exception:
+                    err_desc = resp.text[:1000]
+                print(f"[AdsClient] RSA広告の削除・作成失敗詳細: {err_desc}")
+                return {"success": False, "error": f"RSA広告更新エラー: {err_desc}"}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
