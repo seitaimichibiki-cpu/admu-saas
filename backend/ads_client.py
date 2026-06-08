@@ -1055,13 +1055,13 @@ class AdsClient:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
 
-    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str], descriptions: list[str], final_url: str = None) -> dict:
+    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None) -> dict:
         """
         キャンペーン内の広告グループのアクティブなRSA（レスポンシブ検索広告）を更新する。
-        既存のRSAを検索し、headlinesとdescriptionsを新しいもので上書きする。
+        既存のRSAを検索し、headlinesとdescriptions、およびfinal_urlを新しいもので上書きする。
         """
         if self.mock_mode:
-            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions}")
+            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions} URL={final_url}")
             return {"success": True, "mock": True}
 
         try:
@@ -1092,21 +1092,44 @@ class AdsClient:
                 return {"success": False, "error": "キャンペーン内に広告グループが見つかりません"}
 
             # 2. 既存の RSA 広告を検索
-            ad_query = f"SELECT ad_group_ad.ad.resource_name, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group.resource_name = '{ag_rn}' AND ad_group_ad.status != 'REMOVED' AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD' LIMIT 1"
+            ad_query = (
+                f"SELECT ad_group_ad.ad.resource_name, ad_group_ad.ad.final_urls, "
+                f"ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions "
+                f"FROM ad_group_ad "
+                f"WHERE ad_group.resource_name = '{ag_rn}' AND ad_group_ad.status != 'REMOVED' "
+                f"AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD' LIMIT 1"
+            )
             ad_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=_rest_headers, json={"query": ad_query})
             ad_rn = None
             existing_final_urls = []
+            existing_headlines = []
+            existing_descriptions = []
             if ad_resp.status_code == 200:
                 for batch in ad_resp.json():
                     for row in batch.get("results", []):
-                        ad_rn = row.get("adGroupAd", {}).get("ad", {}).get("resourceName")
-                        existing_final_urls = row.get("adGroupAd", {}).get("ad", {}).get("finalUrls", [])
+                        ad_group_ad = row.get("adGroupAd", {})
+                        ad = ad_group_ad.get("ad", {})
+                        ad_rn = ad.get("resourceName")
+                        existing_final_urls = ad.get("finalUrls", [])
+                        
+                        rsa = ad.get("responsiveSearchAd", {})
+                        existing_headlines = [h.get("text", "") for h in rsa.get("headlines", []) if h.get("text")]
+                        existing_descriptions = [d.get("text", "") for d in rsa.get("descriptions", []) if d.get("text")]
                         break
                     if ad_rn: break
 
             # 3. 広告文を構成
-            formatted_headlines = [{"text": hl[:30]} for hl in headlines[:15]]
-            formatted_descriptions = [{"text": d[:45]} for d in descriptions[:4]]
+            target_headlines = headlines if headlines is not None else existing_headlines
+            target_descriptions = descriptions if descriptions is not None else existing_descriptions
+
+            # 新規作成時に何も存在しない場合のフォールバック
+            if not target_headlines:
+                target_headlines = ["静岡県藤枝市の整体院", "肩こり・腰痛はお任せください", "根本改善を目指す整体院"]
+            if not target_descriptions:
+                target_descriptions = ["国家資格保持者による施術で安心。藤枝駅徒歩3分。", "痛みの原因へアプローチし根本改善を目指します。"]
+
+            formatted_headlines = [{"text": hl[:30]} for hl in target_headlines[:15]]
+            formatted_descriptions = [{"text": d[:45]} for d in target_descriptions[:4]]
 
             final_urls = [final_url] if final_url else existing_final_urls
             if not final_urls:
@@ -1154,3 +1177,4 @@ class AdsClient:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+

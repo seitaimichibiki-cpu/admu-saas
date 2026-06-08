@@ -1242,11 +1242,72 @@ function renderCampDrawer(d) {
       <div id="drawerAiResult"></div>
     </div>`;
 
-  body.innerHTML = budgetHtml + kwHtml + locationHtml + adsHtml + aiActionsHtml;
+  // 遷移先URL (LP) セクション
+  const currentUrl = (d.ads && d.ads[0] && d.ads[0].final_urls && d.ads[0].final_urls[0]) || '';
+  const urlHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">🔗 最終遷移先URL (LPリンク)</div>
+      <div style="font-size:12px;color:var(--text-2);word-break:break-all;margin-bottom:8px">
+        ${currentUrl ? `<a href="${currentUrl}" target="_blank" style="color:var(--accent);text-decoration:underline">${currentUrl}</a>` : '<span style="color:var(--text-3)">設定なし</span>'}
+      </div>
+      <div>
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.05)" onclick="toggleManualUrlForm()">✍️ URLを手動で更新</button>
+      </div>
+      <div id="manualUrlForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border)">
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">遷移先LPのURL</label>
+          <input type="url" id="manualUrlInput" value="${currentUrl}" placeholder="https://michibiki-seitai.com/symptoms/waist/" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+        </div>
+        <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="updateCampaignFinalUrl()">設定を適用</button>
+      </div>
+    </div>`;
+
+  body.innerHTML = budgetHtml + urlHtml + kwHtml + locationHtml + adsHtml + aiActionsHtml;
   if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml) {
     body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 }
+
+function toggleManualUrlForm() {
+  const form = document.getElementById('manualUrlForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleManualUrlForm = toggleManualUrlForm;
+
+async function updateCampaignFinalUrl() {
+  const urlInput = document.getElementById('manualUrlInput');
+  const url = urlInput ? urlInput.value.trim() : '';
+  
+  if (!url) {
+    toast('URLを入力してください', 'error');
+    return;
+  }
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    toast('有効なURLを入力してください (http:// または https:// から始めてください)', 'error');
+    return;
+  }
+
+  try {
+    await api('/campaigns/update-final-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        campaign_id: parseInt(_drawerCampaignId),
+        final_url: url
+      })
+    });
+    toast('✅ 最終遷移先URLをGoogle広告に適用しました！', 'success');
+    
+    // ドロワー内の情報を再読み込み
+    api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+      .then(d => {
+        renderCampDrawer(d);
+      });
+  } catch (e) {
+    toast('URL更新失敗: ' + e.message, 'error');
+  }
+}
+window.updateCampaignFinalUrl = updateCampaignFinalUrl;
 
 // --- AIキーワード提案 ---
 async function runSmartKeywords() {

@@ -5544,7 +5544,8 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260608-manual-settings', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260608-final-url-sync', html)
+
 
         return HTMLResponse(
             content=html,
@@ -5725,7 +5726,33 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     return res
 
 
+class UpdateCampaignUrlReq(BaseModel):
+    clinic_id: int = 1
+    campaign_id: int
+    final_url: str
+
+
+@app.post("/api/campaigns/update-final-url")
+def update_campaign_final_url(req: UpdateCampaignUrlReq):
+    """キャンペーンの最終遷移先URL（LP）をGoogle広告で更新する。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+
+    campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
+    g_id = campaign.get("google_campaign_id")
+
+    if not g_id:
+        raise HTTPException(404, "Google広告キャンペーンIDが紐付いていません")
+
+    res = client.update_campaign_rsa(google_campaign_id=g_id, final_url=req.final_url)
+    if not res.get("success"):
+        raise HTTPException(500, f"最終遷移先URLの更新に失敗しました: {res.get('error')}")
+
+    return {"success": True, "message": "最終遷移先URLをGoogle広告に適用しました", "resource": res.get("resource")}
+
+
 class AddKeywordsReq(BaseModel):
+
     clinic_id: int = 1
     platform: str = "google"
     google_campaign_id: str
