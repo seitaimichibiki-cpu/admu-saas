@@ -471,7 +471,54 @@ class AdsClient:
             
         campaign_service.mutate_campaigns(customer_id=self.customer_id, operations=[campaign_op])
 
+    def update_campaign_budget(self, google_campaign_id: str, budget_micros: int):
+        """キャンペーンに紐づく予算（CampaignBudget）を変更する。"""
+        if self.mock_mode:
+            print(f"[MOCK] 予算更新: campaign_id={google_campaign_id} -> {budget_micros} micros")
+            return
+        
+        # 1. キャンペーンに紐づく CampaignBudget の resource_name を取得
+        ga_service = self._client.get_service("GoogleAdsService")
+        query = f"""
+            SELECT campaign.campaign_budget 
+            FROM campaign 
+            WHERE campaign.id = {google_campaign_id}
+        """
+        resp = ga_service.search(customer_id=self.customer_id, query=query)
+        budget_rn = None
+        for row in resp:
+            budget_rn = row.campaign.campaign_budget
+            break
+            
+        if not budget_rn:
+            raise Exception(f"キャンペーン {google_campaign_id} に紐づく予算が見つかりません。")
+            
+        # 2. CampaignBudget の amount_micros を更新
+        budget_service = self._client.get_service("CampaignBudgetService")
+        b_op = self._client.get_type("CampaignBudgetOperation")
+        
+        b = b_op.update
+        b.resource_name = budget_rn
+        b.amount_micros = budget_micros
+        b_op.update_mask.paths.append("amount_micros")
+        
+        budget_service.mutate_campaign_budgets(customer_id=self.customer_id, operations=[b_op])
 
+    def get_this_month_cost(self) -> int:
+        """今月の総消化コスト（micros）を取得する。"""
+        if self.mock_mode:
+            return 280_000 * 1_000_000  # モックデータ: 28万円分
+        ga_service = self._client.get_service("GoogleAdsService")
+        query = """
+            SELECT metrics.cost_micros 
+            FROM campaign 
+            WHERE segments.date DURING THIS_MONTH
+        """
+        resp = ga_service.search(customer_id=self.customer_id, query=query)
+        total_cost_micros = 0
+        for row in resp:
+            total_cost_micros += int(row.metrics.cost_micros)
+        return total_cost_micros
 
     # ---- パフォーマンス ----
     def get_performance_series(self, days: str = "7", start_date: str = None, end_date: str = None):

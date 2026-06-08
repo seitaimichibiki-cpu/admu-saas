@@ -883,7 +883,7 @@ def set_monthly_budget(req: MonthlyBudgetReq):
         alloc = _run_ai_budget_allocation(req.clinic_id, req.monthly_budget_yen, AdsClient(updated_acc))
         result["allocation"] = alloc
 
-        # AI配分結果をDBの各キャンペーン予算に即座に反映させる
+        # AI配分結果をDBの各キャンペーン予算に即座に反映させ、Google広告APIに同期する
         if alloc and "allocations" in alloc:
             with db.get_conn() as conn:
                 for item in alloc["allocations"]:
@@ -904,6 +904,23 @@ def set_monthly_budget(req: MonthlyBudgetReq):
                             "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
                             (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(c_id), req.clinic_id)
                         )
+
+                    # google_campaign_idの特定とGoogle広告APIへの同期
+                    google_camp_id = None
+                    if local_id is not None:
+                        row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE id=? AND clinic_id=?", (local_id, req.clinic_id)).fetchone()
+                        if row:
+                            google_camp_id = row[0]
+                    if not google_camp_id:
+                        row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE google_campaign_id=? AND clinic_id=?", (str(c_id), req.clinic_id)).fetchone()
+                        if row:
+                            google_camp_id = row[0]
+                            
+                    if google_camp_id:
+                        try:
+                            _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
+                        except Exception as api_err:
+                            raise HTTPException(500, f"Google 広告への予算同期に失敗しました: {api_err}")
                 conn.commit()
     return result
 
@@ -947,7 +964,7 @@ def manual_budget_allocate(req: ManualAllocationReq):
         "ai_auto_allocate": False,
     })
     
-    # 2. 各キャンペーンの予算を更新
+    # 2. 各キャンペーンの予算を更新し、Google広告APIに同期する
     with db.get_conn() as conn:
         for item in req.allocations:
             c_id = item.campaign_id
@@ -967,6 +984,23 @@ def manual_budget_allocate(req: ManualAllocationReq):
                     "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
                     (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(c_id), req.clinic_id)
                 )
+
+            # google_campaign_idの特定とGoogle広告APIへの同期
+            google_camp_id = None
+            if local_id is not None:
+                row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE id=? AND clinic_id=?", (local_id, req.clinic_id)).fetchone()
+                if row:
+                    google_camp_id = row[0]
+            if not google_camp_id:
+                row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE google_campaign_id=? AND clinic_id=?", (str(c_id), req.clinic_id)).fetchone()
+                if row:
+                    google_camp_id = row[0]
+                    
+            if google_camp_id:
+                try:
+                    _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
+                except Exception as api_err:
+                    raise HTTPException(500, f"Google 広告への予算同期に失敗しました: {api_err}")
         conn.commit()
         
     # 3. 最新のキャンペーン情報を引いて、allocations構造を作って返す
@@ -1028,6 +1062,13 @@ def manual_budget_allocate(req: ManualAllocationReq):
     }
 
 
+def _sync_campaign_budget_to_gads(clinic_id: int, google_campaign_id: str, daily_micros: int):
+    """指定したキャンペーンの日予算をGoogle広告本番へ同期する"""
+    acc_config = _require_account(clinic_id)
+    client = _get_ads_client(acc_config, "google")
+    client.update_campaign_budget(google_campaign_id, daily_micros)
+
+
 # ---- API: 予算（手動・キャンペーン別） ----
 @app.post("/api/budget/{campaign_id}")
 def update_budget(campaign_id: str, req: BudgetUpdateReq):
@@ -1035,11 +1076,19 @@ def update_budget(campaign_id: str, req: BudgetUpdateReq):
     ads_cache.clear()
     campaign = _resolve_campaign(campaign_id, req.clinic_id)
     local_campaign_id = campaign["id"]
+    google_campaign_id = campaign.get("google_campaign_id")
     try:
         db.update_budget(local_campaign_id, req.clinic_id, req.budget_yen * 1_000_000)
+        
+        # Google広告APIへ同期
+        if google_campaign_id:
+            _sync_campaign_budget_to_gads(req.clinic_id, google_campaign_id, req.budget_yen * 1_000_000)
+            
         return {"success": True, "budget_yen": req.budget_yen}
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Google 広告への予算同期に失敗しました: {e}")
 
 
 

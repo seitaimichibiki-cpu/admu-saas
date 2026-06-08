@@ -165,6 +165,8 @@ def init_db():
             notification_email TEXT, smtp_user TEXT, smtp_pass TEXT,
             ga4_property_id TEXT, ga4_api_secret TEXT,
             monthly_budget_yen INTEGER DEFAULT 300000,
+            budget_safety_brake_enabled INTEGER DEFAULT 1,
+            ltv_conversion_action_id TEXT,
             logiction_integration_key TEXT,
             logiction_base_url TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
@@ -353,6 +355,9 @@ def init_db():
         # Google Ads アクセス権リンクステータス
         "ALTER TABLE ads_accounts ADD COLUMN google_link_status TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN google_link_requested_at TEXT DEFAULT NULL",
+        # 自動セーフティブレーキおよびLTVコンバージョン同期用のカラム
+        "ALTER TABLE ads_accounts ADD COLUMN budget_safety_brake_enabled INTEGER DEFAULT 1",
+        "ALTER TABLE ads_accounts ADD COLUMN ltv_conversion_action_id TEXT",
     ]
     for sql in migrations:
         try:
@@ -540,7 +545,7 @@ def save_ads_account(clinic_id: int, data: dict):
                   "login_customer_id", "mock_mode", "line_channel_token", "line_user_id",
                   "target_age_gender", "target_job_lifestyle", "target_pain_point", "target_desired_outcome",
                   "notification_email", "smtp_user", "smtp_pass", "ga4_property_id", "ga4_api_secret",
-                  "monthly_budget_yen",
+                  "monthly_budget_yen", "budget_safety_brake_enabled", "ltv_conversion_action_id",
                   "gemini_api_key", "ai_monthly_limit",
                   "google_link_status", "google_link_requested_at",
                   "logiction_integration_key", "logiction_base_url"]

@@ -106,6 +106,67 @@ def _check_campaigns(clinic_id: int):
                 budget_warnings.append(msg)
                 db.create_alert(clinic_id, f"予算警告: {c['name']} 消化率{usage_pct:.1f}%", level="WARNING")
 
+    # ─── 🔒 月間予算自動セーフティブレーキ ───
+    safety_enabled = acc.get("budget_safety_brake_enabled", 1) == 1
+    monthly_budget = acc.get("monthly_budget_yen", 0)
+
+    if safety_enabled and monthly_budget > 0:
+        try:
+            total_month_cost_micros = client.get_this_month_cost()
+            total_month_cost_yen = total_month_cost_micros / 1_000_000
+            
+            if total_month_cost_yen >= monthly_budget:
+                paused_campaigns = []
+                for c in campaigns:
+                    g_id = c.get("id")  # google_campaign_id
+                    c_name = c.get("name")
+                    status = c.get("status")
+                    if status == "ENABLED" and g_id:
+                        client.update_campaign_status(g_id, "PAUSED")
+                        with db.get_conn() as conn:
+                            conn.execute(
+                                "UPDATE campaigns SET status='PAUSED', updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(g_id), clinic_id)
+                            )
+                        paused_campaigns.append(c_name)
+                
+                if paused_campaigns:
+                    db.create_alert(
+                        clinic_id, 
+                        f"予算自動ブレーキ作動: 月間予算上限(¥{monthly_budget:,})を超過したため配信を自動停止しました。", 
+                        level="ERROR"
+                    )
+                    
+                    stop_msg = (
+                        f"🚨【予算自動ブレーキ作動】\n"
+                        f"当月の総消化コスト（¥{int(total_month_cost_yen):,}）が設定月間予算（¥{monthly_budget:,}）の上限に達したため、以下のキャンペーンの配信を自動停止（PAUSE）しました。\n"
+                        f"・" + "\n・".join(paused_campaigns) + "\n\n"
+                        f"配信を再開するにはダッシュボードから月間予算を増やすか、手動でキャンペーンを再起動（ENABLED）してください。"
+                    )
+                    
+                    line_token = acc.get("line_channel_token", "")
+                    line_uid = acc.get("line_user_id", "")
+                    if line_token and line_uid:
+                        try:
+                            import line_notifier
+                            line_notifier.send_text(line_token, line_uid, stop_msg)
+                        except Exception as ne:
+                            print(f"[Monitor] ブレーキLINE通知失敗: {ne}")
+                            
+                    notify_email = acc.get("notification_email", "")
+                    if notify_email:
+                        try:
+                            import email_notifier
+                            email_notifier.send_alert_email(
+                                notify_email,
+                                "【重要】予算自動ブレーキ作動による配信停止 - AdMu 広告AI",
+                                stop_msg
+                            )
+                        except Exception as ee:
+                            print(f"[Monitor] ブレーキメール通知失敗: {ee}")
+        except Exception as brake_err:
+            print(f"[Monitor] 月間予算セーフティブレーキエラー clinic_id={clinic_id}: {brake_err}")
+
     token = acc.get("line_channel_token", "")
     uid = acc.get("line_user_id", "")
 
@@ -454,6 +515,71 @@ def _run_auto_exclusion_area_scan(clinic_id: int):
         print(f"[Monitor] 無駄地域自動スキャンエラー clinic_id={clinic_id}: {e}")
 
 
+def _run_auto_ltv_upload_scan(clinic_id: int):
+    """LTVデータのオフラインコンバージョン値自動Push同期"""
+    acc = _get_account_and_notify_config(clinic_id)
+    if not acc:
+        return
+    
+    action_id = acc.get("ltv_conversion_action_id")
+    if not action_id:
+        print(f"[LTV Sync] clinic_id={clinic_id}: ltv_conversion_action_id が設定されていないため自動同期をスキップします。")
+        return
+
+    try:
+        client = AdsClient(acc)
+    except Exception as e:
+        print(f"[LTV Sync] AdsClientの初期化に失敗しました: {e}")
+        return
+
+    # Logiction患者データのうち、GCLIDが存在し、かつLTV(ltv_yen)が0より大きい患者を取得
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT gclid, ltv_yen, first_visit_date FROM logiction_patients "
+            "WHERE clinic_id=? AND gclid IS NOT NULL AND gclid != '' AND ltv_yen > 0",
+            (clinic_id,)
+        ).fetchall()
+
+    if not rows:
+        print(f"[LTV Sync] clinic_id={clinic_id}: 同期対象のLTVデータがありません。")
+        return
+
+    success_count = 0
+    failed_count = 0
+
+    print(f"[LTV Sync] clinic_id={clinic_id}: {len(rows)}件のLTVデータを同期中...")
+
+    for gclid, ltv_yen, first_visit in rows:
+        if not first_visit:
+            first_visit = datetime.now().strftime("%Y-%m-%d")
+        
+        cv_time = f"{first_visit} 12:00:00+09:00"
+
+        try:
+            res = client.upload_offline_conversion_value(
+                gclid=gclid,
+                conversion_action_id=action_id,
+                conversion_time_str=cv_time,
+                value=float(ltv_yen)
+            )
+            if res.get("success"):
+                success_count += 1
+            else:
+                failed_count += 1
+        except Exception as upload_err:
+            print(f"[LTV Sync] CVアップロードエラー (GCLID: {gclid}): {upload_err}")
+            failed_count += 1
+
+    # 同期結果をアラートログに記録
+    if success_count > 0:
+        db.create_alert(
+            clinic_id, 
+            f"LTVコンバージョン自動同期完了: {success_count}件のLTVデータをGoogle広告に反映しました。(失敗: {failed_count}件)", 
+            level="INFO"
+        )
+    print(f"[LTV Sync] 同期完了 clinic_id={clinic_id} 成功={success_count} 失敗={failed_count}")
+
+
 def _run_cleanup():
     """週1回曜深夜: 古いログやアラートを削除"""
     try:
@@ -627,6 +753,11 @@ def start_scheduler():
             _collect_performance_data, CronTrigger(hour=2, minute=0),
             id=f"perf_collect_{cid}", args=[cid], replace_existing=True
         )
+        # ④ LTVオフラインコンバージョン自動同期（毎日深夜3:00）
+        _scheduler.add_job(
+            _run_auto_ltv_upload_scan, CronTrigger(hour=3, minute=0),
+            id=f"ltv_sync_{cid}", args=[cid], replace_existing=True
+        )
 
     # システム全体の日次稼働レポート（毎日 9:00 管理者宛）
     _scheduler.add_job(
@@ -708,6 +839,11 @@ def register_clinic_jobs(clinic_id: int):
         _collect_performance_data, CronTrigger(hour=2, minute=0),
         id=f"perf_collect_{clinic_id}", args=[clinic_id], replace_existing=True
     )
+    # ④ LTVオフラインコンバージョン自動同期（毎日深夜3:00）
+    _scheduler.add_job(
+        _run_auto_ltv_upload_scan, CronTrigger(hour=3, minute=0),
+        id=f"ltv_sync_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
     print(f"[Monitor] 新規クリニックのジョブを動的登録完了 (clinic_id={clinic_id})")
 
 
@@ -716,7 +852,7 @@ def unregister_clinic_jobs(clinic_id: int):
     global _scheduler
     if not _scheduler or not _scheduler.running:
         return
-    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_", "area_exclude_scan_"]:
+    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_", "area_exclude_scan_", "ltv_sync_"]:
         job_id = f"{job_prefix}{clinic_id}"
         try:
             _scheduler.remove_job(job_id)
