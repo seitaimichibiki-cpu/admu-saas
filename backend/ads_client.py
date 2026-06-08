@@ -118,6 +118,14 @@ class AdsClient:
         self.customer_id = str(raw_customer_id).replace("-", "")
         self._client: Optional[object] = None
 
+        # REST API用の認証情報を常に初期化（どのパスでも属性が存在するように）
+        self._developer_token   = account_config.get("developer_token") or os.environ.get("MASTER_ADS_DEVELOPER_TOKEN", "") or os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", "")
+        self._client_id         = account_config.get("client_id") or os.environ.get("MASTER_ADS_CLIENT_ID", "") or os.environ.get("GOOGLE_ADS_CLIENT_ID", "")
+        self._client_secret     = account_config.get("client_secret") or os.environ.get("MASTER_ADS_CLIENT_SECRET", "") or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", "")
+        self._refresh_token     = account_config.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", "")
+        login_id_raw            = account_config.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", "")
+        self._login_customer_id = str(login_id_raw).replace("-", "") if login_id_raw else ""
+
         if not self.mock_mode and GOOGLE_ADS_AVAILABLE:
             try:
                 cfg = {
