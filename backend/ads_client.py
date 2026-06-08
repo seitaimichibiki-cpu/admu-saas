@@ -1122,11 +1122,26 @@ class AdsClient:
             target_headlines = headlines if headlines is not None else existing_headlines
             target_descriptions = descriptions if descriptions is not None else existing_descriptions
 
-            # 新規作成時に何も存在しない場合のフォールバック
-            if not target_headlines:
-                target_headlines = ["静岡県藤枝市の整体院", "肩こり・腰痛はお任せください", "根本改善を目指す整体院"]
-            if not target_descriptions:
-                target_descriptions = ["国家資格保持者による施術で安心。藤枝駅徒歩3分。", "痛みの原因へアプローチし根本改善を目指します。"]
+            # Noneや空文字、改行コードを含んだゴミデータの除去・トリミング
+            target_headlines = [hl.strip() for hl in target_headlines if hl and hl.strip()]
+            target_descriptions = [d.strip() for d in target_descriptions if d and d.strip()]
+
+            # RSAの仕様: 見出しは最低3件、説明文は最低2件必要
+            if len(target_headlines) < 3:
+                fallbacks = ["静岡県藤枝市の整体院", "肩こり・腰痛はお任せください", "根本改善を目指す整体院"]
+                for f in fallbacks:
+                    if f not in target_headlines:
+                        target_headlines.append(f)
+                    if len(target_headlines) >= 3:
+                        break
+
+            if len(target_descriptions) < 2:
+                fallbacks = ["国家資格保持者による施術で安心。藤枝駅徒歩3分。", "痛みの原因へアプローチし根本改善を目指します。"]
+                for f in fallbacks:
+                    if f not in target_descriptions:
+                        target_descriptions.append(f)
+                    if len(target_descriptions) >= 2:
+                        break
 
             formatted_headlines = [{"text": hl[:30]} for hl in target_headlines[:15]]
             formatted_descriptions = [{"text": d[:45]} for d in target_descriptions[:4]]
@@ -1157,7 +1172,20 @@ class AdsClient:
                     print(f"[AdsClient] 既存のRSA広告を上書き更新しました: {ad_rn}")
                     return {"success": True, "updated": True, "resource": ad_rn}
                 else:
-                    return {"success": False, "error": f"既存RSA更新エラー: {resp.text[:300]}"}
+                    try:
+                        err_json = resp.json()
+                        fail_details = err_json.get("error", {}).get("details", [{}])[0].get("errors", [])
+                        err_msgs = [e.get("message", "") for e in fail_details if e.get("message")]
+                        err_code = ""
+                        if fail_details:
+                            # エラータイプやコードを詳細にダンプ
+                            err_code = str(fail_details[0].get("errorCode", "")) or str(fail_details[0].get("errorType", ""))
+                        err_desc = f"{err_code}: {', '.join(err_msgs)}" if err_msgs else resp.text[:1000]
+                    except Exception:
+                        err_desc = resp.text[:1000]
+                    print(f"[AdsClient] 既存RSA更新失敗詳細: {err_desc}")
+                    return {"success": False, "error": f"既存RSA更新エラー: {err_desc}"}
+
             else:
                 op = {
                     "create": {
