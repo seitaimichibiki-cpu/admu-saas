@@ -911,20 +911,6 @@ def ai_budget_allocate_endpoint(clinic_id: int = 1):
     db.increment_ai_quota(clinic_id, feature_name="ai_budget")
     return {"success": True, "allocation": alloc}
 
-# ---- API: 予算（手動・キャンペーン別） ----
-@app.post("/api/budget/{campaign_id}")
-def update_budget(campaign_id: str, req: BudgetUpdateReq):
-    """予算変更は手動のみ。"""
-    ads_cache.clear()
-    campaign = _resolve_campaign(campaign_id, req.clinic_id)
-    local_campaign_id = campaign["id"]
-    try:
-        db.update_budget(local_campaign_id, req.clinic_id, req.budget_yen * 1_000_000)
-        return {"success": True, "budget_yen": req.budget_yen}
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 class ManualAllocationItem(BaseModel):
     campaign_id: str
     daily_budget_yen: int
@@ -967,6 +953,23 @@ def manual_budget_allocate(req: ManualAllocationReq):
         "ai_auto_allocate": False,
         "message": "手動配分を適用しました"
     }
+
+
+# ---- API: 予算（手動・キャンペーン別） ----
+@app.post("/api/budget/{campaign_id}")
+def update_budget(campaign_id: str, req: BudgetUpdateReq):
+    """予算変更は手動のみ。"""
+    ads_cache.clear()
+    campaign = _resolve_campaign(campaign_id, req.clinic_id)
+    local_campaign_id = campaign["id"]
+    try:
+        db.update_budget(local_campaign_id, req.clinic_id, req.budget_yen * 1_000_000)
+        return {"success": True, "budget_yen": req.budget_yen}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+
 
 
 
