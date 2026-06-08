@@ -5500,7 +5500,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260607-gemini-key', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260608-manual-settings', html)
 
         return HTMLResponse(
             content=html,

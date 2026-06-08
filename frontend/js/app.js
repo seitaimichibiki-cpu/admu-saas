@@ -1123,46 +1123,83 @@ function renderCampDrawer(d) {
     </div>`;
 
   // ② キーワードセクション
-  const kwHtml = d.keywords && d.keywords.length ? `
+  const kwHtml = `
     <div class="drawer-section">
-      <div class="drawer-section-title">🔍 検索キーワード（${d.keywords.length}件）</div>
-      <div class="drawer-kw-list">
+      <div class="drawer-section-title">🔍 検索キーワード（${d.keywords ? d.keywords.length : 0}件）</div>
+      ${d.keywords && d.keywords.length ? `
+      <div class="drawer-kw-list" style="max-height: 180px; overflow-y: auto;">
         ${d.keywords.map(kw => `
           <div class="drawer-kw-item">
             <span class="drawer-kw-text">${kw.text}</span>
             <span class="drawer-kw-badge ${matchTypeClass[kw.match_type] || 'broad'}">${matchTypeLabel[kw.match_type] || kw.match_type}</span>
           </div>
         `).join('')}
+      </div>` : '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">設定されているキーワードがありません</div>'}
+      
+      <div style="margin-top:8px">
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.05)" onclick="toggleManualKeywordForm()">✍️ キーワードを手動追加</button>
       </div>
-    </div>` : '';
+      <div id="manualKeywordForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border)">
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">キーワード（改行で複数入力可）</label>
+          <textarea id="manualKeywordsInput" placeholder="腰痛 整体&#10;藤枝 骨盤矯正" style="width:100%;height:60px;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"></textarea>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">マッチタイプ</label>
+          <select id="manualKeywordMatch" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+            <option value="BROAD">インテント（部分一致）</option>
+            <option value="PHRASE">フレーズ一致</option>
+            <option value="EXACT">完全一致</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="applyManualKeywords()">追加する</button>
+      </div>
+    </div>`;
 
   // ③ 位置ターゲティングセクション
   let locationHtml = '';
-  if (d.location) {
-    if (d.location.type === 'proximity') {
-      locationHtml = `
-        <div class="drawer-section">
-          <div class="drawer-section-title">📍 配信エリア</div>
-          <div class="drawer-location-box">
-            <div class="drawer-location-icon">🗺️</div>
-            <div>
-              <div class="drawer-location-text">半径 <strong>${d.location.radius_km}km</strong> 圏内</div>
-              <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4)} / 経度 ${d.location.lon?.toFixed(4)}</div>
-              <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">藤枝市田沼1-19-7を中心とした${d.location.radius_km}km圏</div>
-            </div>
-          </div>
-        </div>`;
-    } else {
-      locationHtml = `
-        <div class="drawer-section">
-          <div class="drawer-section-title">📍 配信エリア</div>
-          <div class="drawer-location-box">
-            <div class="drawer-location-icon">📌</div>
-            <div class="drawer-location-text">地域ターゲティング設定済み</div>
-          </div>
-        </div>`;
-    }
-  }
+  const locationContent = d.location ? (
+    d.location.type === 'proximity' ? `
+      <div class="drawer-location-box">
+        <div class="drawer-location-icon">🗺️</div>
+        <div>
+          <div class="drawer-location-text">半径 <strong>${d.location.radius_km}km</strong> 圏内</div>
+          <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4)} / 経度 ${d.location.lon?.toFixed(4)}</div>
+          <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">藤枝市田沼1-19-7を中心とした${d.location.radius_km}km圏</div>
+        </div>
+      </div>` : `
+      <div class="drawer-location-box">
+        <div class="drawer-location-icon">📌</div>
+        <div class="drawer-location-text">${d.location.geo_targets ? d.location.geo_targets.join('・') : '地域ターゲティング設定済み'}</div>
+      </div>`
+  ) : '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">位置情報が設定されていません</div>';
+
+  locationHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">📍 配信エリア</div>
+      ${locationContent}
+      <div style="margin-top:8px">
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.05)" onclick="toggleManualLocationForm()">✍️ エリアを手動設定</button>
+      </div>
+      <div id="manualLocationForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border)">
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">設定タイプ</label>
+          <select id="manualLocType" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px" onchange="onManualLocTypeChange()">
+            <option value="proximity">半径指定 (例: 8km)</option>
+            <option value="geo_target">地域名指定 (例: 藤枝市・焼津市)</option>
+          </select>
+        </div>
+        <div id="manualLocProximityGroup" style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">半径 (km)</label>
+          <input type="number" id="manualLocRadius" value="8" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+        </div>
+        <div id="manualLocGeoGroup" style="display:none; margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">対象地域 (カンマ区切り)</label>
+          <input type="text" id="manualLocGeos" placeholder="藤枝市, 焼津市" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+        </div>
+        <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="applyManualLocation()">設定を適用</button>
+      </div>
+    </div>`;
 
   // ④ 広告文セクション
   const adsHtml = d.ads && d.ads.length ? `
@@ -4773,4 +4810,123 @@ window.updateInquiryStatus = async function(id, status) {
     toast('更新失敗', 'error');
   }
 };
+
+// ============================================================
+// 手動設定: キーワード追加・配信エリア更新
+// ============================================================
+
+function toggleManualKeywordForm() {
+  const form = document.getElementById('manualKeywordForm');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleManualKeywordForm = toggleManualKeywordForm;
+
+async function applyManualKeywords() {
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+  const input = document.getElementById('manualKeywordsInput').value.trim();
+  if (!input) { toast('キーワードを入力してください', 'error'); return; }
+  const matchType = document.getElementById('manualKeywordMatch').value;
+
+  const keywords = input.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({
+    text: text,
+    match_type: matchType
+  }));
+
+  const btn = document.querySelector('#manualKeywordForm button');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '追加中...';
+  }
+
+  try {
+    const res = await api('/campaigns/add-keywords', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        platform: currentPlatform,
+        google_campaign_id: _drawerGoogleCampaignId,
+        keywords: keywords
+      })
+    });
+    toast(`✅ ${res.added || keywords.length}件のキーワードを追加しました`, 'success');
+    setTimeout(() => {
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => renderCampDrawer(d)).catch(()=>{});
+    }, 1000);
+  } catch(e) {
+    toast('追加失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '追加する';
+    }
+  }
+}
+window.applyManualKeywords = applyManualKeywords;
+
+function toggleManualLocationForm() {
+  const form = document.getElementById('manualLocationForm');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleManualLocationForm = toggleManualLocationForm;
+
+function onManualLocTypeChange() {
+  const type = document.getElementById('manualLocType').value;
+  document.getElementById('manualLocProximityGroup').style.display = type === 'proximity' ? 'block' : 'none';
+  document.getElementById('manualLocGeoGroup').style.display = type === 'geo_target' ? 'block' : 'none';
+}
+window.onManualLocTypeChange = onManualLocTypeChange;
+
+async function applyManualLocation() {
+  if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
+  const type = document.getElementById('manualLocType').value;
+  
+  let bodyData = {
+    clinic_id: currentClinicId,
+    platform: currentPlatform,
+    google_campaign_id: _drawerGoogleCampaignId,
+    type: type
+  };
+
+  if (type === 'proximity') {
+    const rad = parseInt(document.getElementById('manualLocRadius').value);
+    if (isNaN(rad) || rad <= 0) { toast('有効な半径を入力してください', 'error'); return; }
+    bodyData.radius_km = rad;
+    bodyData.lat = 34.868;
+    bodyData.lon = 138.257;
+  } else {
+    const geosVal = document.getElementById('manualLocGeos').value.trim();
+    if (!geosVal) { toast('地域名を入力してください', 'error'); return; }
+    // 全角カンマやスペース、中黒などを半角カンマに正規化
+    const normalizedGeos = geosVal.replace(/，/g, ',').replace(/、/g, ',').replace(/・/g, ',');
+    const geos = normalizedGeos.split(',').map(s => s.trim()).filter(Boolean);
+    bodyData.geo_targets = geos;
+  }
+
+  const btn = document.querySelector('#manualLocationForm button');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '適用中...';
+  }
+
+  try {
+    await api('/campaigns/update-location', {
+      method: 'POST',
+      body: JSON.stringify(bodyData)
+    });
+    toast('✅ 位置ターゲットを手動更新しました', 'success');
+    setTimeout(() => {
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => renderCampDrawer(d)).catch(()=>{});
+    }, 1000);
+  } catch(e) {
+    toast('適用失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '設定を適用';
+    }
+  }
+}
+window.applyManualLocation = applyManualLocation;
 
