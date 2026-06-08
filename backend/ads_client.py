@@ -127,11 +127,18 @@ class AdsClient:
                     "refresh_token":   account_config.get("refresh_token") or os.environ.get("MASTER_ADS_REFRESH_TOKEN", "") or os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
                     "use_proto_plus": True,
                 }
-                
+
                 # login_customer_id（親MCCのID）の解決：顧客個別の設定があれば優先、なければマスターのMCC ID
                 login_id = account_config.get("login_customer_id") or os.environ.get("MASTER_ADS_LOGIN_CUSTOMER_ID", "")
                 if login_id:
                     cfg["login_customer_id"] = str(login_id).replace("-", "")
+
+                # REST API用に認証情報をインスタンスに保存
+                self._developer_token  = cfg["developer_token"]
+                self._client_id        = cfg["client_id"]
+                self._client_secret    = cfg["client_secret"]
+                self._refresh_token    = cfg["refresh_token"]
+                self._login_customer_id = cfg.get("login_customer_id", "")
 
                 # 認証情報が一つでも欠ければモックにフォールバック（どのキーが欠けているか詳細ログ）
                 missing_keys = [k for k in ["developer_token", "client_id", "client_secret", "refresh_token"] if not cfg[k]]
