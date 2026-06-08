@@ -272,24 +272,31 @@ class AdsClient:
         print(f"[AdsClient] バジェット作成: {budget_rn}")
 
         # ② キャンペーン作成（PAUSED）
+        # json_format.ParseDictでJSON→proto変換することで
+        # Falseのbool値もシリアライズ時に省略されなくなる
+        from google.protobuf import json_format as _jf
         campaign_service = client.get_service("CampaignService")
         c_op = client.get_type("CampaignOperation")
-        c = c_op.create
-        c.name = config["campaign_name"]
-        c.status = client.enums.CampaignStatusEnum[config.get("status", "PAUSED")]
-        c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
-        c.campaign_budget = budget_rn
-        c.manual_cpc.enhanced_cpc_enabled = False  # Enhanced CPCは廃止のためFalse
-        # proto3でFalse(デフォルト値)は省略されるため_pbで強制セット
-        c._pb.contains_eu_political_advertising = False
-        c.network_settings.target_google_search = True
-        c.network_settings.target_search_network = True
-        c.network_settings.target_content_network = False
-        c.network_settings.target_partner_search_network = False
+        campaign_dict = {
+            "name": config["campaign_name"],
+            "status": "PAUSED",
+            "advertisingChannelType": "SEARCH",
+            "campaignBudget": budget_rn,
+            "manualCpc": {},
+            "containsEuPoliticalAdvertising": False,
+            "networkSettings": {
+                "targetGoogleSearch": True,
+                "targetSearchNetwork": True,
+                "targetContentNetwork": False,
+                "targetPartnerSearchNetwork": False,
+            },
+        }
+        _jf.ParseDict(campaign_dict, c_op.create._pb, ignore_unknown_fields=True)
         c_resp = campaign_service.mutate_campaigns(customer_id=cid, operations=[c_op])
         campaign_rn = c_resp.results[0].resource_name
         campaign_id = campaign_rn.split("/")[-1]
         print(f"[AdsClient] キャンペーン作成: {campaign_rn}")
+
 
         # ③ 位置ターゲティング（半径指定）
         if config.get("lat") and config.get("lon"):
