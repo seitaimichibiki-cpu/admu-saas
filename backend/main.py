@@ -5827,10 +5827,21 @@ def add_keywords_to_campaign(req: AddKeywordsReq):
     acc = _require_account(req.clinic_id)
     client = _get_ads_client(acc, req.platform)
 
+    from ads_client import clean_keyword_text
+
+    cleaned_kws = []
+    for kw in req.keywords:
+        cleaned_text = clean_keyword_text(kw.get("text", ""))
+        if cleaned_text:
+            cleaned_kws.append({
+                "text": cleaned_text,
+                "match_type": kw.get("match_type", "BROAD")
+            })
+
     if client.mock_mode:
         return {
             "success": True,
-            "added": len(req.keywords),
+            "added": len(cleaned_kws),
             "failed": 0,
             "mock": True,
         }
@@ -5867,6 +5878,8 @@ def add_keywords_to_campaign(req: AddKeywordsReq):
     if not ag_rn:
         raise HTTPException(404, "キャンペーン内に広告グループが見つかりません")
 
+
+
     kw_ops = [{
         "create": {
             "adGroup": ag_rn,
@@ -5880,7 +5893,7 @@ def add_keywords_to_campaign(req: AddKeywordsReq):
             "policyName": "HEALTH_IN_PERSONALIZED_ADS",
             "violatingText": kw["text"],
         }]
-    } for kw in req.keywords]
+    } for kw in cleaned_kws]
 
     resp = rq.post(
         f"{BASE}/adGroupCriteria:mutate",

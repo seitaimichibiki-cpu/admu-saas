@@ -105,6 +105,17 @@ def _mock_performance_series(days: str = "7", start_date: str = None, end_date: 
             "cvr": cvr,
         })
     return series
+def clean_keyword_text(text: str) -> str:
+    """Google広告で使用できない無効な記号を除去・クリーニングする"""
+    if not text:
+        return ""
+    import re
+    # 無効な記号（! @ # $ % ^ & * ( ) = { } [ ] | \ : ; " ' < > , ? / ~ と全角チルダ・波ダッシュなど）を除去
+    invalid_chars = r'[!@#\$%\^&\*\(\)=\{\}\[\]|\\:;"\'<>\,\?\/\~〜~]'
+    cleaned = re.sub(invalid_chars, '', text)
+    # 連続するスペースを1つの半角スペースにまとめる
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    return cleaned.strip()
 
 
 class AdsClient:
@@ -866,7 +877,10 @@ class AdsClient:
                 existing = existing_per_camp.get(camp_rn, set())
                 operations = []
                 for kw_data in keywords:
-                    kw_text = kw_data["keyword"].strip()
+                    kw_text = clean_keyword_text(kw_data["keyword"])
+                    if not kw_text:
+                        skipped += 1
+                        continue
                     if kw_text.lower() in existing:
                         skipped += 1
                         continue
