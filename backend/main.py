@@ -889,10 +889,21 @@ def set_monthly_budget(req: MonthlyBudgetReq):
                 for item in alloc["allocations"]:
                     c_id = item.get("campaign_id")
                     daily_micros = item.get("daily_budget_yen", 0) * 1_000_000
-                    conn.execute(
-                        "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
-                        (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c_id, str(c_id), req.clinic_id)
-                    )
+                    try:
+                        local_id = int(c_id) if c_id is not None else None
+                    except ValueError:
+                        local_id = None
+                    
+                    if local_id is not None:
+                        conn.execute(
+                            "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
+                            (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), local_id, str(c_id), req.clinic_id)
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                            (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(c_id), req.clinic_id)
+                        )
                 conn.commit()
     return result
 
@@ -941,10 +952,21 @@ def manual_budget_allocate(req: ManualAllocationReq):
         for item in req.allocations:
             c_id = item.campaign_id
             daily_micros = item.daily_budget_yen * 1_000_000
-            conn.execute(
-                "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
-                (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c_id, str(c_id), req.clinic_id)
-            )
+            try:
+                local_id = int(c_id) if c_id is not None else None
+            except ValueError:
+                local_id = None
+            
+            if local_id is not None:
+                conn.execute(
+                    "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
+                    (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), local_id, str(c_id), req.clinic_id)
+                )
+            else:
+                conn.execute(
+                    "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                    (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(c_id), req.clinic_id)
+                )
         conn.commit()
         
     return {
