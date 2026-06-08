@@ -280,7 +280,8 @@ class AdsClient:
         c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
         c.campaign_budget = budget_rn
         c.manual_cpc.enhanced_cpc_enabled = False  # Enhanced CPCは廃止のためFalse
-        c.contains_eu_political_advertising = False  # 必須フィールド
+        # proto3でFalse(デフォルト値)は省略されるため_pbで強制セット
+        c._pb.contains_eu_political_advertising = False
         c.network_settings.target_google_search = True
         c.network_settings.target_search_network = True
         c.network_settings.target_content_network = False
