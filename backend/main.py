@@ -700,6 +700,165 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
 
 
 
+# ---- API: キャンペーン詳細（キーワード・位置・広告文）----
+@app.get("/api/campaigns/{campaign_id}/detail")
+def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
+    """Google Ads REST APIからキャンペーン詳細（キーワード・位置ターゲット・広告文）を取得する。"""
+    import requests as rq
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, platform)
+
+    # google_campaign_id を解決
+    try:
+        campaign = _resolve_campaign(campaign_id, clinic_id)
+        g_id = campaign.get("google_campaign_id") or campaign_id
+    except Exception:
+        g_id = campaign_id
+
+    if client.mock_mode:
+        return {
+            "google_campaign_id": g_id,
+            "keywords": [
+                {"text": "モックキーワード 藤枝", "match_type": "BROAD", "status": "ENABLED"},
+                {"text": "整体院 モック", "match_type": "PHRASE", "status": "ENABLED"},
+            ],
+            "location": {"type": "proximity", "lat": 34.868, "lon": 138.257, "radius_km": 8},
+            "ads": [{"headlines": ["モック広告見出し1", "モック広告見出し2"], "descriptions": ["モック説明文1"], "final_urls": ["https://example.com"]}],
+            "budget_yen": 1000,
+            "mock": True,
+        }
+
+    # アクセストークン取得
+    try:
+        token = client._get_rest_access_token()
+    except Exception as e:
+        raise HTTPException(500, f"認証エラー: {e}")
+
+    CID = client.customer_id
+    BASE = f"https://googleads.googleapis.com/v23/customers/{CID}"
+    headers_rest = {
+        "Authorization": f"Bearer {token}",
+        "developer-token": client._developer_token,
+        "login-customer-id": client._login_customer_id,
+        "Content-Type": "application/json",
+    }
+
+    def gads_query(gaql: str):
+        resp = rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": gaql})
+        if resp.status_code != 200:
+            return []
+        rows = []
+        for batch in resp.json():
+            rows.extend(batch.get("results", []))
+        return rows
+
+    # ① キャンペーン予算
+    budget_yen = 0
+    try:
+        camp_rows = gads_query(f"""
+            SELECT campaign_budget.amount_micros
+            FROM campaign
+            WHERE campaign.id = {g_id}
+        """)
+        if camp_rows:
+            budget_yen = int(camp_rows[0].get("campaignBudget", {}).get("amountMicros", 0)) // 1_000_000
+    except Exception:
+        pass
+
+    # ② キーワード
+    keywords = []
+    try:
+        kw_rows = gads_query(f"""
+            SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status
+            FROM ad_group_criterion
+            WHERE campaign.id = {g_id}
+            AND ad_group_criterion.type = KEYWORD
+            AND ad_group_criterion.status != REMOVED
+        """)
+        for row in kw_rows:
+            c = row.get("adGroupCriterion", {})
+            kw = c.get("keyword", {})
+            if kw.get("text"):
+                keywords.append({
+                    "text": kw.get("text", ""),
+                    "match_type": kw.get("matchType", ""),
+                    "status": c.get("status", ""),
+                })
+    except Exception:
+        pass
+
+    # ③ 位置ターゲティング
+    location = None
+    try:
+        loc_rows = gads_query(f"""
+            SELECT campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
+                   campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
+                   campaign_criterion.proximity.radius,
+                   campaign_criterion.proximity.radius_units,
+                   campaign_criterion.location.geo_target_constant
+            FROM campaign_criterion
+            WHERE campaign.id = {g_id}
+            AND campaign_criterion.status != REMOVED
+        """)
+        for row in loc_rows:
+            cc = row.get("campaignCriterion", {})
+            prox = cc.get("proximity", {})
+            geo = prox.get("geoPoint", {})
+            if geo.get("latitudeInMicroDegrees"):
+                location = {
+                    "type": "proximity",
+                    "lat": geo["latitudeInMicroDegrees"] / 1_000_000,
+                    "lon": geo["longitudeInMicroDegrees"] / 1_000_000,
+                    "radius_km": prox.get("radius", 0),
+                    "radius_units": prox.get("radiusUnits", "KILOMETERS"),
+                }
+                break
+            loc = cc.get("location", {})
+            if loc.get("geoTargetConstant"):
+                location = {"type": "geo_target", "resource": loc["geoTargetConstant"]}
+                break
+    except Exception:
+        pass
+
+    # ④ 広告文（RSA）
+    ads = []
+    try:
+        ad_rows = gads_query(f"""
+            SELECT ad_group_ad.ad.responsive_search_ad.headlines,
+                   ad_group_ad.ad.responsive_search_ad.descriptions,
+                   ad_group_ad.ad.final_urls,
+                   ad_group_ad.status
+            FROM ad_group_ad
+            WHERE campaign.id = {g_id}
+            AND ad_group_ad.status != REMOVED
+        """)
+        for row in ad_rows:
+            aga = row.get("adGroupAd", {})
+            ad = aga.get("ad", {})
+            rsa = ad.get("responsiveSearchAd", {})
+            headlines = [h.get("text", "") for h in rsa.get("headlines", []) if h.get("text")]
+            descriptions = [d.get("text", "") for d in rsa.get("descriptions", []) if d.get("text")]
+            final_urls = ad.get("finalUrls", [])
+            if headlines or final_urls:
+                ads.append({
+                    "headlines": headlines,
+                    "descriptions": descriptions,
+                    "final_urls": final_urls,
+                    "status": aga.get("status", ""),
+                })
+    except Exception:
+        pass
+
+    return {
+        "google_campaign_id": g_id,
+        "budget_yen": budget_yen,
+        "keywords": keywords,
+        "location": location,
+        "ads": ads,
+        "mock": False,
+    }
+
+
 # ---- API: 月間予算ターゲット設定（具体パスを先に定義）----
 class MonthlyBudgetReq(BaseModel):
     clinic_id: int = 1

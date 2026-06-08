@@ -1026,13 +1026,14 @@ async function loadCampaigns() {
       return;
     }
     wrap.innerHTML = campaigns.map(c => `
-      <div class="campaign-item" id="campaign-item-${c.id}">
+      <div class="campaign-item" id="campaign-item-${c.id}" onclick="openCampDrawer('${c.id}', '${(c.name||'').replace(/'/g,"\\'")}', '${c.status||''}', event)">
         <div class="campaign-header">
           <div class="campaign-name">${c.name}</div>
           <span class="status-badge ${c.status?.toLowerCase()}">${c.status}</span>
           ${c.status==='ENABLED'
             ? `<button class="btn btn-secondary" onclick="toggleCampaign('${c.id}','PAUSED')">一時停止</button>`
             : `<button class="btn btn-success" onclick="toggleCampaign('${c.id}','ENABLED')">再開</button>`}
+          <span class="campaign-detail-hint">詳細 →</span>
           <button class="btn btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteCampaign(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑 削除</button>
         </div>
         <div class="campaign-stats">
@@ -1060,6 +1061,129 @@ async function toggleCampaign(id, status) {
   }
 }
 window.toggleCampaign = toggleCampaign;
+
+// ============================================================
+// キャンペーン詳細ドロワー
+// ============================================================
+function openCampDrawer(campaignId, campaignName, status, event) {
+  // ボタン類のクリックはドロワーを開かない
+  if (event && event.target.closest('button')) return;
+
+  const drawer = document.getElementById('campDrawer');
+  const overlay = document.getElementById('campDrawerOverlay');
+  const title = document.getElementById('campDrawerTitle');
+  const subtitle = document.getElementById('campDrawerSubtitle');
+  const body = document.getElementById('campDrawerBody');
+
+  title.textContent = campaignName;
+  subtitle.textContent = status === 'ENABLED' ? '🟢 配信中' : status === 'PAUSED' ? '⏸ 一時停止' : status;
+  body.innerHTML = '<div class="camp-drawer-loading"><div style="font-size:24px;margin-bottom:8px">⏳</div>Google Adsから情報を取得中...</div>';
+
+  drawer.classList.add('open');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // API取得
+  api(`/campaigns/${campaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+    .then(d => renderCampDrawer(d))
+    .catch(e => {
+      body.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">取得に失敗しました<br><small>${e.message}</small></div>`;
+    });
+}
+window.openCampDrawer = openCampDrawer;
+
+function closeCampDrawer() {
+  document.getElementById('campDrawer').classList.remove('open');
+  document.getElementById('campDrawerOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+window.closeCampDrawer = closeCampDrawer;
+
+function renderCampDrawer(d) {
+  const body = document.getElementById('campDrawerBody');
+  const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
+  const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
+
+  // ① 予算セクション
+  const budgetHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">📊 予算</div>
+      <div class="drawer-budget-row">
+        <div class="drawer-budget-value">¥${(d.budget_yen||0).toLocaleString()}</div>
+        <div class="drawer-budget-label">/ 日</div>
+      </div>
+    </div>`;
+
+  // ② キーワードセクション
+  const kwHtml = d.keywords && d.keywords.length ? `
+    <div class="drawer-section">
+      <div class="drawer-section-title">🔍 検索キーワード（${d.keywords.length}件）</div>
+      <div class="drawer-kw-list">
+        ${d.keywords.map(kw => `
+          <div class="drawer-kw-item">
+            <span class="drawer-kw-text">${kw.text}</span>
+            <span class="drawer-kw-badge ${matchTypeClass[kw.match_type] || 'broad'}">${matchTypeLabel[kw.match_type] || kw.match_type}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : '';
+
+  // ③ 位置ターゲティングセクション
+  let locationHtml = '';
+  if (d.location) {
+    if (d.location.type === 'proximity') {
+      locationHtml = `
+        <div class="drawer-section">
+          <div class="drawer-section-title">📍 配信エリア</div>
+          <div class="drawer-location-box">
+            <div class="drawer-location-icon">🗺️</div>
+            <div>
+              <div class="drawer-location-text">半径 <strong>${d.location.radius_km}km</strong> 圏内</div>
+              <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4)} / 経度 ${d.location.lon?.toFixed(4)}</div>
+              <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">藤枝市田沼1-19-7を中心とした${d.location.radius_km}km圏</div>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      locationHtml = `
+        <div class="drawer-section">
+          <div class="drawer-section-title">📍 配信エリア</div>
+          <div class="drawer-location-box">
+            <div class="drawer-location-icon">📌</div>
+            <div class="drawer-location-text">地域ターゲティング設定済み</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  // ④ 広告文セクション
+  const adsHtml = d.ads && d.ads.length ? `
+    <div class="drawer-section">
+      <div class="drawer-section-title">📝 広告文（RSA）</div>
+      ${d.ads.map(ad => `
+        <div class="drawer-ad-card">
+          ${ad.final_urls && ad.final_urls.length ? `<div class="drawer-ad-url">🔗 ${ad.final_urls[0]}</div>` : ''}
+          <div class="drawer-ad-headlines">
+            ${ad.headlines.slice(0,3).map(h => `<div class="drawer-ad-headline">| ${h}</div>`).join('')}
+          </div>
+          <div class="drawer-ad-descriptions">
+            ${ad.descriptions.map(d => `<div class="drawer-ad-desc">${d}</div>`).join('')}
+          </div>
+          ${ad.headlines.length > 3 ? `<div style="font-size:11px;color:var(--text-3)">他 ${ad.headlines.length-3} 件のヘッドライン</div>` : ''}
+        </div>
+      `).join('')}
+    </div>` : '';
+
+  body.innerHTML = budgetHtml + kwHtml + locationHtml + adsHtml;
+  if (!body.innerHTML.trim()) {
+    body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>';
+  }
+}
+
+// Escキーでドロワーを閉じる
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCampDrawer();
+});
 
 async function deleteCampaign(id, name) {
   if (!confirm(`キャンペーン「${name}」を削除しますか？\n\nこの操作は元に戻せません。Google Ads上のキャンペーンも削除（REMOVED）されます。`)) return;

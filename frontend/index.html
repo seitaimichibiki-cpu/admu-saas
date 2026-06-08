@@ -1856,6 +1856,21 @@
       <div class="modal-footer" id="modalFooter"></div>
     </div>
   </div>
+
+  <!-- キャンペーン詳細ドロワー -->
+  <div class="camp-drawer-overlay" id="campDrawerOverlay" onclick="closeCampDrawer()"></div>
+  <div class="camp-drawer" id="campDrawer">
+    <div class="camp-drawer-header">
+      <div>
+        <div class="camp-drawer-title" id="campDrawerTitle">キャンペーン詳細</div>
+        <div class="camp-drawer-subtitle" id="campDrawerSubtitle"></div>
+      </div>
+      <button class="camp-drawer-close" onclick="closeCampDrawer()">✕</button>
+    </div>
+    <div class="camp-drawer-body" id="campDrawerBody">
+      <div class="camp-drawer-loading">読み込み中...</div>
+    </div>
+  </div>
   <!-- Toast -->
   <div class="toast-container" id="toastContainer"></div>
 
