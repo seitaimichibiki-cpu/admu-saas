@@ -6082,7 +6082,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-manual-alloc', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-manual-alloc-v2', html)
 
 
         return HTMLResponse(

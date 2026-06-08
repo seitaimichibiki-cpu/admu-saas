@@ -465,7 +465,10 @@ async function api(path, options={}) {
       });
       if (!res.ok) {
         const err = await res.json().catch(()=>({}));
-        const errMsg = err.detail || err.error || `HTTP ${res.status}`;
+        let errMsg = err.detail || err.error || `HTTP ${res.status}`;
+        if (typeof errMsg === 'object') {
+          errMsg = JSON.stringify(errMsg);
+        }
         
         // CSRFエラー（403等）かつリトライがまだの場合、CSRFトークンを再取得してリトライ
         if (res.status === 403 && (errMsg.includes('CSRF') || errMsg.includes('token') || errMsg.includes('トークン')) && retryCount < maxRetries) {
@@ -1835,7 +1838,7 @@ async function loadBudget() {
     const rawList = (data.campaigns && data.campaigns.length)
       ? data.campaigns
       : (data.local_campaigns || []);
-    const local = rawList.filter(c => c.status !== 'REMOVED');
+    const local = rawList.filter(c => c.status === 'ENABLED');
     const wrap = document.getElementById('budgetList');
     if (wrap) {
       if(!local.length) {
@@ -4962,7 +4965,7 @@ window.startManualAllocation = async function startManualAllocation() {
     const rawList = (data.campaigns && data.campaigns.length)
       ? data.campaigns
       : (data.local_campaigns || []);
-    manualAllocCampaigns = rawList.filter(c => c.status !== 'REMOVED');
+    manualAllocCampaigns = rawList.filter(c => c.status === 'ENABLED');
 
     if (!manualAllocCampaigns.length) {
       toast('キャンペーンがありません', 'error');
