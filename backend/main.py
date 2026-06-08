@@ -5847,7 +5847,13 @@ async def smart_keywords_for_campaign(req: SmartKeywordReq):
         keywords = _json.loads(m.group(0)) if m else []
         return {"success": True, "keywords": keywords, "symptom_summary": dict(top_symptoms)}
     except Exception as e:
-        raise HTTPException(500, f"AI生成エラー: {e}")
+        err_msg = str(e)
+        if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini APIキーの利用上限（無料枠の制限）に達しました。Google AI Studioの管理画面で課金設定（Pay-as-you-go）を有効にするか、別の有効なAPIキーを設定してください。"
+            )
+        raise HTTPException(500, f"AI生成エラー: {err_msg}")
 
 
 if __name__ == "__main__":

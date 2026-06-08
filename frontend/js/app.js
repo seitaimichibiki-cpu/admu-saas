@@ -1313,6 +1313,8 @@ async function applySelectedKeywords(keywords) {
 window.applySelectedKeywords = applySelectedKeywords;
 
 // --- 最適配信半径計算 ---
+let _latestRecommendRadiusData = null;
+
 async function runRecommendRadius() {
   const btn = document.getElementById('btnRecommendRadius');
   const result = document.getElementById('drawerAiResult');
@@ -1326,6 +1328,7 @@ async function runRecommendRadius() {
       result.innerHTML = `<div class="camp-drawer-loading" style="color:#ef4444">${data.error}</div>`;
       return;
     }
+    _latestRecommendRadiusData = data;
 
     const bands = data.distance_bands || {};
     const total = data.geocoded_count || 1;
@@ -1350,14 +1353,14 @@ async function runRecommendRadius() {
       </div>
     `).join('') : '<div style="font-size:11px;color:var(--text-3)">エリアデータがありません</div>';
 
-    // 適用ボタンの作成
+    // 適用ボタンの作成（グローバルキャッシュを参照し、onclickの引数でのパース崩れを防ぐ）
     const applyButtonsHtml = `
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="applyRadiusTarget(${data.recommended_radius_km})">
+        <button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px" onclick="applyRadiusTargetFromCache()">
           🎯 推奨半径 (${data.recommended_radius_km}km) を適用
         </button>
         ${topAreas.length ? `
-        <button class="btn btn-secondary" style="flex:1;font-size:12px;padding:8px" onclick='applyAreaTarget(${JSON.stringify(topAreas.slice(0, 2).map(a => a.area))})'>
+        <button class="btn btn-secondary" style="flex:1;font-size:12px;padding:8px" onclick="applyAreaTargetFromCache()">
           🗺️ 主要エリアを適用
         </button>` : ''}
       </div>`;
@@ -1403,6 +1406,19 @@ async function runRecommendRadius() {
   }
 }
 window.runRecommendRadius = runRecommendRadius;
+
+async function applyRadiusTargetFromCache() {
+  if (!_latestRecommendRadiusData || !_latestRecommendRadiusData.recommended_radius_km) return;
+  await applyRadiusTarget(_latestRecommendRadiusData.recommended_radius_km);
+}
+window.applyRadiusTargetFromCache = applyRadiusTargetFromCache;
+
+async function applyAreaTargetFromCache() {
+  if (!_latestRecommendRadiusData || !_latestRecommendRadiusData.top_areas || !_latestRecommendRadiusData.top_areas.length) return;
+  const areas = _latestRecommendRadiusData.top_areas.slice(0, 2).map(a => a.area);
+  await applyAreaTarget(areas);
+}
+window.applyAreaTargetFromCache = applyAreaTargetFromCache;
 
 async function applyRadiusTarget(radiusKm) {
   if (!_drawerGoogleCampaignId) { toast('キャンペーンIDが取得できていません', 'error'); return; }
