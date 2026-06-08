@@ -320,6 +320,140 @@ def _run_auto_negative_keyword_scan(clinic_id: int):
         print(f"[Monitor] 検索語句自動スキャンエラー clinic_id={clinic_id}: {e}")
 
 
+def _run_auto_exclusion_area_scan(clinic_id: int):
+    """
+    毎週水曜4時: コンバージョン見込みのない無駄地域（患者が殆ど来ない遠方地域）を自動検出・除外ターゲット登録 ⑤
+    """
+    import math
+    import requests as rq
+
+    acc = _get_account_and_notify_config(clinic_id)
+    if not acc:
+        return
+
+    # デフォルトの院の座標: 藤枝市田沼1-19-7
+    CLINIC_LAT = 34.868
+    CLINIC_LON = 138.257
+
+    def haversine_km(lat1, lon1, lat2, lon2):
+        R = 6371
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+        return R * 2 * math.asin(math.sqrt(a))
+
+    def geocode_address(address: str) -> tuple:
+        try:
+            url = f"https://msearch.gsi.go.jp/address-search/AddressSearch?q={rq.utils.quote(address)}"
+            resp = rq.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data and len(data) > 0:
+                    coords = data[0].get('geometry', {}).get('coordinates', [])
+                    if len(coords) >= 2:
+                        return float(coords[1]), float(coords[0])  # lat, lon
+        except Exception:
+            pass
+        return None, None
+
+    try:
+        # 患者データを取得
+        with db.get_conn() as conn:
+            rows = conn.execute(
+                "SELECT address_pref, address_city FROM logiction_patients "
+                "WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''",
+                (clinic_id,)
+            ).fetchall()
+
+        if not rows:
+            print(f"[Monitor] 患者データがないため無駄地域スキャンをスキップします。clinic_id={clinic_id}")
+            return
+
+        # 市区町村ごとの患者数を集計
+        city_counts = {}
+        for pref, city in rows:
+            city_name = city.strip()
+            full_addr = f"{pref or '静岡県'}{city_name}"
+            city_counts[full_addr] = city_counts.get(full_addr, 0) + 1
+
+        total_patients = len(rows)
+        wasted_areas = []
+
+        # 院からの距離が20km以上かつ患者割合が1.5%未満を無駄地域とする
+        for addr, count in city_counts.items():
+            lat, lon = geocode_address(addr)
+            if lat and lon:
+                dist = haversine_km(CLINIC_LAT, CLINIC_LON, lat, lon)
+                pct = (count / total_patients) * 100
+                if dist >= 20.0 and pct < 1.5:
+                    wasted_areas.append({
+                        "name": addr,
+                        "distance_km": round(dist, 1),
+                        "patient_count": count,
+                        "percentage": round(pct, 2)
+                    })
+
+        if not wasted_areas:
+            print(f"[Monitor] 無駄地域は検出されませんでした clinic_id={clinic_id}")
+            return
+
+        client = AdsClient(acc)
+        campaigns = client.list_campaigns()
+        active_campaigns = [c for c in campaigns if c.get("status") in ("ENABLED", "PAUSED")]
+
+        if not active_campaigns:
+            print(f"[Monitor] 設定対象のキャンペーンが見つかりません clinic_id={clinic_id}")
+            return
+
+        applied_count = 0
+        excluded_details = []
+
+        for area in wasted_areas:
+            # 地名からGeo Target IDを解決
+            res_names = client.suggest_geo_target_constants([area["name"]])
+            if not res_names:
+                print(f"[Monitor] 地域IDが解決できませんでした: {area['name']}")
+                continue
+
+            geo_res_name = res_names[0]
+            geo_id = geo_res_name.split("/")[-1]
+
+            for camp in active_campaigns:
+                camp_id = camp.get("id")
+                if not camp_id:
+                    continue
+
+                res = client.exclude_campaign_location(camp_id, geo_id)
+                if res.get("success"):
+                    applied_count += 1
+                    excluded_details.append(f"・{camp.get('name')}: {area['name']} (距離 {area['distance_km']}km, 患者数 {area['patient_count']}名, 割合 {area['percentage']}%)")
+                    db.create_alert(
+                        clinic_id,
+                        f"無駄地域自動除外: キャンペーン「{camp.get('name')}」から「{area['name']}」（距離{area['distance_km']}km、CV率{area['percentage']}%）を除外設定しました。",
+                        level="INFO"
+                    )
+
+        if applied_count > 0:
+            # LINE通知
+            token = acc.get("line_channel_token", "")
+            uid   = acc.get("line_user_id", "")
+            if token and uid:
+                summary = "\n".join(excluded_details[:5]) # 最大5件表示
+                msg = (
+                    f"🛡️ AI Feed Guard: 無駄エリア自動除外完了\n"
+                    f"患者データ分析により、来院見込みの低い遠方地域({len(wasted_areas)}箇所)を広告配信対象から自動的に除外設定しました。\n\n"
+                    f"【除外設定詳細】\n"
+                    f"{summary}\n\n"
+                    f"CPA改善と無駄クリック費用の削減に貢献します。詳細はAdMuダッシュボードを確認してください。"
+                )
+                line_notifier.send_text(token, uid, msg)
+
+        print(f"[Monitor] 無駄地域自動スキャン完了 clinic_id={clinic_id} 除外適用数={applied_count}件")
+
+    except Exception as e:
+        print(f"[Monitor] 無駄地域自動スキャンエラー clinic_id={clinic_id}: {e}")
+
+
 def _run_cleanup():
     """週1回曜深夜: 古いログやアラートを削除"""
     try:
@@ -483,6 +617,11 @@ def start_scheduler():
             _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
             id=f"nkw_scan_{cid}", args=[cid], replace_existing=True
         )
+        # ⑤ 無駄地域自動除外スキャン（毎週水曜 4:00）
+        _scheduler.add_job(
+            _run_auto_exclusion_area_scan, CronTrigger(day_of_week='wed', hour=4, minute=0),
+            id=f"area_exclude_scan_{cid}", args=[cid], replace_existing=True
+        )
         # ③ 広告パフォーマンス自動収集（毎日深夜2:00）
         _scheduler.add_job(
             _collect_performance_data, CronTrigger(hour=2, minute=0),
@@ -559,6 +698,11 @@ def register_clinic_jobs(clinic_id: int):
         _run_auto_negative_keyword_scan, CronTrigger(day_of_week='wed', hour=3, minute=0),
         id=f"nkw_scan_{clinic_id}", args=[clinic_id], replace_existing=True
     )
+    # ⑤ 無駄地域自動除外スキャン（毎週水曜 4:00）
+    _scheduler.add_job(
+        _run_auto_exclusion_area_scan, CronTrigger(day_of_week='wed', hour=4, minute=0),
+        id=f"area_exclude_scan_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
     # ③ 広告パフォーマンス自動収集（毎日深夜2:00）
     _scheduler.add_job(
         _collect_performance_data, CronTrigger(hour=2, minute=0),
@@ -572,7 +716,7 @@ def unregister_clinic_jobs(clinic_id: int):
     global _scheduler
     if not _scheduler or not _scheduler.running:
         return
-    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_"]:
+    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_", "area_exclude_scan_"]:
         job_id = f"{job_prefix}{clinic_id}"
         try:
             _scheduler.remove_job(job_id)

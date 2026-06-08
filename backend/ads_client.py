@@ -1207,4 +1207,245 @@ class AdsClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def list_accessible_customers(self) -> dict:
+        """アクセス可能なGoogle広告のCustomer IDおよびアカウント一覧を取得する。"""
+        if self.mock_mode:
+            return {
+                "success": True,
+                "customers": [
+                    {"id": "8110558709", "name": "整体院導 (テスト)", "is_manager": False},
+                    {"id": "1234567890", "name": "サブ治療院アカウント", "is_manager": False},
+                    {"id": "9998887776", "name": "管理用MCCアカウント", "is_manager": True},
+                ],
+                "mock": True
+            }
+
+        try:
+            token = self._get_rest_access_token()
+            url = "https://googleads.googleapis.com/v23/customers:listAccessibleCustomers"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "Content-Type": "application/json",
+            }
+            import requests as _rq
+            resp = _rq.get(url, headers=headers)
+            if resp.status_code != 200:
+                return {"success": False, "error": f"listAccessibleCustomersエラー: {resp.text[:300]}"}
+            
+            resource_names = resp.json().get("resourceNames", [])
+            customers = []
+            
+            for rn in resource_names:
+                cid = rn.split("/")[-1]
+                query_headers = {
+                    "Authorization": f"Bearer {token}",
+                    "developer-token": self._developer_token,
+                    "Content-Type": "application/json",
+                }
+                query_url = f"https://googleads.googleapis.com/v23/customers/{cid}/googleAds:searchStream"
+                query = "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1"
+                q_resp = _rq.post(query_url, headers=query_headers, json={"query": query})
+                if q_resp.status_code == 200:
+                    try:
+                        for batch in q_resp.json():
+                            for row in batch.get("results", []):
+                                c = row.get("customer", {})
+                                customers.append({
+                                    "id": str(c.get("id", cid)),
+                                    "name": c.get("descriptiveName", f"アカウント ({cid})"),
+                                    "is_manager": c.get("manager", False)
+                                })
+                    except Exception:
+                        customers.append({"id": cid, "name": f"アカウント ({cid})", "is_manager": False})
+                else:
+                    customers.append({"id": cid, "name": f"アカウント ({cid})", "is_manager": False})
+
+            return {"success": True, "customers": customers, "mock": False}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def upload_image_asset(self, image_data_b64: str, asset_name: str = None) -> dict:
+        """
+        Google広告に画像アセットをアップロード・登録する。
+        """
+        import uuid
+        name = asset_name or f"admu_img_{uuid.uuid4().hex[:8]}"
+
+        if self.mock_mode:
+            mock_asset_id = str(uuid.uuid4().int)[:12]
+            mock_rn = f"customers/{self.customer_id}/assets/{mock_asset_id}"
+            print(f"[MOCK] 画像アセット登録: name={name} resource={mock_rn}")
+            return {"success": True, "resource_name": mock_rn, "mock": True}
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+
+            import requests as _rq
+
+            op = {
+                "create": {
+                    "type": "IMAGE",
+                    "name": name,
+                    "imageAsset": {
+                        "data": image_data_b64
+                    }
+                }
+            }
+
+            url = f"{BASE}/assets:mutate"
+            resp = _rq.post(url, headers=headers_rest, json={"operations": [op]})
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                if results and results[0].get("resourceName"):
+                    rn = results[0]["resourceName"]
+                    print(f"[AdsClient] 画像アセット登録成功: {rn}")
+                    return {"success": True, "resource_name": rn, "mock": False}
+                else:
+                    return {"success": False, "error": "アセット登録結果が空です"}
+            else:
+                return {"success": False, "error": f"アセット登録エラー: {resp.text[:300]}"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def link_asset_to_campaign(self, google_campaign_id: str, asset_resource_name: str, field_type: str = "MARKETING_IMAGE") -> dict:
+        """
+        画像アセットをキャンペーンに関連付ける (CampaignAssetの登録)。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] アセット関連付け: campaign={google_campaign_id} asset={asset_resource_name} type={field_type}")
+            return {"success": True, "mock": True}
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+
+            import requests as _rq
+
+            op = {
+                "create": {
+                    "campaign": f"customers/{cid}/campaigns/{google_campaign_id}",
+                    "asset": asset_resource_name,
+                    "fieldType": field_type.upper()
+                }
+            }
+
+            url = f"{BASE}/campaignAssets:mutate"
+            resp = _rq.post(url, headers=headers_rest, json={"operations": [op]})
+            if resp.status_code == 200:
+                print(f"[AdsClient] アセットをキャンペーンに関連付けました: {asset_resource_name} -> {google_campaign_id}")
+                return {"success": True, "mock": False}
+            else:
+                return {"success": False, "error": f"キャンペーンアセット関連付けエラー: {resp.text[:300]}"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def upload_offline_conversion_value(self, gclid: str, conversion_action_id: str, conversion_time_str: str, value: float) -> dict:
+        """
+        GCLIDに紐づくオフラインコンバージョン値（LTV売上）をGoogle広告へフィードバックアップロードする。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] オフラインCV値フィードバック: gclid={gclid} action_id={conversion_action_id} value={value}円")
+            return {"success": True, "mock": True}
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+
+            import requests as _rq
+
+            payload = {
+                "conversions": [
+                    {
+                        "gclid": gclid,
+                        "conversionAction": f"customers/{cid}/conversionActions/{conversion_action_id}",
+                        "conversionDateTime": conversion_time_str,
+                        "conversionValue": value,
+                        "currencyCode": "JPY"
+                    }
+                ],
+                "partialFailure": True
+            }
+
+            url = f"{BASE}:uploadClickConversions"
+            resp = _rq.post(url, headers=headers_rest, json=payload)
+            if resp.status_code == 200:
+                print(f"[AdsClient] オフラインコンバージョン値アップロード成功: gclid={gclid} value={value}")
+                return {"success": True, "mock": False}
+            else:
+                return {"success": False, "error": f"CVアップロードエラー: {resp.text[:300]}"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def exclude_campaign_location(self, google_campaign_id: str, geo_target_constant_id: str) -> dict:
+        """
+        キャンペーンに除外ターゲット地域（Exclusion Area）を追加・登録する。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] キャンペーン除外地域追加: campaign={google_campaign_id} geo_id={geo_target_constant_id}")
+            return {"success": True, "mock": True}
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+
+            import requests as _rq
+
+            op = {
+                "create": {
+                    "campaign": f"customers/{cid}/campaigns/{google_campaign_id}",
+                    "negative": True,
+                    "location": {
+                        "geoTargetConstant": f"geoTargetConstants/{geo_target_constant_id}"
+                    }
+                }
+            }
+
+            url = f"{BASE}/campaignCriteria:mutate"
+            resp = _rq.post(url, headers=headers_rest, json={"operations": [op]})
+            if resp.status_code == 200:
+                print(f"[AdsClient] キャンペーン除外地域を追加しました: campaign={google_campaign_id} geo_id={geo_target_constant_id}")
+                return {"success": True, "mock": False}
+            else:
+                return {"success": False, "error": f"除外地域登録エラー: {resp.text[:300]}"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
+
+
 

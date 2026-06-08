@@ -5513,48 +5513,6 @@ def update_lead_status(lead_id: int, request: Request, source: str = "contact", 
     return {"success": True}
 
 
-@app.get("/{path:path}", include_in_schema=False)
-
-
-def serve_spa(path: str = ""):
-    # admin.html・onboarding.htmlは専用ルートで処理済み
-    # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
-    index = os.path.join(FRONTEND_DIR, "index.html")
-    if os.path.exists(index):
-        from fastapi.responses import HTMLResponse
-        import re
-        with open(index, "r", encoding="utf-8") as f:
-            html = f.read()
-
-        # ―― ダミー要素の動的注入 ――――――――――――――――――――――――――――――――
-        # 削除したUI要素に依存する旧キャッシュJSがnullクラッシュしないよう安全策
-        DUMMY = (
-            '<!-- [backend-injected] -->\n'
-            '<div id="weeklyActionsContent" style="display:none"></div>\n'
-            '<div id="benchmarkContent" style="display:none"></div>\n'
-            '<div id="dailyBriefContent" style="display:none"></div>\n'
-            '<div id="narrativeContent" style="display:none"></div>\n'
-            '<div id="briefGeneratedAt" style="display:none"></div>\n'
-            '<div id="narrativeGeneratedAt" style="display:none"></div>\n'
-            '<span id="alertBadge" style="display:none"></span>\n'
-            '<span id="aiQuotaBadge" style="display:none"><span id="aiQuotaText"></span></span>\n'
-            '<!-- [/backend-injected] -->\n'
-        )
-        if '[backend-injected]' not in html:
-            html = html.replace('</body>', DUMMY + '</body>', 1)
-
-        # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260608-final-url-sync', html)
-
-
-        return HTMLResponse(
-            content=html,
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-            }
-        )
-    return {"message": "Google広告自動運用システム API サーバー稼働中", "docs": "/docs"}
 
 # ============================================================
 # ---- AI自動化: 最適配信半径 & キーワード一括投入 ----
@@ -5751,7 +5709,105 @@ def update_campaign_final_url(req: UpdateCampaignUrlReq):
     return {"success": True, "message": "最終遷移先URLをGoogle広告に適用しました", "resource": res.get("resource")}
 
 
+@app.get("/api/campaigns/accessible-customers")
+def get_accessible_customers(clinic_id: int = 1):
+    """OAuth認証済みの情報から、アクセス可能なGoogle広告のアカウント一覧を取得する。"""
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, "google")
+    
+    res = client.list_accessible_customers()
+    if not res.get("success"):
+        raise HTTPException(500, f"アカウント一覧の取得に失敗しました: {res.get('error')}")
+        
+    return res
+
+
+class UploadAssetReq(BaseModel):
+    clinic_id: int = 1
+    campaign_id: int
+    image_b64: str  # Base64
+    asset_name: Optional[str] = None
+    field_type: Optional[str] = "MARKETING_IMAGE"
+
+
+@app.post("/api/campaigns/upload-asset")
+def upload_campaign_asset(req: UploadAssetReq):
+    """キャンペーンに画像アセットをアップロード・関連付け登録する。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+
+    campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
+    g_id = campaign.get("google_campaign_id")
+
+    if not g_id:
+        raise HTTPException(404, "Google広告キャンペーンIDが紐付いていません")
+
+    res_upload = client.upload_image_asset(req.image_b64, req.asset_name)
+    if not res_upload.get("success"):
+        raise HTTPException(500, f"アセットのアップロードに失敗しました: {res_upload.get('error')}")
+
+    asset_rn = res_upload.get("resource_name")
+
+    res_link = client.link_asset_to_campaign(g_id, asset_rn, req.field_type)
+    if not res_link.get("success"):
+        raise HTTPException(500, f"キャンペーンへの関連付けに失敗しました: {res_link.get('error')}")
+
+    return {
+        "success": True, 
+        "message": "画像アセットをアップロードし、キャンペーンに関連付けました", 
+        "resource_name": asset_rn
+    }
+
+
+class LtvConversionReq(BaseModel):
+    clinic_id: int = 1
+    gclid: str
+    conversion_action_id: str
+    conversion_time: str
+    value: float
+
+
+@app.post("/api/analytics/feed-ltv-conversions")
+def feed_ltv_conversions(req: LtvConversionReq):
+    """LTV（売上）データをオフラインコンバージョン値としてGoogle広告にアップロードする。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+    
+    res = client.upload_offline_conversion_value(
+        gclid=req.gclid,
+        conversion_action_id=req.conversion_action_id,
+        conversion_time_str=req.conversion_time,
+        value=req.value
+    )
+    if not res.get("success"):
+        raise HTTPException(500, f"コンバージョン値のフィードバックアップロードに失敗しました: {res.get('error')}")
+        
+    return res
+
+
+class ExcludeLocationReq(BaseModel):
+    clinic_id: int = 1
+    google_campaign_id: str
+    geo_target_constant_id: str
+
+
+@app.post("/api/campaigns/exclude-location")
+def exclude_campaign_location_endpoint(req: ExcludeLocationReq):
+    """特定の地域をキャンペーンの除外ターゲットに登録する。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+    
+    res = client.exclude_campaign_location(req.google_campaign_id, req.geo_target_constant_id)
+    if not res.get("success"):
+        raise HTTPException(500, f"地域の除外設定に失敗しました: {res.get('error')}")
+        
+    return res
+
+
 class AddKeywordsReq(BaseModel):
+
+
+
 
     clinic_id: int = 1
     platform: str = "google"
@@ -5925,6 +5981,48 @@ async def smart_keywords_for_campaign(req: SmartKeywordReq):
                 detail="Gemini APIキーの利用上限（無料枠の制限）に達しました。Google AI Studioの管理画面で課金設定（Pay-as-you-go）を有効にするか、別の有効なAPIキーを設定してください。"
             )
         raise HTTPException(500, f"AI生成エラー: {err_msg}")
+
+
+@app.get("/{path:path}", include_in_schema=False)
+def serve_spa(path: str = ""):
+    # admin.html・onboarding.htmlは専用ルートで処理済み
+    # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
+    index = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index):
+        from fastapi.responses import HTMLResponse
+        import re
+        with open(index, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # ―― ダミー要素の動的注入 ――――――――――――――――――――――――――――――――
+        # 削除したUI要素に依存する旧キャッシュJSがnullクラッシュしないよう安全策
+        DUMMY = (
+            '<!-- [backend-injected] -->\n'
+            '<div id="weeklyActionsContent" style="display:none"></div>\n'
+            '<div id="benchmarkContent" style="display:none"></div>\n'
+            '<div id="dailyBriefContent" style="display:none"></div>\n'
+            '<div id="narrativeContent" style="display:none"></div>\n'
+            '<div id="briefGeneratedAt" style="display:none"></div>\n'
+            '<div id="narrativeGeneratedAt" style="display:none"></div>\n'
+            '<span id="alertBadge" style="display:none"></span>\n'
+            '<span id="aiQuotaBadge" style="display:none"><span id="aiQuotaText"></span></span>\n'
+            '<!-- [/backend-injected] -->\n'
+        )
+        if '[backend-injected]' not in html:
+            html = html.replace('</body>', DUMMY + '</body>', 1)
+
+        # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260608-final-url-sync', html)
+
+
+        return HTMLResponse(
+            content=html,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            }
+        )
+    return {"message": "Google広告自動運用システム API サーバー稼働中", "docs": "/docs"}
 
 
 if __name__ == "__main__":

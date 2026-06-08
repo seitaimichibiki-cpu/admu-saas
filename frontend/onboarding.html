@@ -129,19 +129,33 @@
     <div class="step" id="s4">
       <div class="badge">STEP 4 / 6 — Google広告連携</div>
       <h2>Google広告アカウントを<br>連携してください</h2>
-      <p class="sub">Google広告の顧客IDを入力すると実際のデータと連携できます。後から設定できます。</p>
-      <div class="tip">
-        💡 <strong>顧客IDの確認方法</strong><br>
-        Google広告管理画面（ads.google.com）の右上に「<strong>xxx-xxxx-xxxx</strong>」形式で表示されています。
+      <p class="sub">Google広告を連携すると実際のデータと連携できます。後から設定することも可能です。</p>
+      
+      <div id="oauth_section" style="margin-bottom: 20px;">
+        <button class="btn btn-p" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px; background:#1e293b; border:1px solid var(--border)" onclick="startGoogleAdsOAuth()">
+          <span>🔑</span> 広告アカウント一覧を読み込む
+        </button>
       </div>
-      <label>Google広告 顧客ID（任意）</label>
-      <input type="text" id="w_cid" placeholder="例: 123-456-7890">
+
+      <div id="account_select_section" style="display:none; margin-bottom: 20px;">
+        <label>Google広告 顧客アカウントの選択</label>
+        <select id="w_cid_select" onchange="onAccountSelectChange()" style="width:100%; padding:11px 14px; background:#0f172a; border:1px solid var(--border); border-radius:8px; color:var(--t1);">
+          <option value="">-- アカウントを取得中 --</option>
+        </select>
+      </div>
+
+      <div id="manual_cid_section">
+        <label>Google広告 顧客ID（手動入力）</label>
+        <input type="text" id="w_cid" placeholder="例: 123-456-7890">
+      </div>
+
       <div class="btns">
         <button class="btn btn-g" onclick="go(3)">← 戻る</button>
         <button class="btn btn-p" onclick="go(5)">次へ →</button>
         <button class="btn btn-s" onclick="go(5)">スキップ</button>
       </div>
     </div>
+
 
     <!-- S5 -->
     <div class="step" id="s5">
@@ -221,7 +235,61 @@ function go(n) {
   cur = n; updProg();
   window.scrollTo({top:0,behavior:'smooth'});
   track(n);
+
+  if (n === 4) {
+    // STEP4遷移時に自動取得を走らせる
+    fetchAccessibleAccounts();
+  }
 }
+
+async function fetchAccessibleAccounts() {
+  const selectSec = document.getElementById('account_select_section');
+  const select = document.getElementById('w_cid_select');
+  select.innerHTML = '<option value="">-- アカウントを取得中 --</option>';
+  
+  try {
+    const r = await fetch(`/api/campaigns/accessible-customers?clinic_id=${clinicId}`, {credentials:'include'});
+    if (!r.ok) throw new Error('APIエラー');
+    const data = await r.json();
+    
+    if (data.success && data.customers && data.customers.length > 0) {
+      selectSec.style.display = 'block';
+      let html = '<option value="">-- アカウントを選択してください --</option>';
+      data.customers.forEach(c => {
+        const role = c.is_manager ? ' [MCC]' : '';
+        // IDにハイフンを挿入して整形表示
+        const rawId = c.id;
+        const formattedId = `${rawId.slice(0,3)}-${rawId.slice(3,6)}-${rawId.slice(6)}`;
+        html += `<option value="${rawId}">${c.name} (${formattedId})${role}</option>`;
+      });
+      select.innerHTML = html;
+      toast('広告アカウント一覧を取得しました！', 'success');
+      
+      // 最初のアカウントを選択
+      select.value = data.customers[0].id;
+      onAccountSelectChange();
+    } else {
+      selectSec.style.display = 'none';
+      toast('アクセス可能なアカウントが見つかりませんでした。手動でご入力ください。', 'info');
+    }
+  } catch (e) {
+    selectSec.style.display = 'none';
+    console.error(e);
+  }
+}
+
+function onAccountSelectChange() {
+  const select = document.getElementById('w_cid_select');
+  const cidInput = document.getElementById('w_cid');
+  if (select.value) {
+    cidInput.value = select.value;
+  }
+}
+
+function startGoogleAdsOAuth() {
+  fetchAccessibleAccounts();
+}
+
 
 function validateStep2() {
   if (!document.getElementById('w_name').value.trim()) { toast('クリニック名は必須です','error'); return; }

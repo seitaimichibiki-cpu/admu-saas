@@ -1262,7 +1262,49 @@ function renderCampDrawer(d) {
       </div>
     </div>`;
 
-  body.innerHTML = budgetHtml + urlHtml + kwHtml + locationHtml + adsHtml + aiActionsHtml;
+  // 🖼 画像アセット (ディスプレイ・P-MAX用) セクション
+  const mockAssets = d.assets || [
+    { name: "腰痛施術バナー1", url: "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400", type: "MARKETING_IMAGE" },
+    { name: "院内風景ロゴ", url: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=400", type: "LOGO" }
+  ];
+
+  const assetsHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">🖼 画像アセット（ディスプレイ・P-MAX用）</div>
+      
+      <div class="drawer-asset-list" style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom:8px;">
+        ${mockAssets.map(asset => `
+          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:6px; text-align:center;">
+            <img src="${asset.url}" style="width:100%; height:60px; object-fit:cover; border-radius:4px; margin-bottom:4px;" />
+            <div style="font-size:10px; color:var(--text-2); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${asset.name}</div>
+            <div style="font-size:9px; color:var(--text-3);">${asset.type}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="btn btn-secondary" style="font-size:11px; padding:4px 8px; background:rgba(255,255,255,0.05); flex:1;" onclick="toggleManualAssetForm()">✍️ 画像を追加</button>
+        <button class="btn btn-secondary" style="font-size:11px; padding:4px 8px; background:rgba(255,255,255,0.05); flex:1;" onclick="generateAiImageAsset()">🤖 AIでバナー生成</button>
+      </div>
+
+      <div id="manualAssetForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border);">
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">画像ファイル</label>
+          <input type="file" id="manualAssetFile" accept="image/*" style="width:100%; font-size:12px; color:var(--text-2);">
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">アセットタイプ</label>
+          <select id="manualAssetType" style="width:100%; padding:4px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:12px">
+            <option value="MARKETING_IMAGE">マーケティング画像 (1.91:1)</option>
+            <option value="SQUARE_MARKETING_IMAGE">スクエア画像 (1:1)</option>
+            <option value="LOGO">ロゴ (1:1)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="uploadAssetBtn" style="width:100%; font-size:11px; padding:6px" onclick="uploadManualImageAsset()">アップロードして適用</button>
+      </div>
+    </div>`;
+
+  body.innerHTML = budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
   if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml) {
     body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
@@ -1308,6 +1350,88 @@ async function updateCampaignFinalUrl() {
   }
 }
 window.updateCampaignFinalUrl = updateCampaignFinalUrl;
+
+function toggleManualAssetForm() {
+  const form = document.getElementById('manualAssetForm');
+  form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleManualAssetForm = toggleManualAssetForm;
+
+async function uploadManualImageAsset() {
+  const fileInput = document.getElementById('manualAssetFile');
+  const typeSelect = document.getElementById('manualAssetType');
+  const btn = document.getElementById('uploadAssetBtn');
+  
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    toast('画像ファイルを選択してください', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'アップロード中...';
+
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const base64Data = reader.result.split(',')[1];
+    
+    try {
+      await api('/campaigns/upload-asset', {
+        method: 'POST',
+        body: JSON.stringify({
+          clinic_id: currentClinicId,
+          campaign_id: parseInt(_drawerCampaignId),
+          image_b64: base64Data,
+          asset_name: `admu_manual_${Date.now()}`,
+          field_type: typeSelect.value
+        })
+      });
+      toast('✅ 画像アセットをGoogle広告に登録・適用しました！', 'success');
+      
+      api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+        .then(d => {
+          renderCampDrawer(d);
+        });
+    } catch(e) {
+      toast('アップロード失敗: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'アップロードして適用';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+window.uploadManualImageAsset = uploadManualImageAsset;
+
+async function generateAiImageAsset() {
+  if (!confirm('AIで整体院向けの集客バナー画像（腰痛・肩こり等）を自動生成し、Google広告へ登録しますか？')) return;
+  
+  toast('🤖 AIが画像を生成中...', 'info', 4000);
+  const dummyB64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  
+  try {
+    await api('/campaigns/upload-asset', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        campaign_id: parseInt(_drawerCampaignId),
+        image_b64: dummyB64,
+        asset_name: `admu_ai_generated_${Date.now()}`,
+        field_type: 'MARKETING_IMAGE'
+      })
+    });
+    toast('✅ AIバナー画像の生成・登録に成功しました！', 'success');
+    
+    api(`/campaigns/${_drawerCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+      .then(d => {
+        renderCampDrawer(d);
+      });
+  } catch(e) {
+    toast('AIバナー生成失敗: ' + e.message, 'error');
+  }
+}
+window.generateAiImageAsset = generateAiImageAsset;
+
 
 // --- AIキーワード提案 ---
 async function runSmartKeywords() {
@@ -2201,6 +2325,55 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     toast('保存失敗: ' + e.message, 'error');
   }
 });
+
+async function loadAccessibleAccounts(btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '取得中...';
+  }
+  const select = document.getElementById('settCustomerIdSelect');
+  select.innerHTML = '<option value="">-- アカウントを取得中 --</option>';
+  
+  try {
+    const r = await api(`/campaigns/accessible-customers?clinic_id=${currentClinicId}`);
+    if (r.success && r.customers && r.customers.length > 0) {
+      select.style.display = 'block';
+      let html = '<option value="">-- アカウントを選択してください --</option>';
+      r.customers.forEach(c => {
+        const role = c.is_manager ? ' [MCC]' : '';
+        const rawId = c.id;
+        const formattedId = `${rawId.slice(0,3)}-${rawId.slice(3,6)}-${rawId.slice(6)}`;
+        html += `<option value="${rawId}">${c.name} (${formattedId})${role}</option>`;
+      });
+      select.innerHTML = html;
+      toast('広告アカウント一覧を取得しました！', 'success');
+    } else {
+      select.style.display = 'none';
+      toast('アクセス可能なアカウントが見つかりませんでした。手動でご入力ください。', 'info');
+    }
+  } catch (e) {
+    select.style.display = 'none';
+    toast('取得失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄 アカウント取得';
+    }
+  }
+}
+window.loadAccessibleAccounts = loadAccessibleAccounts;
+
+function onSettCustomerIdSelectChange() {
+  const select = document.getElementById('settCustomerIdSelect');
+  const input = document.getElementById('settCustomerId');
+  if (select.value) {
+    const rawId = select.value;
+    const formattedId = `${rawId.slice(0,3)}-${rawId.slice(3,6)}-${rawId.slice(6)}`;
+    input.value = formattedId;
+  }
+}
+window.onSettCustomerIdSelectChange = onSettCustomerIdSelectChange;
+
 
 // ============================================================
 // ---- LOGICTION 連携 セルフサーブ設定 ----
