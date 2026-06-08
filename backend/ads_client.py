@@ -140,8 +140,14 @@ class AdsClient:
                     print(f"[AdsClient] → 設定画面から各認証情報を入力して保存してください。モックモードで動作継続します。")
                     self.mock_mode = True
                 else:
-                    self._client = GoogleAdsClient.load_from_dict(cfg)
-                    print(f"[AdsClient] ✅ 本番APIモードで初期化成功 (Customer: {self.customer_id})")
+                    # RESTトランスポートを使用: gRPCのbool省略問題を回避しJSON通信にする
+                    try:
+                        self._client = GoogleAdsClient.load_from_dict(cfg, transport="rest")
+                        print(f"[AdsClient] ✅ 本番APIモード(REST)で初期化成功 (Customer: {self.customer_id})")
+                    except TypeError:
+                        # 古いライブラリはtransport引数未対応 → gRPCフォールバック
+                        self._client = GoogleAdsClient.load_from_dict(cfg)
+                        print(f"[AdsClient] ✅ 本番APIモード(gRPC)で初期化成功 (Customer: {self.customer_id})")
             except Exception as e:
                 print(f"[AdsClient] API初期化失敗、モックモードに切替: {e}")
                 self._init_error = str(e)
@@ -272,26 +278,20 @@ class AdsClient:
         print(f"[AdsClient] バジェット作成: {budget_rn}")
 
         # ② キャンペーン作成（PAUSED）
-        # json_format.ParseDictでJSON→proto変換することで
-        # Falseのbool値もシリアライズ時に省略されなくなる
-        from google.protobuf import json_format as _jf
+        # RESTトランスポート使用時はJSON送信のためFalseも省略されない
         campaign_service = client.get_service("CampaignService")
         c_op = client.get_type("CampaignOperation")
-        campaign_dict = {
-            "name": config["campaign_name"],
-            "status": "PAUSED",
-            "advertisingChannelType": "SEARCH",
-            "campaignBudget": budget_rn,
-            "manualCpc": {},
-            "containsEuPoliticalAdvertising": False,
-            "networkSettings": {
-                "targetGoogleSearch": True,
-                "targetSearchNetwork": True,
-                "targetContentNetwork": False,
-                "targetPartnerSearchNetwork": False,
-            },
-        }
-        _jf.ParseDict(campaign_dict, c_op.create._pb, ignore_unknown_fields=True)
+        c = c_op.create
+        c.name = config["campaign_name"]
+        c.status = client.enums.CampaignStatusEnum[config.get("status", "PAUSED")]
+        c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
+        c.campaign_budget = budget_rn
+        c.manual_cpc.enhanced_cpc_enabled = False
+        c.contains_eu_political_advertising = False
+        c.network_settings.target_google_search = True
+        c.network_settings.target_search_network = True
+        c.network_settings.target_content_network = False
+        c.network_settings.target_partner_search_network = False
         c_resp = campaign_service.mutate_campaigns(customer_id=cid, operations=[c_op])
         campaign_rn = c_resp.results[0].resource_name
         campaign_id = campaign_rn.split("/")[-1]
