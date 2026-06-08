@@ -969,10 +969,61 @@ def manual_budget_allocate(req: ManualAllocationReq):
                 )
         conn.commit()
         
+    # 3. 最新のキャンペーン情報を引いて、allocations構造を作って返す
+    allocations = []
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, google_campaign_id, name, status, budget_micros FROM campaigns "
+            "WHERE clinic_id=? AND status='ENABLED'",
+            (req.clinic_id,)
+        ).fetchall()
+        
+    req_map = {item.campaign_id: item for item in req.allocations}
+    
+    today = datetime.date.today()
+    last_day = datetime.date(today.year, today.month % 12 + 1, 1) - datetime.timedelta(days=1) \
+               if today.month < 12 else datetime.date(today.year, 12, 31)
+    remaining_days = max(1, (last_day - today).days + 1)
+    
+    for row in rows:
+        c_id = str(row["id"])
+        g_id = str(row.get("google_campaign_id") or "")
+        req_item = req_map.get(c_id) or req_map.get(g_id)
+        if req_item:
+            daily_budget = req_item.daily_budget_yen
+            monthly_alloc = req_item.monthly_alloc_yen
+            share_pct = req_item.share_pct
+        else:
+            daily_budget = int((row["budget_micros"] or 0) / 1_000_000)
+            monthly_alloc = daily_budget * remaining_days
+            share_pct = round(monthly_alloc / req.monthly_budget_yen * 100, 1) if req.monthly_budget_yen > 0 else 0
+
+        allocations.append({
+            "campaign_id": row["id"],
+            "campaign_name": row["name"],
+            "status": row["status"],
+            "monthly_alloc_yen": monthly_alloc,
+            "daily_budget_yen": daily_budget,
+            "share_pct": share_pct,
+            "roi_grade": "A",
+            "reason": "手動配分設定。",
+        })
+        
+    allocation_result = {
+        "monthly_budget_yen": req.monthly_budget_yen,
+        "remaining_days": remaining_days,
+        "total_campaigns": len(rows),
+        "allocations": sorted(allocations, key=lambda x: -x["share_pct"]),
+        "ai_comment": "手動で予算割合が指定されています。指定された配分率に基づいて、各キャンペーンに予算が適用されています。",
+        "allocated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "is_manual": True
+    }
+        
     return {
         "success": True,
         "monthly_budget_yen": req.monthly_budget_yen,
         "ai_auto_allocate": False,
+        "allocation": allocation_result,
         "message": "手動配分を適用しました"
     }
 
@@ -6107,7 +6158,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-manual-alloc-v2', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-manual-alloc-v3', html)
 
 
         return HTMLResponse(

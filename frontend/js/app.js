@@ -4853,17 +4853,77 @@ async function addSingleNegativeKw(keyword) {
 async function loadBudgetPage() {
   try {
     const acc = await api(`/ads-account?clinic_id=${currentClinicId}`);
-    const saved = acc?.settings?.monthly_budget_yen;
-    if (saved) {
-      const inp = document.getElementById('monthlyBudgetInput');
-      if (inp) inp.value = saved;
-      // 最終配分日を表示
-      const lastEl = document.getElementById('lastAllocatedAt');
-      if (lastEl && acc?.settings?.last_allocated_at) {
+    const saved = acc?.settings?.monthly_budget_yen || 300000;
+    
+    const inp = document.getElementById('monthlyBudgetInput');
+    if (inp) inp.value = saved;
+    
+    const autoToggle = document.getElementById('autoAllocateToggle');
+    if (autoToggle) {
+      autoToggle.checked = acc?.settings?.ai_auto_allocate !== false;
+    }
+    
+    const lastEl = document.getElementById('lastAllocatedAt');
+    if (lastEl) {
+      if (acc?.settings?.ai_auto_allocate === false) {
+        lastEl.textContent = `手動割合配分が適用されています`;
+      } else if (acc?.settings?.last_allocated_at) {
         lastEl.textContent = `最終AI配分: ${acc.settings.last_allocated_at}`;
+      } else {
+        lastEl.textContent = '';
       }
     }
-  } catch(e) {}
+    
+    const data = await api(`/campaigns?clinic_id=${currentClinicId}`);
+    const rawList = (data.campaigns && data.campaigns.length)
+      ? data.campaigns
+      : (data.local_campaigns || []);
+    const local = rawList.filter(c => c.status === 'ENABLED');
+    
+    if (local.length > 0) {
+      const today = new Date();
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const remainingDays = Math.max(1, lastDay.getDate() - today.getDate() + 1);
+      
+      const allocations = local.map(c => {
+        const dailyBudget = microsToYenNum(c.budget_micros);
+        const monthlyAlloc = dailyBudget * remainingDays;
+        const sharePct = saved > 0 ? roundOneDecimal(monthlyAlloc / saved * 100) : 0;
+        return {
+          campaign_id: c.id,
+          campaign_name: c.name,
+          status: c.status,
+          monthly_alloc_yen: monthlyAlloc,
+          daily_budget_yen: dailyBudget,
+          share_pct: sharePct,
+          roi_grade: 'A',
+          reason: '現在の適用予算設定。'
+        };
+      });
+      
+      allocations.sort((a, b) => b.share_pct - a.share_pct);
+      
+      const simulatedAlloc = {
+        monthly_budget_yen: saved,
+        remaining_days: remainingDays,
+        total_campaigns: local.length,
+        allocations: allocations,
+        ai_comment: acc?.settings?.ai_auto_allocate === false 
+          ? "手動で予算割合が指定されています。指定された配分率に基づいて、各キャンペーンに予算が適用されています。"
+          : "AI最適配分が有効です。過去の獲得効率に基づいて予算が自動配分されています。",
+        allocated_at: acc?.settings?.last_allocated_at || '',
+        is_manual: acc?.settings?.ai_auto_allocate === false
+      };
+      
+      renderBudgetAllocation(simulatedAlloc, saved);
+    }
+  } catch(e) {
+    console.error('loadBudgetPage error:', e);
+  }
+}
+
+function roundOneDecimal(val) {
+  return Math.round(val * 10) / 10;
 }
 
 // 月間予算設定 + AI配分実行
@@ -5120,10 +5180,9 @@ window.applyManualAllocation = async function() {
 
     toast(`✅ 手動予算配分を適用しました。月予算¥${monthly.toLocaleString()}が適用されました`, 'success', 4000);
     document.getElementById('manualAllocArea').style.display = 'none';
-    document.getElementById('budgetAllocResult').style.display = 'none';
     
+    renderBudgetAllocation(d.allocation, monthly);
     loadBudget();
-    loadBudgetPage();
   } catch(e) {
     toast('適用エラー: ' + e.message, 'error');
   } finally {
@@ -5136,6 +5195,24 @@ function renderBudgetAllocation(alloc, monthlyBudget) {
   if (!alloc || !alloc.allocations) return;
   const resultEl = document.getElementById('budgetAllocResult');
   if (resultEl) resultEl.style.display = 'block';
+
+  // タイトルの書き換え
+  const titleEl = document.querySelector('#budgetAllocResult .card-title');
+  if (titleEl) {
+    titleEl.textContent = alloc.is_manual 
+      ? '📊 キャンペーン別配分（手動設定）' 
+      : '📊 キャンペーン別配分（AI決定）';
+  }
+
+  // AIコメントカードの表示制御
+  const commentCard = document.getElementById('aiCommentCard');
+  if (commentCard) {
+    if (alloc.is_manual) {
+      commentCard.style.display = 'none';
+    } else {
+      commentCard.style.display = 'block';
+    }
+  }
 
   // AIコメント
   const commentEl = document.getElementById('aiAllocComment');
