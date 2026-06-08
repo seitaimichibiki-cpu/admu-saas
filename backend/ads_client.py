@@ -223,6 +223,35 @@ class AdsClient:
             customer_id=self.customer_id, operations=[campaign_op])
         return resp.results[0].resource_name.split("/")[-1]
 
+    def _get_rest_access_token(self) -> str:
+        """REST API用のアクセストークンを取得する"""
+        import google.oauth2.credentials
+        import google.auth.transport.requests as ga_req
+        creds = google.oauth2.credentials.Credentials(
+            token=None,
+            refresh_token=self._refresh_token,
+            client_id=self._client_id,
+            client_secret=self._client_secret,
+            token_uri="https://oauth2.googleapis.com/token",
+        )
+        creds.refresh(ga_req.Request())
+        return creds.token
+
+    def _rest_post(self, endpoint: str, ops: list, access_token: str) -> dict:
+        """Google Ads REST API v23 へのPOSTリクエスト"""
+        import requests as rq
+        url = f"https://googleads.googleapis.com/v23/customers/{self.customer_id}/{endpoint}:mutate"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "developer-token": self._developer_token,
+            "login-customer-id": self._login_customer_id,
+            "Content-Type": "application/json",
+        }
+        resp = rq.post(url, headers=headers, json={"operations": ops})
+        if resp.status_code != 200:
+            raise Exception(f"REST APIエラー [{endpoint}]: {resp.text[:500]}")
+        return resp.json()
+
     def create_full_campaign_setup(self, config: dict) -> dict:
         """
         キャンペーン・広告グループ・キーワード・RSA広告文を一括作成。
@@ -263,120 +292,124 @@ class AdsClient:
             return result
 
         cid = self.customer_id
-        client = self._client
+
+        # REST API v23 を使用（gRPCのbool省略問題を回避）
+        # containsEuPoliticalAdvertising: gRPCではFalse=0がデフォルト値として省略されREQUIREDエラーになる
+        token = self._get_rest_access_token()
+        import requests as _rq
+        _rest_headers = {
+            "Authorization": f"Bearer {token}",
+            "developer-token": self._developer_token,
+            "login-customer-id": self._login_customer_id,
+            "Content-Type": "application/json",
+        }
 
         # ① バジェット作成
         daily_micros = config["daily_budget_yen"] * 1_000_000
-        budget_service = client.get_service("CampaignBudgetService")
-        b_op = client.get_type("CampaignBudgetOperation")
-        b = b_op.create
-        b.name = f"{config['campaign_name']}_budget_{random.randint(1000,9999)}"
-        b.amount_micros = daily_micros
-        b.delivery_method = client.enums.BudgetDeliveryMethodEnum.STANDARD
-        b_resp = budget_service.mutate_campaign_budgets(customer_id=cid, operations=[b_op])
-        budget_rn = b_resp.results[0].resource_name
+        r = self._rest_post("campaignBudgets", [{"create": {
+            "name": f"{config['campaign_name']}_budget_{random.randint(1000,9999)}",
+            "amountMicros": str(daily_micros),
+            "deliveryMethod": "STANDARD",
+        }}], token)
+        budget_rn = r["results"][0]["resourceName"]
         print(f"[AdsClient] バジェット作成: {budget_rn}")
 
-        # ② キャンペーン作成（PAUSED）
-        # RESTトランスポート使用時はJSON送信のためFalseも省略されない
-        campaign_service = client.get_service("CampaignService")
-        c_op = client.get_type("CampaignOperation")
-        c = c_op.create
-        c.name = config["campaign_name"]
-        c.status = client.enums.CampaignStatusEnum[config.get("status", "PAUSED")]
-        c.advertising_channel_type = client.enums.AdvertisingChannelTypeEnum.SEARCH
-        c.campaign_budget = budget_rn
-        c.manual_cpc.enhanced_cpc_enabled = False
-        c.contains_eu_political_advertising = False
-        c.network_settings.target_google_search = True
-        c.network_settings.target_search_network = True
-        c.network_settings.target_content_network = False
-        c.network_settings.target_partner_search_network = False
-        c_resp = campaign_service.mutate_campaigns(customer_id=cid, operations=[c_op])
-        campaign_rn = c_resp.results[0].resource_name
+        # ② キャンペーン作成（REST経由でEnumを明示的に指定）
+        # containsEuPoliticalAdvertising: 3 = DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING
+        r2 = self._rest_post("campaigns", [{"create": {
+            "name": config["campaign_name"],
+            "status": config.get("status", "PAUSED"),
+            "advertisingChannelType": "SEARCH",
+            "campaignBudget": budget_rn,
+            "manualCpc": {"enhancedCpcEnabled": False},
+            "containsEuPoliticalAdvertising": 3,
+            "networkSettings": {
+                "targetGoogleSearch": True,
+                "targetSearchNetwork": True,
+                "targetContentNetwork": False,
+                "targetPartnerSearchNetwork": False,
+            },
+        }}], token)
+        campaign_rn = r2["results"][0]["resourceName"]
         campaign_id = campaign_rn.split("/")[-1]
-        print(f"[AdsClient] キャンペーン作成: {campaign_rn}")
-
+        print(f"[AdsClient] キャンペーン作成: {campaign_rn} (id={campaign_id})")
 
         # ③ 位置ターゲティング（半径指定）
         if config.get("lat") and config.get("lon"):
-            cc_service = client.get_service("CampaignCriterionService")
-            loc_op = client.get_type("CampaignCriterionOperation")
-            loc = loc_op.create
-            loc.campaign = campaign_rn
-            loc.proximity.geo_point.longitude_in_micro_degrees = int(config["lon"] * 1_000_000)
-            loc.proximity.geo_point.latitude_in_micro_degrees = int(config["lat"] * 1_000_000)
-            loc.proximity.radius = config.get("radius_km", 20)
-            loc.proximity.radius_units = client.enums.ProximityRadiusUnitsEnum.KILOMETERS
             try:
-                cc_service.mutate_campaign_criteria(customer_id=cid, operations=[loc_op])
+                self._rest_post("campaignCriteria", [{"create": {
+                    "campaign": campaign_rn,
+                    "proximity": {
+                        "geoPoint": {
+                            "longitudeInMicroDegrees": int(config["lon"] * 1_000_000),
+                            "latitudeInMicroDegrees": int(config["lat"] * 1_000_000),
+                        },
+                        "radius": config.get("radius_km", 20),
+                        "radiusUnits": "KILOMETERS",
+                    }
+                }}], token)
                 print(f"[AdsClient] 位置ターゲティング設定完了")
             except Exception as e:
                 print(f"[AdsClient] 位置ターゲティング設定エラー（続行）: {e}")
 
         # ④ 広告グループ・キーワード・RSA作成
-        ag_service = client.get_service("AdGroupService")
-        kw_service = client.get_service("AdGroupCriterionService")
-        ad_service = client.get_service("AdGroupAdService")
         ad_groups_result = []
 
         for ag_config in config.get("ad_groups", []):
             # 広告グループ作成
-            ag_op = client.get_type("AdGroupOperation")
-            ag = ag_op.create
-            ag.name = ag_config["name"]
-            ag.campaign = campaign_rn
-            ag.status = client.enums.AdGroupStatusEnum.ENABLED
-            ag.type_ = client.enums.AdGroupTypeEnum.SEARCH_STANDARD
-            ag_resp = ag_service.mutate_ad_groups(customer_id=cid, operations=[ag_op])
-            ag_rn = ag_resp.results[0].resource_name
+            r4 = self._rest_post("adGroups", [{"create": {
+                "name": ag_config["name"],
+                "campaign": campaign_rn,
+                "status": "ENABLED",
+                "type": "SEARCH_STANDARD",
+                "cpcBidMicros": "200000000",
+            }}], token)
+            ag_rn = r4["results"][0]["resourceName"]
             ag_id = ag_rn.split("/")[-1]
             print(f"[AdsClient] 広告グループ作成: {ag_config['name']} ({ag_id})")
 
             # キーワード追加
-            kw_ops = []
-            for kw in ag_config.get("keywords", []):
-                kw_op = client.get_type("AdGroupCriterionOperation")
-                kc = kw_op.create
-                kc.ad_group = ag_rn
-                kc.status = client.enums.AdGroupCriterionStatusEnum.ENABLED
-                kc.keyword.text = kw["text"]
-                mt = kw.get("match_type", "PHRASE").upper()
-                kc.keyword.match_type = client.enums.KeywordMatchTypeEnum[mt]
-                kw_ops.append(kw_op)
+            kw_ops = [{"create": {
+                "adGroup": ag_rn,
+                "status": "ENABLED",
+                "keyword": {
+                    "text": kw["text"],
+                    "matchType": kw.get("match_type", "PHRASE").upper(),
+                },
+            }} for kw in ag_config.get("keywords", [])]
             kw_added = 0
             if kw_ops:
-                kw_resp = kw_service.mutate_ad_group_criteria(
-                    customer_id=cid, operations=kw_ops,
-                    partial_failure=True
-                )
-                kw_added = sum(1 for r in kw_resp.results if r.resource_name)
-                print(f"[AdsClient] キーワード追加: {kw_added}/{len(kw_ops)}件")
+                kw_url = f"https://googleads.googleapis.com/v23/customers/{cid}/adGroupCriteria:mutate"
+                kw_resp = _rq.post(kw_url, headers=_rest_headers, json={"operations": kw_ops})
+                if kw_resp.status_code == 200:
+                    kw_added = len(kw_resp.json().get("results", []))
+                    print(f"[AdsClient] キーワード追加: {kw_added}/{len(kw_ops)}件")
+                else:
+                    print(f"[AdsClient] キーワード追加エラー: {kw_resp.text[:200]}")
 
             # RSA広告文作成
-            ad_op = client.get_type("AdGroupAdOperation")
-            aga = ad_op.create
-            aga.ad_group = ag_rn
-            aga.status = client.enums.AdGroupAdStatusEnum.ENABLED
-            aga.ad.final_urls.append(config["final_url"])
+            # Google Ads RSAの文字数制限: ヘッドライン30文字以内、説明文45文字以内（全角）
+            headlines = [{"text": hl[:30]} for hl in ag_config.get("headlines", [])[:15]]
+            descriptions = [{"text": d[:45]} for d in ag_config.get("descriptions", [])[:4]]
 
-            for hl_text in ag_config.get("headlines", [])[:15]:
-                hl = client.get_type("AdTextAsset")
-                hl.text = hl_text[:30]
-                aga.ad.responsive_search_ad.headlines.append(hl)
-
-            for desc_text in ag_config.get("descriptions", [])[:4]:
-                desc = client.get_type("AdTextAsset")
-                desc.text = desc_text[:90]
-                aga.ad.responsive_search_ad.descriptions.append(desc)
-
-            try:
-                ad_service.mutate_ad_group_ads(customer_id=cid, operations=[ad_op])
+            ad_url = f"https://googleads.googleapis.com/v23/customers/{cid}/adGroupAds:mutate"
+            ad_resp = _rq.post(ad_url, headers=_rest_headers, json={"operations": [{"create": {
+                "adGroup": ag_rn,
+                "status": "ENABLED",
+                "ad": {
+                    "finalUrls": [config["final_url"]],
+                    "responsiveSearchAd": {
+                        "headlines": headlines,
+                        "descriptions": descriptions,
+                    }
+                }
+            }}]})
+            if ad_resp.status_code == 200:
                 ad_created = True
                 print(f"[AdsClient] RSA広告文作成完了: {ag_config['name']}")
-            except Exception as e:
+            else:
                 ad_created = False
-                print(f"[AdsClient] RSA広告文作成エラー: {e}")
+                print(f"[AdsClient] RSA広告文作成エラー: {ad_resp.text[:300]}")
 
             ad_groups_result.append({
                 "name": ag_config["name"],
