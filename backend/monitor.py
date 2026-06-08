@@ -281,6 +281,23 @@ def _run_auto_negative_keyword_scan(clinic_id: int):
             newly_added.append(term)
 
         if newly_added:
+            # Google広告 API に直接 Push する（自動適用）
+            push_kws = [{"keyword": t["search_term"], "match_type": "BROAD"} for t in newly_added]
+            try:
+                push_res = client.push_negative_keywords(push_kws)
+                print(f"[Monitor] Google広告への自動除外KW適用結果: {push_res}")
+                
+                # DB側も適用済み (applied = 1) に更新する
+                with db.get_conn() as conn:
+                    for t in newly_added:
+                        conn.execute(
+                            "UPDATE negative_keywords SET applied=1 WHERE clinic_id=? AND keyword=?",
+                            (clinic_id, t["search_term"])
+                        )
+                    conn.commit()
+            except Exception as e_push:
+                print(f"[Monitor] Google広告への自動除外KW適用エラー（DBには記録済み）: {e_push}")
+
             # LINE通知
             token = acc.get("line_channel_token", "")
             uid   = acc.get("line_user_id", "")
@@ -290,8 +307,8 @@ def _run_auto_negative_keyword_scan(clinic_id: int):
                     for t in newly_added[:5]  # 最大5件表示
                 )
                 msg = (
-                    f"🔍 除外KW自動スキャン完了\n"
-                    f"{len(newly_added)}件のムダ語句を除外リストに追加しました。\n\n"
+                    f"🔍 除外KW自動スキャン・適用完了\n"
+                    f"{len(newly_added)}件のムダ語句を除外リストに追加し、Google広告キャンペーンへ自動反映しました。\n\n"
                     f"{summary}\n\n"
                     f"AdMuダッシュボードで詳細を確認してください。"
                 )

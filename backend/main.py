@@ -1126,6 +1126,50 @@ def generate_ad_copy(req: AdCopyReq):
     db.increment_ai_quota(req.clinic_id, feature_name="generate_ad_copy")
     return {"success": True, "id": copy_id, **result}
 
+class ApplyAdCopyReq(BaseModel):
+    clinic_id: int = 1
+    campaign_id: int
+    ad_copy_id: int
+
+@app.post("/api/ad-copy/apply")
+def apply_ad_copy_endpoint(req: ApplyAdCopyReq):
+    """生成された広告コピーをGoogle広告キャンペーンに実適用する。"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM ad_copies WHERE id=? AND clinic_id=?",
+            (req.ad_copy_id, req.clinic_id)
+        ).fetchone()
+        
+    if not row:
+        raise HTTPException(404, "指定された広告コピーが見つかりません")
+    
+    ad_copy = dict(row)
+    headlines = [h.strip() for h in ad_copy.get("headlines", "").split("\n") if h.strip()]
+    descriptions = [d.strip() for d in ad_copy.get("descriptions", "").split("\n") if d.strip()]
+
+    campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
+    g_id = campaign.get("google_campaign_id")
+
+    if not g_id:
+        raise HTTPException(404, "Google広告キャンペーンIDが紐付いていません")
+
+    res = client.update_campaign_rsa(g_id, headlines, descriptions)
+    if not res.get("success"):
+        raise HTTPException(500, f"Google広告への適用失敗: {res.get('error')}")
+
+    from datetime import datetime
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE ad_copies SET status='active', applied_at=? WHERE id=? AND clinic_id=?",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), req.ad_copy_id, req.clinic_id)
+        )
+        conn.commit()
+
+    return {"success": True, "message": "広告文をGoogle広告に適用しました", "resource": res.get("resource")}
+
 @app.post("/api/analyze-report")
 async def analyze_report(clinic_id: int = 1):
     raise HTTPException(status_code=410, detail="This feature has been removed.")

@@ -1859,6 +1859,7 @@ document.getElementById('generateAdCopyBtn').addEventListener('click', async () 
     const data = await api('/ad-copy/generate', { method:'POST', body: JSON.stringify(body) });
     document.getElementById('adCopyLoading').style.display = 'none';
     document.getElementById('adCopyResult').style.display = 'block';
+    window._lastAdCopyId = data.id; // 生成されたIDをキャッシュ保存
     renderAdCopyPreview(data);
     loadAdCopyHistory();
     // ★ 心理トリガースコアを自動計算（生成直後に非同期実行）
@@ -1903,8 +1904,34 @@ function renderAdCopyPreview(data) {
   `;
 }
 
-document.getElementById('applyAdCopyBtn').addEventListener('click', () => {
-  toast('Google広告への反映にはAPIキーの設定が必要です。設定画面で本番モードに切替後に有効になります。', 'info', 5000);
+document.getElementById('applyAdCopyBtn').addEventListener('click', async () => {
+  const campaignId = document.getElementById('acCampaignSelect')?.value || null;
+  if (!campaignId) { toast('適用先のキャンペーンを選択してください', 'error'); return; }
+  
+  const latestCopyId = window._lastAdCopyId;
+  if (!latestCopyId) { toast('先に広告文を生成してください', 'error'); return; }
+
+  const btn = document.getElementById('applyAdCopyBtn');
+  btn.disabled = true;
+  btn.textContent = 'Google広告に適用中...';
+
+  try {
+    await api('/ad-copy/apply', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        campaign_id: parseInt(campaignId),
+        ad_copy_id: latestCopyId
+      })
+    });
+    toast('✅ 広告文をGoogle広告に適用しました！', 'success');
+    loadAdCopyHistory();
+  } catch(e) {
+    toast('適用失敗: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📢 Google広告へ反映';
+  }
 });
 
 async function loadAdCopyHistory() {
@@ -1931,6 +1958,7 @@ async function loadAdCopyHistory() {
             <td style="color:var(--text-2);font-size:12px">${(c.headlines||'').split('\n')[0]||'-'}</td>
             <td style="display:flex;gap:6px">
               ${c.status !== 'retired' ? `
+                <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--accent)" onclick="applyAdCopyFromHistory(${c.id}, ${c.campaign_id})">📢 適用</button>
                 <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px" onclick="setAbTestWinner(${c.id})">🏆 A/B採用</button>
                 <button class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--danger)" onclick="retireAdCopy(${c.id})">🗑 廃案</button>
               ` : '<span style="font-size:11px;color:var(--text-3)">廃案済み</span>'}
@@ -1940,6 +1968,27 @@ async function loadAdCopyHistory() {
       </table>`;
   } catch(e) {}
 }
+
+async function applyAdCopyFromHistory(copyId, campaignId) {
+  if (!campaignId) { toast('紐付くキャンペーンがありません', 'error'); return; }
+  if (!confirm('この広告文をキャンペーンのGoogle広告RSAに適用しますか？\n（既存のRSA見出しと説明文が更新されます）')) return;
+
+  try {
+    await api('/ad-copy/apply', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        campaign_id: parseInt(campaignId),
+        ad_copy_id: copyId
+      })
+    });
+    toast('✅ 広告文をGoogle広告に適用しました！', 'success');
+    loadAdCopyHistory();
+  } catch(e) {
+    toast('適用失敗: ' + e.message, 'error');
+  }
+}
+window.applyAdCopyFromHistory = applyAdCopyFromHistory;
 
 // ============================================================
 // アラート

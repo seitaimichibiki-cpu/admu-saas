@@ -1054,3 +1054,103 @@ class AdsClient:
         except Exception as e:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
+
+    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str], descriptions: list[str], final_url: str = None) -> dict:
+        """
+        キャンペーン内の広告グループのアクティブなRSA（レスポンシブ検索広告）を更新する。
+        既存のRSAを検索し、headlinesとdescriptionsを新しいもので上書きする。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions}")
+            return {"success": True, "mock": True}
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            _rest_headers = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+
+            import requests as _rq
+
+            # 1. キャンペーン内の最初の広告グループを取得
+            ag_query = f"SELECT ad_group.resource_name FROM ad_group WHERE campaign.id = '{google_campaign_id}' AND ad_group.status != 'REMOVED' LIMIT 1"
+            ag_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=_rest_headers, json={"query": ag_query})
+            ag_rn = None
+            if ag_resp.status_code == 200:
+                for batch in ag_resp.json():
+                    for row in batch.get("results", []):
+                        ag_rn = row.get("adGroup", {}).get("resourceName")
+                        break
+                    if ag_rn: break
+
+            if not ag_rn:
+                return {"success": False, "error": "キャンペーン内に広告グループが見つかりません"}
+
+            # 2. 既存の RSA 広告を検索
+            ad_query = f"SELECT ad_group_ad.ad.resource_name, ad_group_ad.ad.final_urls FROM ad_group_ad WHERE ad_group.resource_name = '{ag_rn}' AND ad_group_ad.status != 'REMOVED' AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD' LIMIT 1"
+            ad_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=_rest_headers, json={"query": ad_query})
+            ad_rn = None
+            existing_final_urls = []
+            if ad_resp.status_code == 200:
+                for batch in ad_resp.json():
+                    for row in batch.get("results", []):
+                        ad_rn = row.get("adGroupAd", {}).get("ad", {}).get("resourceName")
+                        existing_final_urls = row.get("adGroupAd", {}).get("ad", {}).get("finalUrls", [])
+                        break
+                    if ad_rn: break
+
+            # 3. 広告文を構成
+            formatted_headlines = [{"text": hl[:30]} for hl in headlines[:15]]
+            formatted_descriptions = [{"text": d[:45]} for d in descriptions[:4]]
+
+            final_urls = [final_url] if final_url else existing_final_urls
+            if not final_urls:
+                final_urls = ["https://michibiki-seitai.com"]
+
+            ad_payload = {
+                "finalUrls": final_urls,
+                "responsiveSearchAd": {
+                    "headlines": formatted_headlines,
+                    "descriptions": formatted_descriptions,
+                }
+            }
+
+            if ad_rn:
+                op = {
+                    "update": {
+                        "resourceName": ad_rn,
+                        "ad": ad_payload
+                    },
+                    "updateMask": "ad.responsive_search_ad.headlines,ad.responsive_search_ad.descriptions,ad.final_urls"
+                }
+                url = f"{BASE}/adGroupAds:mutate"
+                resp = _rq.post(url, headers=_rest_headers, json={"operations": [op]})
+                if resp.status_code == 200:
+                    print(f"[AdsClient] 既存のRSA広告を上書き更新しました: {ad_rn}")
+                    return {"success": True, "updated": True, "resource": ad_rn}
+                else:
+                    return {"success": False, "error": f"既存RSA更新エラー: {resp.text[:300]}"}
+            else:
+                op = {
+                    "create": {
+                        "adGroup": ag_rn,
+                        "status": "ENABLED",
+                        "ad": ad_payload
+                    }
+                }
+                url = f"{BASE}/adGroupAds:mutate"
+                resp = _rq.post(url, headers=_rest_headers, json={"operations": [op]})
+                if resp.status_code == 200:
+                    new_ad_rn = resp.json().get("results", [{}])[0].get("resourceName")
+                    print(f"[AdsClient] 新規にRSA広告を作成しました: {new_ad_rn}")
+                    return {"success": True, "created": True, "resource": new_ad_rn}
+                else:
+                    return {"success": False, "error": f"新規RSA作成エラー: {resp.text[:300]}"}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
