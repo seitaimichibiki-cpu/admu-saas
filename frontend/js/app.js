@@ -1815,40 +1815,42 @@ async function loadBudget() {
       : (data.local_campaigns || []);
     const local = rawList.filter(c => c.status !== 'REMOVED');
     const wrap = document.getElementById('budgetList');
-    if(!local.length) {
-      wrap.innerHTML = '<div class="card"><p style="text-align:center;color:var(--text-3);padding:32px">まだキャンペーンがありません</p></div>';
-      return;
+    if (wrap) {
+      if(!local.length) {
+        wrap.innerHTML = '<div class="card"><p style="text-align:center;color:var(--text-3);padding:32px">まだキャンペーンがありません</p></div>';
+        return;
+      }
+      wrap.innerHTML = `<div class="card">${local.map(c => {
+        const budgetYen = microsToYenNum(c.budget_micros);
+        const maxBudget = 10000;
+        const pct = Math.min(100, Math.round(budgetYen/maxBudget*100));
+        // IDはDBのid（数値）またはモックID（文字列）の両方を使う
+        const safeId = encodeURIComponent(c.id);
+        return `
+          <div class="budget-item">
+            <div class="budget-row">
+              <div class="budget-name">${c.name}${c.status === 'PAUSED' ? ' <span class="status-badge warning">停止中</span>' : ''}</div>
+              <div class="budget-input-wrap">
+                <span class="budget-prefix">¥</span>
+                <input type="number" class="budget-input" id="budget_${safeId}"
+                  value="${budgetYen}" min="0" step="500">
+                <span class="budget-prefix">/日</span>
+                <button class="btn btn-primary" onclick="saveBudget('${safeId}')">保存</button>
+              </div>
+            </div>
+            <div class="budget-progress">
+              <div class="progress-label">
+                <span>現在: ${microsToYen(c.budget_micros)}/日</span>
+                <span>${pct}% / 上限¥${maxBudget.toLocaleString()}</span>
+              </div>
+              <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" style="width:${pct}%"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}</div>`;
     }
-    wrap.innerHTML = `<div class="card">${local.map(c => {
-      const budgetYen = microsToYenNum(c.budget_micros);
-      const maxBudget = 10000;
-      const pct = Math.min(100, Math.round(budgetYen/maxBudget*100));
-      // IDはDBのid（数値）またはモックID（文字列）の両方を使う
-      const safeId = encodeURIComponent(c.id);
-      return `
-        <div class="budget-item">
-          <div class="budget-row">
-            <div class="budget-name">${c.name}${c.status === 'PAUSED' ? ' <span class="status-badge warning">停止中</span>' : ''}</div>
-            <div class="budget-input-wrap">
-              <span class="budget-prefix">¥</span>
-              <input type="number" class="budget-input" id="budget_${safeId}"
-                value="${budgetYen}" min="0" step="500">
-              <span class="budget-prefix">/日</span>
-              <button class="btn btn-primary" onclick="saveBudget('${safeId}')">保存</button>
-            </div>
-          </div>
-          <div class="budget-progress">
-            <div class="progress-label">
-              <span>現在: ${microsToYen(c.budget_micros)}/日</span>
-              <span>${pct}% / 上限¥${maxBudget.toLocaleString()}</span>
-            </div>
-            <div class="progress-bar-wrap">
-              <div class="progress-bar-fill" style="width:${pct}%"></div>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('')}</div>`;
   } catch(e) {
     toast('予算データ読み込み失敗: ' + e.message, 'error');
   }
