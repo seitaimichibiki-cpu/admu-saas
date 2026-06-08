@@ -878,9 +878,22 @@ def set_monthly_budget(req: MonthlyBudgetReq):
     result = {"success": True, "monthly_budget_yen": req.monthly_budget_yen, "ai_auto_allocate": req.ai_auto_allocate}
     if req.ai_auto_allocate:
         from ads_client import AdsClient
+        import datetime
         updated_acc = db.get_ads_account(req.clinic_id) or {}
         alloc = _run_ai_budget_allocation(req.clinic_id, req.monthly_budget_yen, AdsClient(updated_acc))
         result["allocation"] = alloc
+
+        # AI配分結果をDBの各キャンペーン予算に即座に反映させる
+        if alloc and "allocations" in alloc:
+            with db.get_conn() as conn:
+                for item in alloc["allocations"]:
+                    c_id = item.get("campaign_id")
+                    daily_micros = item.get("daily_budget_yen", 0) * 1_000_000
+                    conn.execute(
+                        "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
+                        (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c_id, str(c_id), req.clinic_id)
+                    )
+                conn.commit()
     return result
 
 @app.post("/api/budget/ai-allocate")
@@ -910,6 +923,50 @@ def update_budget(campaign_id: str, req: BudgetUpdateReq):
         return {"success": True, "budget_yen": req.budget_yen}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+class ManualAllocationItem(BaseModel):
+    campaign_id: str
+    daily_budget_yen: int
+    monthly_alloc_yen: int
+    share_pct: float
+
+class ManualAllocationReq(BaseModel):
+    clinic_id: int = 1
+    monthly_budget_yen: int
+    allocations: list[ManualAllocationItem]
+
+@app.post("/api/budget/manual-allocate")
+def manual_budget_allocate(req: ManualAllocationReq):
+    """ユーザーが手動で指定した配分に基づいて、各キャンペーンの予算を一括更新する。"""
+    import datetime
+    ads_cache.clear()
+    
+    # 1. ads_accountの設定を更新
+    acc = db.get_ads_account(req.clinic_id) or {}
+    db.save_ads_account(req.clinic_id, {
+        **acc,
+        "monthly_budget_yen": req.monthly_budget_yen,
+        "ai_auto_allocate": False,
+    })
+    
+    # 2. 各キャンペーンの予算を更新
+    with db.get_conn() as conn:
+        for item in req.allocations:
+            c_id = item.campaign_id
+            daily_micros = item.daily_budget_yen * 1_000_000
+            conn.execute(
+                "UPDATE campaigns SET budget_micros=?, updated_at=? WHERE (id=? OR google_campaign_id=?) AND clinic_id=?",
+                (daily_micros, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), c_id, str(c_id), req.clinic_id)
+            )
+        conn.commit()
+        
+    return {
+        "success": True,
+        "monthly_budget_yen": req.monthly_budget_yen,
+        "ai_auto_allocate": False,
+        "message": "手動配分を適用しました"
+    }
 
 
 
@@ -6025,7 +6082,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-budget-safety', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260609-manual-alloc', html)
 
 
         return HTMLResponse(

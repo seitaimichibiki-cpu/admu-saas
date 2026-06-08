@@ -443,25 +443,47 @@ function fmtPct(n) { return `${(n||0).toFixed(2)}%`; }
 function fmtDate(s) { return s ? s.replace('T',' ').slice(0,16) : '-'; }
 
 async function api(path, options={}) {
-  try {
-    // 初回APIコールの前にCSRFトークンを取得
-    if (!getCookie('csrf_token') && (options.method || 'GET') !== 'GET') {
-      await fetch(API + '/csrf-token', { credentials: 'include' });
+  let retryCount = 0;
+  const maxRetries = 1;
+
+  async function execute() {
+    try {
+      // 初回APIコールの前にCSRFトークンを取得
+      if (!getCookie('csrf_token') && (options.method || 'GET') !== 'GET') {
+        await fetch(API + '/csrf-token', { credentials: 'include' });
+      }
+      const mergedHeaders = {
+        ...authHeaders(),
+        ...(options.headers || {})
+      };
+      const { headers, ...restOptions } = options;
+      const res = await fetch(API + path, {
+        headers: mergedHeaders,
+        credentials: 'include',
+        cache: 'no-store',
+        ...restOptions,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({}));
+        const errMsg = err.detail || err.error || `HTTP ${res.status}`;
+        
+        // CSRFエラー（403等）かつリトライがまだの場合、CSRFトークンを再取得してリトライ
+        if (res.status === 403 && (errMsg.includes('CSRF') || errMsg.includes('token') || errMsg.includes('トークン')) && retryCount < maxRetries) {
+          retryCount++;
+          console.warn('[API] CSRFトークンエラーのため、トークンを再取得してリトライします...');
+          await fetch(API + '/csrf-token', { credentials: 'include' });
+          return await execute();
+        }
+        
+        throw new Error(errMsg);
+      }
+      return await res.json();
+    } catch(e) {
+      throw e;
     }
-    const res = await fetch(API + path, {
-      headers: authHeaders(),
-      credentials: 'include',
-      cache: 'no-store',
-      ...options,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(()=>({}));
-      throw new Error(err.detail || err.error || `HTTP ${res.status}`);
-    }
-    return await res.json();
-  } catch(e) {
-    throw e;
   }
+
+  return await execute();
 }
 
 function toast(msg, type='info', duration=3500) {
@@ -4842,7 +4864,8 @@ async function loadBudgetPage() {
 }
 
 // 月間予算設定 + AI配分実行
-window.setAndAllocateBudget = async function setAndAllocateBudget() {
+// 月間予算設定 + AI配分実行
+window.setAndAllocateBudget = async function setAndAllocateBudget(isAi = true) {
   const inp = document.getElementById('monthlyBudgetInput');
   const btn = document.getElementById('budgetAllocBtn');
   const loading = document.getElementById('budgetAllocLoading');
@@ -4854,6 +4877,10 @@ window.setAndAllocateBudget = async function setAndAllocateBudget() {
     toast('月間予算は10,000円以上で入力してください', 'error'); return;
   }
 
+  // 手動配分エリアは非表示にする
+  const manualArea = document.getElementById('manualAllocArea');
+  if (manualArea) manualArea.style.display = 'none';
+
   btn.disabled = true;
   btn.textContent = '⏳ AIが計算中...';
   if (loading) loading.style.display = 'block';
@@ -4862,23 +4889,243 @@ window.setAndAllocateBudget = async function setAndAllocateBudget() {
   try {
     const d = await api('/budget/monthly-target', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         clinic_id: currentClinicId,
         monthly_budget_yen: monthly,
-        ai_auto_allocate: autoToggle?.checked !== false,
+        ai_auto_allocate: isAi && (autoToggle?.checked !== false),
       }),
     });
 
     if (!d.success) throw new Error(d.error || '配分失敗');
+    
+    // 手動フォールバックメッセージを削除
+    document.getElementById('budgetAllocErrorFallbackMsg')?.remove();
+    
+    // 手動枠の赤い警告等を戻す
+    const budgetListWrap = document.getElementById('budgetList')?.closest('.card');
+    if (budgetListWrap) {
+      budgetListWrap.style.border = '';
+      budgetListWrap.style.background = '';
+    }
+
     renderBudgetAllocation(d.allocation, monthly);
     toast(`✅ 月間予算¥${monthly.toLocaleString()}を設定。AIが配分しました`, 'success', 4000);
   } catch(e) {
     toast('配分エラー: ' + e.message, 'error');
+    
+    // フォールバック表示と自動スクロール
+    const budgetListWrap = document.getElementById('budgetList')?.closest('.card');
+    if (budgetListWrap) {
+      budgetListWrap.style.border = '2px solid rgba(239, 68, 68, 0.4)';
+      budgetListWrap.style.background = 'rgba(239, 68, 68, 0.02)';
+      
+      document.getElementById('budgetAllocErrorFallbackMsg')?.remove();
+      
+      const errMsgEl = document.createElement('div');
+      errMsgEl.id = 'budgetAllocErrorFallbackMsg';
+      errMsgEl.style.cssText = 'color:#fca5a5; font-size:12px; margin-top:8px; margin-bottom:12px; padding:12px; background:rgba(239,68,68,0.15); border-radius:6px; line-height:1.6; border:1px solid rgba(239,68,68,0.2)';
+      errMsgEl.innerHTML = `⚠️ AI配分でエラーが発生しました (${e.message})。<br>AI配分機能が利用できない場合でも、以下の手動設定フォームからキャンペーンごとの日予算を直接設定して保存できます。`;
+      
+      const budgetListEl = document.getElementById('budgetList');
+      if (budgetListEl) {
+        budgetListEl.parentNode.insertBefore(errMsgEl, budgetListEl);
+      }
+      budgetListWrap.scrollIntoView({ behavior: 'smooth' });
+    }
   } finally {
     btn.disabled = false;
-    btn.textContent = '🤖 AIで最適配分する';
+    btn.textContent = '🤖 AIで最適配分';
     if (loading) loading.style.display = 'none';
+  }
+};
+
+// ── 手動割合配分ロジック ──────────────────────────────
+let manualAllocCampaigns = [];
+
+window.startManualAllocation = async function startManualAllocation() {
+  const inp = document.getElementById('monthlyBudgetInput');
+  const monthly = parseInt(inp?.value || '0', 10);
+  if (!monthly || monthly < 10000) {
+    toast('まずは月間予算を10,000円以上で入力してください', 'error');
+    return;
+  }
+
+  // AI結果エリアは非表示
+  document.getElementById('budgetAllocResult').style.display = 'none';
+  document.getElementById('manualAllocArea').style.display = 'block';
+  
+  // フォールバックエラー表示を消す
+  document.getElementById('budgetAllocErrorFallbackMsg')?.remove();
+
+  try {
+    const data = await api(`/campaigns?clinic_id=${currentClinicId}`);
+    const rawList = (data.campaigns && data.campaigns.length)
+      ? data.campaigns
+      : (data.local_campaigns || []);
+    manualAllocCampaigns = rawList.filter(c => c.status !== 'REMOVED');
+
+    if (!manualAllocCampaigns.length) {
+      toast('キャンペーンがありません', 'error');
+      cancelManualAllocation();
+      return;
+    }
+
+    // 残り日数を計算
+    const today = new Date();
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const remainingDays = Math.max(1, lastDay.getDate() - today.getDate() + 1);
+
+    document.getElementById('manualAllocSummaryMeta').textContent = `月間予算 ¥${monthly.toLocaleString()} | 残り${remainingDays}日 | ${manualAllocCampaigns.length}キャンペーン`;
+
+    // 初期配分率は均等
+    const count = manualAllocCampaigns.length;
+    const defaultPct = Math.floor(100 / count);
+    let totalAssigned = 0;
+
+    manualAllocCampaigns.forEach((c, idx) => {
+      if (idx === count - 1) {
+        c.share_pct = 100 - totalAssigned;
+      } else {
+        c.share_pct = defaultPct;
+        totalAssigned += defaultPct;
+      }
+    });
+
+    renderManualAllocList(monthly, remainingDays);
+    updateManualAllocTotal();
+  } catch(e) {
+    toast('キャンペーン情報の読み込みに失敗しました: ' + e.message, 'error');
+    cancelManualAllocation();
+  }
+};
+
+function renderManualAllocList(monthly, remainingDays) {
+  const container = document.getElementById('manualAllocList');
+  if (!container) return;
+
+  container.innerHTML = manualAllocCampaigns.map((c, idx) => {
+    const allocYen = Math.round(monthly * (c.share_pct / 100));
+    const dailyYen = Math.max(500, Math.round(allocYen / remainingDays));
+    const safeId = encodeURIComponent(c.id);
+
+    return `
+      <div style="background:rgba(255,255,255,0.02); padding:14px; border-radius:8px; border:1px solid rgba(255,255,255,0.05)">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px">
+          <span style="font-weight:700; font-size:14px; color:var(--text-1)">${c.name}</span>
+          <div style="display:flex; align-items:center; gap:8px">
+            <span style="font-size:12px; color:var(--text-3)">配分割合:</span>
+            <input type="number" id="manual_pct_${safeId}" class="budget-input" style="width:70px; text-align:right; padding:4px 8px"
+              value="${c.share_pct}" min="0" max="100" step="1" onchange="onManualPctChange('${safeId}')" oninput="onManualPctChange('${safeId}')">
+            <span style="font-size:13px; font-weight:700; color:var(--text-2)">%</span>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-3)">
+          <span>月間配分額: <strong style="color:#c8a97a" id="manual_alloc_yen_${safeId}">¥${allocYen.toLocaleString()}</strong></span>
+          <span>日予算（目安）: <strong style="color:var(--text-2)" id="manual_daily_yen_${safeId}">¥${dailyYen.toLocaleString()}</strong></span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.onManualPctChange = function(campaignId) {
+  const input = document.getElementById(`manual_pct_${campaignId}`);
+  let val = parseFloat(input?.value || '0');
+  if (val < 0) val = 0;
+  if (val > 100) val = 100;
+
+  const camp = manualAllocCampaigns.find(c => String(c.id) === String(campaignId));
+  if (camp) {
+    camp.share_pct = val;
+  }
+
+  const inp = document.getElementById('monthlyBudgetInput');
+  const monthly = parseInt(inp?.value || '0', 10);
+  const today = new Date();
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const remainingDays = Math.max(1, lastDay.getDate() - today.getDate() + 1);
+
+  const allocYen = Math.round(monthly * (val / 100));
+  const dailyYen = Math.max(500, Math.round(allocYen / remainingDays));
+
+  const allocEl = document.getElementById(`manual_alloc_yen_${campaignId}`);
+  if (allocEl) allocEl.textContent = `¥${allocYen.toLocaleString()}`;
+
+  const dailyEl = document.getElementById(`manual_daily_yen_${campaignId}`);
+  if (dailyEl) dailyEl.textContent = `¥${dailyYen.toLocaleString()}`;
+
+  updateManualAllocTotal();
+};
+
+function updateManualAllocTotal() {
+  const total = manualAllocCampaigns.reduce((sum, c) => sum + (c.share_pct || 0), 0);
+  const display = document.getElementById('manualAllocTotalPct');
+  const applyBtn = document.getElementById('manualAllocApplyBtn');
+
+  if (display) {
+    display.textContent = `${total.toFixed(0)}% / 100%`;
+    if (Math.abs(total - 100) < 0.1) {
+      display.style.color = '#10b981';
+      if (applyBtn) applyBtn.disabled = false;
+    } else {
+      display.style.color = '#ef4444';
+      if (applyBtn) applyBtn.disabled = true;
+    }
+  }
+}
+
+window.cancelManualAllocation = function() {
+  document.getElementById('manualAllocArea').style.display = 'none';
+  loadBudgetPage();
+};
+
+window.applyManualAllocation = async function() {
+  const inp = document.getElementById('monthlyBudgetInput');
+  const monthly = parseInt(inp?.value || '0', 10);
+  const applyBtn = document.getElementById('manualAllocApplyBtn');
+
+  const today = new Date();
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const remainingDays = Math.max(1, lastDay.getDate() - today.getDate() + 1);
+
+  applyBtn.disabled = true;
+  applyBtn.textContent = '⏳ 保存中...';
+
+  try {
+    const allocations = manualAllocCampaigns.map(c => {
+      const allocYen = Math.round(monthly * (c.share_pct / 100));
+      const dailyYen = Math.max(500, Math.round(allocYen / remainingDays));
+      return {
+        campaign_id: String(c.id),
+        daily_budget_yen: dailyYen,
+        monthly_alloc_yen: allocYen,
+        share_pct: c.share_pct
+      };
+    });
+
+    const d = await api('/budget/manual-allocate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clinic_id: currentClinicId,
+        monthly_budget_yen: monthly,
+        allocations: allocations
+      })
+    });
+
+    if (!d.success) throw new Error(d.error || '手動配分の適用に失敗しました');
+
+    toast(`✅ 手動予算配分を適用しました。月予算¥${monthly.toLocaleString()}が適用されました`, 'success', 4000);
+    document.getElementById('manualAllocArea').style.display = 'none';
+    document.getElementById('budgetAllocResult').style.display = 'none';
+    
+    loadBudget();
+    loadBudgetPage();
+  } catch(e) {
+    toast('適用エラー: ' + e.message, 'error');
+  } finally {
+    applyBtn.disabled = false;
+    applyBtn.textContent = '配分を決定して適用';
   }
 };
 
