@@ -3035,7 +3035,10 @@ def serve_favicon_ico():
 def serve_admin():
     admin_path = os.path.join(FRONTEND_DIR, "admin.html")
     if os.path.exists(admin_path):
-        return FileResponse(admin_path, media_type="text/html")
+        from fastapi.responses import FileResponse as FR
+        resp = FR(admin_path, media_type="text/html")
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return resp
     raise HTTPException(404, "admin.html not found")
 
 @app.get("/onboarding", include_in_schema=False)
