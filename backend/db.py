@@ -1092,11 +1092,11 @@ def get_admin_overview(start_date: str = None, end_date: str = None):
                 """, (cid,) + tuple(params)).fetchone()
 
             if USE_PG:
-                p7  = _perf("date::date >= CURRENT_DATE - INTERVAL '7 days'")
-                p30 = _perf("date::date >= CURRENT_DATE - INTERVAL '30 days'")
-                pm  = _perf("to_char(date::date, 'YYYY-MM') = to_char(NOW(), 'YYYY-MM')")
-                p_ty = _perf("EXTRACT(YEAR FROM date::date) = EXTRACT(YEAR FROM NOW())")
-                p_ly = _perf("EXTRACT(YEAR FROM date::date) = EXTRACT(YEAR FROM NOW()) - 1")
+                p7  = _perf("date >= to_char(CURRENT_DATE - INTERVAL '7 days', 'YYYY-MM-DD')")
+                p30 = _perf("date >= to_char(CURRENT_DATE - INTERVAL '30 days', 'YYYY-MM-DD')")
+                pm  = _perf("substring(date from 1 for 7) = to_char(NOW(), 'YYYY-MM')")
+                p_ty = _perf("substring(date from 1 for 4) = to_char(NOW(), 'YYYY')")
+                p_ly = _perf("substring(date from 1 for 4) = to_char(NOW() - INTERVAL '1 year', 'YYYY')")
             else:
                 p7  = _perf("date >= date('now','-7 days')")
                 p30 = _perf("date >= date('now','-30 days')")
