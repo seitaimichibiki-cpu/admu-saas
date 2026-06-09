@@ -740,7 +740,7 @@ function switchPage(page) {
         else if (tabId === 'campaign-negative') { loadNegativeKeywords(); updateCampaignSelects(); }
       }
     },
-    budget: loadBudget,
+    budget: () => { loadBudget(); loadBudgetPage(); },
     'bid-rules': loadBidRules,
     personas: loadPersonas,
     'lp-diagnosis': loadLpDiag,
@@ -5149,23 +5149,27 @@ async function addSingleNegativeKw(keyword) {
 // 予算ページを開いた時、保存済み月間予算を復元して表示
 async function loadBudgetPage() {
   try {
-    const acc = await api(`/ads-account?clinic_id=${currentClinicId}`);
-    const saved = acc?.settings?.monthly_budget_yen || 300000;
+    const data = await api(`/settings?clinic_id=${currentClinicId}`);
+    const s = data?.settings || {};
+    const saved = s.monthly_budget_yen || 300000;
+    
+    // グローバル変数にも同期しておく
+    monthlyBudgetYen = saved;
     
     const inp = document.getElementById('monthlyBudgetInput');
     if (inp) inp.value = saved;
     
     const autoToggle = document.getElementById('autoAllocateToggle');
     if (autoToggle) {
-      autoToggle.checked = acc?.settings?.ai_auto_allocate !== false;
+      autoToggle.checked = s.ai_auto_allocate !== false;
     }
     
     const lastEl = document.getElementById('lastAllocatedAt');
     if (lastEl) {
-      if (acc?.settings?.ai_auto_allocate === false) {
+      if (s.ai_auto_allocate === false) {
         lastEl.textContent = `手動割合配分が適用されています`;
-      } else if (acc?.settings?.last_allocated_at) {
-        lastEl.textContent = `最終AI配分: ${acc.settings.last_allocated_at}`;
+      } else if (s.last_allocated_at) {
+        lastEl.textContent = `最終AI配分: ${s.last_allocated_at}`;
       } else {
         lastEl.textContent = '';
       }
@@ -5205,11 +5209,11 @@ async function loadBudgetPage() {
         remaining_days: remainingDays,
         total_campaigns: local.length,
         allocations: allocations,
-        ai_comment: acc?.settings?.ai_auto_allocate === false 
+        ai_comment: s.ai_auto_allocate === false 
           ? "手動で予算割合が指定されています。指定された配分率に基づいて、各キャンペーンに予算が適用されています。"
           : "AI最適配分が有効です。過去の獲得効率に基づいて予算が自動配分されています。",
-        allocated_at: acc?.settings?.last_allocated_at || '',
-        is_manual: acc?.settings?.ai_auto_allocate === false
+        allocated_at: s.last_allocated_at || '',
+        is_manual: s.ai_auto_allocate === false
       };
       
       renderBudgetAllocation(simulatedAlloc, saved);
