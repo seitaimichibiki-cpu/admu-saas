@@ -925,11 +925,11 @@ def set_monthly_budget(req: MonthlyBudgetReq):
                     if local_id is not None:
                         row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE id=? AND clinic_id=?", (local_id, req.clinic_id)).fetchone()
                         if row:
-                            google_camp_id = row[0]
+                            google_camp_id = row["google_campaign_id"]
                     if not google_camp_id:
                         row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE google_campaign_id=? AND clinic_id=?", (str(c_id), req.clinic_id)).fetchone()
                         if row:
-                            google_camp_id = row[0]
+                            google_camp_id = row["google_campaign_id"]
                             
                     if google_camp_id:
                         if str(google_camp_id).isdigit():
@@ -1009,11 +1009,11 @@ def manual_budget_allocate(req: ManualAllocationReq):
             if local_id is not None:
                 row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE id=? AND clinic_id=?", (local_id, req.clinic_id)).fetchone()
                 if row:
-                    google_camp_id = row[0]
+                    google_camp_id = row["google_campaign_id"]
             if not google_camp_id:
                 row = conn.execute("SELECT google_campaign_id FROM campaigns WHERE google_campaign_id=? AND clinic_id=?", (str(c_id), req.clinic_id)).fetchone()
                 if row:
-                    google_camp_id = row[0]
+                    google_camp_id = row["google_campaign_id"]
                     
             if google_camp_id:
                 if str(google_camp_id).isdigit():
