@@ -1320,6 +1320,18 @@ def generate_ad_copy(req: AdCopyReq):
         "target_desired_outcome": acc.get("target_desired_outcome"),
     })
 
+    # キャンペーンのキーワードを取得して注入
+    campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
+    g_id = campaign.get("google_campaign_id")
+    keywords = []
+    if g_id:
+        try:
+            client = _get_ads_client(acc, "google")
+            keywords = client.get_campaign_keywords(g_id)
+        except Exception as e:
+            print(f"[main.py] 生成用キーワード取得失敗: {e}")
+    context["keywords"] = keywords
+
     generator = adcopy.AdCopyGenerator(api_key=gemini_key)
     result = generator.generate(context)
     copy_id = db.save_ad_copy(req.clinic_id, {

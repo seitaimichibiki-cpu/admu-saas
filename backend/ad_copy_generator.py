@@ -68,9 +68,8 @@ GENERATION_PROMPT = """
 ## ルール
 - **見出し（headlines）は必ず15個、説明文（descriptions）は必ず4個フルで生成してください。数が不足するとGoogle広告の評価が下がります。**
 - 見出しは各半角30文字（日本語全角で15文字）以内、説明文は各半角90文字（日本語全角で45文字）以内（句読点含む）。
-- **ユーザーがよく検索する「地域名」や「ターゲット悩み」などの重要キーワードを組み合わせた見出しを、最初の3つ以上に必ず含めてください。**
-  - 例：地域が「藤枝」、悩みが「腰痛」の場合、「藤枝市の腰痛整体院」「腰痛を藤枝で改善するなら」等。
-- それぞれの見出しは独自の切り口（実績、価格・初回特典、アクセスの良さ、個室などの環境、悩みの解消、予約の手軽さ等）で記述し、重複しないようにしてください。
+- **「登録キーワード」に記載されている言葉を、見出しの最初の5つ以上にそれぞれ必ず含めてください。スペースが入っているキーワードは、見出しに入れる際はスペースを詰めても構いません（例：「腰痛 整体」→「腰痛整体」）。これにより、Google広告での広告有効性が劇的に高まります。**
+- それぞれの見出しは独自の切り口（実績、価格・初回特典、アクセスの良さ、個室などの環境、悩みの解消、予約の手軽さ等）で記述し、重複や類似した見出し（単語の順番を入れ替えただけなど）を避け、バリエーションを豊かにしてください。
 - 広告ポリシーに準拠（証明できない「最高」「No.1」「日本一」などは使用禁止）。
 - 自然な日本語で、ユーザーの検索意図に沿った内容。
 - 必ずJSON形式のみで返答すること。
@@ -108,12 +107,16 @@ class AdCopyGenerator:
             if context.get("target_pain_point"): persona_section += f"- 深い悩み: {context.get('target_pain_point')}\n"
             if context.get("target_desired_outcome"): persona_section += f"- 求める理想（ゴール）: {context.get('target_desired_outcome')}\n"
 
+        keywords_list = context.get("keywords", [])
+        keywords_str = ", ".join(keywords_list) if keywords_list else "なし"
+
         prompt = GENERATION_PROMPT.format(
             clinic_name=context.get("clinic_name", "〇〇整体院"),
             region=context.get("region", ""),
             appeal_points=context.get("appeal_points", ""),
             target_issues=context.get("target_issues", "腰痛、肩こり"),
             extra_instructions=context.get("extra_instructions", "なし"),
+            keywords=keywords_str,
             persona_section=persona_section
         )
         try:

@@ -1524,6 +1524,58 @@ class AdsClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def _add_url_parameter(self, url: str, param: str) -> str:
+        """URLにクエリパラメータを追加する。アンカー（#）がある場合はその前に挿入する。"""
+        if not url:
+            return url
+        parts = url.split('#')
+        base_url = parts[0]
+        anchor = f"#{parts[1]}" if len(parts) > 1 else ""
+        if '?' in base_url:
+            new_url = f"{base_url}&{param}{anchor}"
+        else:
+            new_url = f"{base_url}?{param}{anchor}"
+        return new_url
+
+    def get_campaign_keywords(self, google_campaign_id: str) -> list[str]:
+        """キャンペーンに設定されているアクティブなキーワードのテキスト一覧を取得する"""
+        if self.mock_mode:
+            return ["腰痛 整体", "藤枝 腰痛", "腰痛 治療 近く"]
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+            import requests as _rq
+            query = f"""
+                SELECT ad_group_criterion.keyword.text
+                FROM ad_group_criterion
+                WHERE campaign.id = '{google_campaign_id}'
+                  AND ad_group_criterion.type = 'KEYWORD'
+                  AND ad_group_criterion.status = 'ENABLED'
+                  AND ad_group.status = 'ENABLED'
+                LIMIT 30
+            """
+            resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": query})
+            keywords = []
+            if resp.status_code == 200:
+                for batch in resp.json():
+                    for row in batch.get("results", []):
+                        kw = row.get("adGroupCriterion", {}).get("keyword", {}).get("text")
+                        if kw:
+                            keywords.append(kw)
+            else:
+                print(f"[AdsClient] キーワード取得エラー REST: {resp.text}")
+            return keywords
+        except Exception as e:
+            print(f"[AdsClient] キーワード取得エラー: {e}")
+            return []
+
     def link_business_name_and_sitelinks(self, google_campaign_id: str, clinic_name: str, final_url: str) -> dict:
         """
         キャンペーンに対して、クリニックの「ビジネス名」アセットと、予約用「サイトリンク」アセットを自動的に紐付け・登録する。
@@ -1606,12 +1658,14 @@ class AdsClient:
                 {
                     "text": "オンライン予約はこちら",
                     "desc1": "24時間LINEから簡単予約受付中",
-                    "desc2": "初めての方もお気軽にご相談ください"
+                    "desc2": "初めての方もお気軽にご相談ください",
+                    "param": "sl=reserve"
                 },
                 {
                     "text": "当院の特徴・施術メニュー",
                     "desc1": "根本改善を目指す独自の整体技術",
-                    "desc2": "腰痛や肩こりなど重症例に対応"
+                    "desc2": "腰痛や肩こりなど重症例に対応",
+                    "param": "sl=menu"
                 }
             ]
 
@@ -1640,7 +1694,7 @@ class AdsClient:
                                 "linkText": sl_text,
                                 "description1": sl["desc1"][:35],
                                 "description2": sl["desc2"][:35],
-                                "finalUrls": [final_url]
+                                "finalUrls": [self._add_url_parameter(final_url, sl["param"])]
                             }
                         }
                     }
