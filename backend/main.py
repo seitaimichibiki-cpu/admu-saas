@@ -1146,10 +1146,10 @@ def _run_ai_budget_allocation(clinic_id: int, monthly_budget_yen: int, ads_clien
 
         if not ads_client.mock_mode:
             # ---- 本番API: 実績データからROIスコアを算出 ----
-            real_cvr  = float(cp.get("cvr", 0))
-            real_ctr  = float(cp.get("ctr", 0))
-            real_conv = float(cp.get("conversions", 0))
-            real_cost = float(cp.get("cost_micros", 0)) / 1_000_000
+            real_cvr  = float(cp.get("cvr") if cp.get("cvr") is not None else 0)
+            real_ctr  = float(cp.get("ctr") if cp.get("ctr") is not None else 0)
+            real_conv = float(cp.get("conversions") if cp.get("conversions") is not None else 0)
+            real_cost = float(cp.get("cost_micros") if cp.get("cost_micros") is not None else 0) / 1_000_000
             cpa_est   = round(real_cost / real_conv) if real_conv > 0 else 15000
             cvr_est   = round(real_cvr, 2)
             ctr_est   = round(real_ctr, 2)

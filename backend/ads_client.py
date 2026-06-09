@@ -206,14 +206,14 @@ class AdsClient:
                 "id": str(c.id),
                 "name": c.name,
                 "status": c.status.name,
-                "budget_micros": row.campaign_budget.amount_micros,
-                "impressions": m.impressions,
-                "clicks": m.clicks,
-                "ctr": round(m.ctr * 100, 2),
-                "avg_cpc_micros": int(m.average_cpc),
-                "cost_micros": int(m.cost_micros),
-                "conversions": m.conversions,
-                "cvr": round(m.conversions_from_interactions_rate * 100, 2),
+                "budget_micros": row.campaign_budget.amount_micros if row.campaign_budget.amount_micros is not None else 0,
+                "impressions": m.impressions if m.impressions is not None else 0,
+                "clicks": m.clicks if m.clicks is not None else 0,
+                "ctr": round(m.ctr * 100, 2) if m.ctr is not None else 0.0,
+                "avg_cpc_micros": int(m.average_cpc) if m.average_cpc is not None else 0,
+                "cost_micros": int(m.cost_micros) if m.cost_micros is not None else 0,
+                "conversions": m.conversions if m.conversions is not None else 0.0,
+                "cvr": round(m.conversions_from_interactions_rate * 100, 2) if m.conversions_from_interactions_rate is not None else 0.0,
             })
         return results
 
@@ -558,13 +558,16 @@ class AdsClient:
                 by_date[d] = {"date": d, "impressions": 0, "clicks": 0,
                               "ctr": [], "avg_cpc_micros": [], "cost_micros": 0,
                               "conversions": 0, "cvr": []}
-            by_date[d]["impressions"] += m.impressions
-            by_date[d]["clicks"] += m.clicks
-            by_date[d]["ctr"].append(m.ctr * 100)
-            by_date[d]["avg_cpc_micros"].append(int(m.average_cpc))
-            by_date[d]["cost_micros"] += int(m.cost_micros)
-            by_date[d]["conversions"] += m.conversions
-            by_date[d]["cvr"].append(m.conversions_from_interactions_rate * 100)
+            by_date[d]["impressions"] += m.impressions if m.impressions is not None else 0
+            by_date[d]["clicks"] += m.clicks if m.clicks is not None else 0
+            if m.ctr is not None:
+                by_date[d]["ctr"].append(m.ctr * 100)
+            if m.average_cpc is not None:
+                by_date[d]["avg_cpc_micros"].append(int(m.average_cpc))
+            by_date[d]["cost_micros"] += int(m.cost_micros) if m.cost_micros is not None else 0
+            by_date[d]["conversions"] += m.conversions if m.conversions is not None else 0
+            if m.conversions_from_interactions_rate is not None:
+                by_date[d]["cvr"].append(m.conversions_from_interactions_rate * 100)
         result = []
         for d, v in sorted(by_date.items()):
             result.append({
