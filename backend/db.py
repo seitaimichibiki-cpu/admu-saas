@@ -170,6 +170,7 @@ def init_db():
             logiction_integration_key TEXT,
             logiction_base_url TEXT,
             is_demo INTEGER DEFAULT 0,
+            demo_expires_at TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -360,6 +361,7 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN budget_safety_brake_enabled INTEGER DEFAULT 1",
         "ALTER TABLE ads_accounts ADD COLUMN ltv_conversion_action_id TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN is_demo INTEGER DEFAULT 0",
+        "ALTER TABLE ads_accounts ADD COLUMN demo_expires_at TEXT",
     ]
     for sql in migrations:
         try:
@@ -551,7 +553,7 @@ def save_ads_account(clinic_id: int, data: dict):
                   "gemini_api_key", "ai_monthly_limit",
                   "google_link_status", "google_link_requested_at",
                   "logiction_integration_key", "logiction_base_url",
-                  "is_demo"]
+                  "is_demo", "demo_expires_at"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]
@@ -1385,7 +1387,7 @@ def mark_stripe_event_processed(event_id: str):
             print(f"[DB] stripe_processed_events 記録失敗: {e}")
 
 
-def create_demo_account(clinic_name: str, email: str, password_hash: str) -> dict:
+def create_demo_account(clinic_name: str, email: str, password_hash: str, demo_expires_at: Optional[str] = None) -> dict:
     """デモ用のクリニック、デモユーザー、デモ設定、およびダミーデータを生成する"""
     import json
     import random
@@ -1411,14 +1413,14 @@ def create_demo_account(clinic_name: str, email: str, password_hash: str) -> dic
             INSERT INTO ads_accounts (
                 clinic_id, customer_id, mock_mode, is_demo, monthly_budget_yen,
                 target_age_gender, target_job_lifestyle, target_pain_point, target_desired_outcome,
-                line_channel_token, line_user_id, notification_email, gemini_api_key
+                line_channel_token, line_user_id, notification_email, gemini_api_key, demo_expires_at
             ) VALUES (?, 'DEMO-999-999-9999', 1, 1, 150000, 
                       '30代〜50代の男女、主婦、デスクワーカー', 
                       '立ち仕事が多い、長時間の運転、パソコン作業が多い',
                       '慢性的な腰痛、肩こりでどこに行っても治らない。手術を勧められている。',
                       '痛みから解放されて、趣味の旅行やスポーツを全力で楽しみたい。',
-                      'mock_line_token_12345', 'mock_line_user_67890', 'demo_notify@admu.jp', 'mock_gemini_key_abcde')
-        """, (clinic_id,))
+                      'mock_line_token_12345', 'mock_line_user_67890', 'demo_notify@admu.jp', 'mock_gemini_key_abcde', ?)
+        """, (clinic_id, demo_expires_at))
 
         # 4. オンボーディング進捗を完了（スキップ済み）として登録
         conn.execute("""

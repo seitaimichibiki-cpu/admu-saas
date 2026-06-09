@@ -127,6 +127,21 @@ async def verify_tenant_middleware(request: Request, call_next):
         if not user:
             return JSONResponse({"detail": "認証されていませんので再度ログインしてください"}, status_code=401)
         
+        # デモアカウントの期限切れチェック（管理者以外に適用）
+        if user.get("role") != "admin":
+            clinic_id = user.get("clinic_id")
+            try:
+                acc = db.get_ads_account(clinic_id)
+                if acc and acc.get("is_demo") == 1:
+                    expires_at_str = acc.get("demo_expires_at")
+                    if expires_at_str:
+                        from datetime import datetime
+                        expires_at = datetime.fromisoformat(expires_at_str)
+                        if datetime.now() > expires_at:
+                            return JSONResponse({"detail": "demo_expired"}, status_code=403)
+            except Exception as e:
+                print(f"[DemoCheck Middleware] 期限切れ判定エラー: {e}")
+        
         if user.get("role") == "admin":
             return await call_next(request)
             
@@ -2432,6 +2447,7 @@ def demo_login(token: str, response: Response):
 
 class DemoLinkReq(BaseModel):
     clinic_name: str = "デモ整体院"
+    duration_hours: int = 72
 
 
 @app.post("/api/admin/demo-link")
@@ -2452,12 +2468,18 @@ def generate_demo_link(request: Request, req: DemoLinkReq):
     import auth
     pw_hash = auth.hash_password(demo_pw)
     
+    # 有効期限の計算
+    from datetime import datetime, timedelta
+    expires_at = datetime.now() + timedelta(hours=req.duration_hours)
+    expires_at_str = expires_at.isoformat()
+    
     try:
         # デモアカウントとダミーデータの作成
         res = db.create_demo_account(
             clinic_name=f"{req.clinic_name}_{rand_id}",
             email=demo_email,
-            password_hash=pw_hash
+            password_hash=pw_hash,
+            demo_expires_at=expires_at_str
         )
         
         clinic_id = res["clinic_id"]
@@ -2487,7 +2509,8 @@ def generate_demo_link(request: Request, req: DemoLinkReq):
             "demo_link": demo_url,
             "email": demo_email,
             "password": demo_pw,
-            "clinic_name": f"{req.clinic_name}_{rand_id}"
+            "clinic_name": f"{req.clinic_name}_{rand_id}",
+            "expires_at": expires_at_str
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"デモリンク生成エラー: {str(e)}")

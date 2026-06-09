@@ -470,6 +470,12 @@ async function api(path, options={}) {
           errMsg = JSON.stringify(errMsg);
         }
         
+        // デモ期間終了時のエラーハンドリング
+        if (res.status === 403 && errMsg === 'demo_expired') {
+          showDemoExpiredPage();
+          throw new Error('デモ体験期間が終了しました。');
+        }
+        
         // CSRFエラー（403等）かつリトライがまだの場合、CSRFトークンを再取得してリトライ
         if (res.status === 403 && (errMsg.includes('CSRF') || errMsg.includes('token') || errMsg.includes('トークン')) && retryCount < maxRetries) {
           retryCount++;
@@ -487,6 +493,114 @@ async function api(path, options={}) {
   }
 
   return await execute();
+}
+
+function showDemoExpiredPage() {
+  // ログアウト処理と同様に Cookie や localStorage をクリア
+  document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  localStorage.removeItem("admu_user");
+  localStorage.removeItem("onboarding_done");
+  
+  // bodyの書き換え
+  document.body.innerHTML = `
+    <div style="
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      color: #f1f5f9;
+      font-family: 'Outfit', 'Inter', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      box-sizing: border-box;
+    ">
+      <div style="
+        max-width: 500px;
+        width: 100%;
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 24px;
+        padding: 40px 32px;
+        text-align: center;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(16px);
+        animation: fadeIn 0.8s ease-out;
+      ">
+        <div style="
+          width: 80px;
+          height: 80px;
+          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 24px;
+          box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
+        ">
+          <span style="font-size: 38px; color: #fff;">🎉</span>
+        </div>
+        
+        <h2 style="
+          font-size: 26px;
+          font-weight: 800;
+          margin: 0 0 16px;
+          background: linear-gradient(to right, #60a5fa, #c084fc);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          letter-spacing: -0.5px;
+        ">AdMu デモ体験期間の終了</h2>
+        
+        <p style="
+          font-size: 15px;
+          color: #94a3b8;
+          line-height: 1.6;
+          margin: 0 0 32px;
+        ">
+          AdMuのデモ体験をご利用いただき、誠にありがとうございました！<br>
+          設定された体験期間が終了いたしました。<br>
+          <br>
+          本番環境のご利用方法、料金プランの詳細、または導入に関するご質問などがございましたら、公式LINEよりお気軽にご連絡ください。
+        </p>
+        
+        <a href="https://lin.ee/RvfeOlD" target="_blank" rel="noopener noreferrer" style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          background: #06c755;
+          color: #ffffff;
+          text-decoration: none;
+          padding: 16px 24px;
+          border-radius: 14px;
+          font-size: 16px;
+          font-weight: 700;
+          box-shadow: 0 8px 24px rgba(6, 199, 85, 0.3);
+          transition: all 0.2s ease;
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 12px 28px rgba(6, 199, 85, 0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 24px rgba(6, 199, 85, 0.3)';">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:20px;height:20px;">
+            <path d="M12 2C6.477 2 2 5.922 2 10.771C2 15.011 5.378 18.529 9.948 19.385C9.641 20.081 9.081 21.353 9.034 21.464C8.98 21.589 8.847 21.905 9.066 22.019C9.284 22.133 9.544 22.029 9.61 21.999C9.843 21.895 14.184 18.995 15.228 18.258C19.789 17.514 22 14.417 22 10.771C22 5.922 17.523 2 12 2Z" fill="currentColor"/>
+          </svg>
+          公式LINEで相談する (無料)
+        </a>
+        
+        <div style="margin-top: 24px;">
+          <a href="/" style="
+            color: #64748b;
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.2s;
+          " onmouseover="this.style.color='#94a3b8'" onmouseout="this.style.color='#64748b'">トップページへ戻る</a>
+        </div>
+      </div>
+    </div>
+    <style>
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  `;
 }
 
 function toast(msg, type='info', duration=3500) {

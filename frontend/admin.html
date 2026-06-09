@@ -222,21 +222,26 @@
         </p>
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <input type="text" id="demoClinicName" class="form-input" placeholder="デモ整体院名（例：デモ体験）" style="width:240px;margin-bottom:0">
+          <select id="demoDuration" class="form-input" style="width:180px;margin-bottom:0;background:var(--bg-card);color:var(--text-1);border:1px solid var(--border)">
+            <option value="24">有効期間: 24時間 (1日)</option>
+            <option value="72" selected>有効期間: 3日間 (72h)</option>
+            <option value="168">有効期間: 7日間 (168h)</option>
+            <option value="720">有効期間: 30日間 (30日)</option>
+          </select>
           <button class="btn btn-primary btn-sm" onclick="generateDemoLink()">⚡ デモリンク発行</button>
         </div>
         
         <!-- 発行結果表示エリア -->
         <div id="demoLinkResult" style="display:none;margin-top:20px;padding:16px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid var(--border)">
           <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--green)">✅ デモアカウントを生成しました！</div>
-          <div style="font-size:12px;color:var(--text-2);margin-bottom:12px">以下のリンク（パスワードなし自動ログインURL）をコピーして希望者に共有してください。</div>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="demoLinkUrl" class="form-input" readonly style="flex:1;margin-bottom:0;background:rgba(0,0,0,0.3)">
-            <button class="btn btn-primary btn-sm" onclick="copyDemoLink()">📋 コピー</button>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:12px">以下のリンクをコピーして希望者に共有してください。このリンクを開くだけでログインやパスワードなしで利用できます。</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="demoLinkUrl" class="form-input" readonly style="flex:1;width:100%;min-width:0;margin-bottom:0;background:rgba(0,0,0,0.3)">
+            <button class="btn btn-primary btn-sm" onclick="copyDemoLink()" style="flex-shrink:0">📋 コピー</button>
           </div>
           <div style="margin-top:12px;font-size:11px;color:var(--text-3)">
-            アカウント名: <span id="demoResultName" style="color:var(--t1)"></span><br>
-            ログインメール: <span id="demoResultEmail" style="color:var(--t1)"></span><br>
-            パスワード（手動ログイン用）: <span id="demoResultPass" style="color:var(--t1)"></span>
+            アカウント名: <span id="demoResultName" style="color:var(--text-1)"></span><br>
+            有効期限: <span id="demoResultExpires" style="color:var(--text-1)"></span>
           </div>
         </div>
       </div>
@@ -1128,19 +1133,25 @@ function closeModal(id) {
 async function generateDemoLink() {
   const clinicNameInput = document.getElementById('demoClinicName');
   const name = clinicNameInput.value.trim() || 'デモ整体院';
+  const durationSelect = document.getElementById('demoDuration');
+  const duration = parseInt(durationSelect.value, 10) || 72;
   const resultEl = document.getElementById('demoLinkResult');
   
   try {
     const res = await api('/admin/demo-link', {
       method: 'POST',
-      body: JSON.stringify({ clinic_name: name })
+      body: JSON.stringify({ clinic_name: name, duration_hours: duration })
     });
     
     if (res.success) {
       document.getElementById('demoLinkUrl').value = res.demo_link;
       document.getElementById('demoResultName').textContent = res.clinic_name;
-      document.getElementById('demoResultEmail').textContent = res.email;
-      document.getElementById('demoResultPass').textContent = res.password;
+      
+      // 有効期限の表示フォーマット
+      const expDate = new Date(res.expires_at);
+      const expStr = expDate.getFullYear() + '年' + (expDate.getMonth()+1) + '月' + expDate.getDate() + '日 ' + 
+                     String(expDate.getHours()).padStart(2, '0') + ':' + String(expDate.getMinutes()).padStart(2, '0');
+      document.getElementById('demoResultExpires').textContent = expStr;
       
       resultEl.style.display = 'block';
       toast('デモアカウントを発行しました ⚡', 'success');
