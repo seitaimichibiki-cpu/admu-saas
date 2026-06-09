@@ -392,12 +392,28 @@
 
 <!-- Clinic Modal -->
 <div class="modal-bg" id="clinicModal">
-  <div class="modal">
+  <div class="modal" style="max-height:90vh; overflow-y:auto;">
     <h3>🏥 クリニック追加・編集</h3>
     <input type="hidden" id="clinicEditId">
     <div class="form-group">
       <label>クリニック名 *</label>
       <input type="text" id="clinicName" class="form-input" placeholder="例: ○○整体院">
+    </div>
+    <div class="form-group">
+      <label>代表者名</label>
+      <input type="text" id="clinicRepresentativeName" class="form-input" placeholder="例: 山田 太郎">
+    </div>
+    <div class="form-group">
+      <label>メールアドレス</label>
+      <input type="email" id="clinicEmail" class="form-input" placeholder="例: sample@example.com">
+    </div>
+    <div class="form-group">
+      <label>住所</label>
+      <input type="text" id="clinicAddress" class="form-input" placeholder="例: 東京都渋谷区...">
+    </div>
+    <div class="form-group">
+      <label>LINE UID</label>
+      <input type="text" id="clinicLineUid" class="form-input" placeholder="例: U123456789...">
     </div>
     <div class="form-group">
       <label>ライセンスキー（空白で自動生成）</label>
@@ -1079,29 +1095,44 @@ async function loadClinicsManage() {
   try {
     const data = await api('/admin/overview');
     const clinics = data.clinics || [];
+    window.manageClinicsData = clinics; // グローバルに保持して編集時に使用
     document.getElementById('clinicsManageTable').innerHTML = `
       <table>
         <thead><tr><th>ID</th><th>クリニック名</th><th>プラン</th><th>ステータス</th><th>操作</th></tr></thead>
         <tbody>
-          ${clinics.map(c => `<tr>
-            <td style="color:var(--text-3)">#${c.clinic_id}</td>
-            <td><strong>${c.clinic_name}</strong></td>
-            <td>${c.plan_name||'未契約'}</td>
-            <td>${c.status === 'active' ? '<span class="badge badge-active">稼働中</span>' : '<span class="badge" style="background:#334155;color:var(--text-3)">未契約</span>'}</td>
-            <td>
-              <button class="btn btn-ghost btn-sm" onclick="openClinicModal(${c.clinic_id},'${c.clinic_name}')">編集</button>
-            </td>
-          </tr>`).join('')}
+          ${clinics.map(c => {
+            const isSystemAdmin = c.clinic_id === 1 || c.clinic_name === 'システム管理者';
+            const deleteBtn = isSystemAdmin 
+              ? `<span style="color:var(--text-3); font-size:12px; margin-left:8px;">(保護)</span>` 
+              : `<button class="btn btn-ghost btn-sm" onclick="deleteClinic(${c.clinic_id}, '${c.clinic_name.replace(/'/g, "\\'")}')" style="color:var(--red); margin-left:8px;">削除</button>`;
+            return `<tr>
+              <td style="color:var(--text-3)">#${c.clinic_id}</td>
+              <td><strong>${c.clinic_name}</strong></td>
+              <td>${c.plan_name||'未契約'}</td>
+              <td>${c.status === 'active' ? '<span class="badge badge-active">稼働中</span>' : '<span class="badge" style="background:#334155;color:var(--text-3)">未契約</span>'}</td>
+              <td>
+                <button class="btn btn-ghost btn-sm" onclick="openClinicModal(${c.clinic_id})">編集</button>
+                ${deleteBtn}
+              </td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     `;
   } catch(e) { toast('取得失敗', 'error'); }
 }
 
-function openClinicModal(id, name) {
+function openClinicModal(id) {
+  const clinics = window.manageClinicsData || [];
+  const c = clinics.find(x => x.clinic_id === id) || {};
+  
   document.getElementById('clinicEditId').value = id || '';
-  document.getElementById('clinicName').value = name || '';
+  document.getElementById('clinicName').value = c.clinic_name || '';
   document.getElementById('clinicLicenseKey').value = '';
+  document.getElementById('clinicRepresentativeName').value = c.representative_name || '';
+  document.getElementById('clinicEmail').value = c.email || '';
+  document.getElementById('clinicAddress').value = c.address || '';
+  document.getElementById('clinicLineUid').value = c.line_uid || '';
   document.getElementById('clinicModal').classList.add('open');
 }
 
@@ -1113,6 +1144,10 @@ async function saveClinic() {
     id: id ? parseInt(id) : null,
     name,
     license_key: document.getElementById('clinicLicenseKey').value.trim() || null,
+    representative_name: document.getElementById('clinicRepresentativeName').value.trim() || null,
+    email: document.getElementById('clinicEmail').value.trim() || null,
+    address: document.getElementById('clinicAddress').value.trim() || null,
+    line_uid: document.getElementById('clinicLineUid').value.trim() || null,
     password: localStorage.getItem('admu_admin_token') || ''
   };
   try {
@@ -1124,6 +1159,25 @@ async function saveClinic() {
     closeModal('clinicModal');
     loadClinicsManage(); populateClinicSelects();
   } catch(e) { toast('保存失敗: '+e.message, 'error'); }
+}
+
+async function deleteClinic(id, name) {
+  if (!confirm(`本当に「${name}」を削除しますか？\n関連するすべてのデータ（広告設定、パフォーマンスログ、ユーザー等）が完全に削除され、復元できません。`)) return;
+  try {
+    const adminToken = localStorage.getItem('admu_admin_token') || '';
+    const res = await api(`/admin/clinics/${id}?password=${encodeURIComponent(adminToken)}`, {
+      method: 'DELETE'
+    });
+    if (res.success) {
+      toast('クリニックを削除しました 🗑️', 'success');
+      loadClinicsManage();
+      populateClinicSelects();
+    } else {
+      toast('削除失敗: ' + (res.detail || '不明なエラー'), 'error');
+    }
+  } catch(e) {
+    toast('削除エラー: ' + e.message, 'error');
+  }
 }
 
 function closeModal(id) {

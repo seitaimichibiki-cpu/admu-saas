@@ -4038,6 +4038,10 @@ class ClinicUpsertReq(BaseModel):
     name: Optional[str] = None
     license_key: Optional[str] = None
     plan_status: Optional[str] = None
+    representative_name: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    line_uid: Optional[str] = None
     password: str = ""
 
 @app.post("/api/admin/login")
@@ -4571,6 +4575,26 @@ def admin_upsert_clinic(req: ClinicUpsertReq, request: Request, authorization: O
         monitor.register_clinic_jobs(clinic_id)
     
     return {"success": True, "clinic_id": clinic_id}
+
+
+@app.delete("/api/admin/clinics/{clinic_id}")
+def admin_delete_clinic(
+    clinic_id: int, 
+    request: Request, 
+    password: str = "", 
+    authorization: Optional[str] = Header(None)
+):
+    """クリニックの削除（システム管理者保護あり）"""
+    _check_admin(password, authorization, request)
+    try:
+        db.delete_clinic(clinic_id)
+        # スケジューラからジョブを削除
+        monitor.unregister_clinic_jobs(clinic_id)
+        return {"success": True, "message": "クリニックを削除しました"}
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"削除エラー: {str(e)}")
 
 
 class MaxAccountsReq(BaseModel):

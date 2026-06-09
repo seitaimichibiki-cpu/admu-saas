@@ -154,7 +154,9 @@ def init_db():
         f"""CREATE TABLE IF NOT EXISTS clinics (
             id {PK}, name TEXT NOT NULL, license_key TEXT UNIQUE,
             parent_clinic_id INTEGER DEFAULT NULL, max_sub_accounts INTEGER DEFAULT 1,
-            plan_status TEXT DEFAULT 'active', created_at {TS})""",
+            plan_status TEXT DEFAULT 'active',
+            representative_name TEXT, email TEXT, address TEXT, line_uid TEXT,
+            created_at {TS})""",
         f"""CREATE TABLE IF NOT EXISTS ads_accounts (
             id {PK}, clinic_id INTEGER NOT NULL, customer_id TEXT NOT NULL,
             developer_token TEXT, client_id TEXT, client_secret TEXT, refresh_token TEXT,
@@ -362,6 +364,10 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN ltv_conversion_action_id TEXT",
         "ALTER TABLE ads_accounts ADD COLUMN is_demo INTEGER DEFAULT 0",
         "ALTER TABLE ads_accounts ADD COLUMN demo_expires_at TEXT",
+        "ALTER TABLE clinics ADD COLUMN representative_name TEXT",
+        "ALTER TABLE clinics ADD COLUMN email TEXT",
+        "ALTER TABLE clinics ADD COLUMN address TEXT",
+        "ALTER TABLE clinics ADD COLUMN line_uid TEXT",
     ]
     for sql in migrations:
         try:
@@ -1037,6 +1043,18 @@ def upsert_clinic(data: dict, requesting_clinic_id: int = None) -> int:
             if data.get("max_sub_accounts") is not None:
                 sets.append("max_sub_accounts=?")
                 vals.append(int(data["max_sub_accounts"]))
+            if "representative_name" in data and data["representative_name"] is not None:
+                sets.append("representative_name=?")
+                vals.append(data["representative_name"])
+            if "email" in data and data["email"] is not None:
+                sets.append("email=?")
+                vals.append(data["email"])
+            if "address" in data and data["address"] is not None:
+                sets.append("address=?")
+                vals.append(data["address"])
+            if "line_uid" in data and data["line_uid"] is not None:
+                sets.append("line_uid=?")
+                vals.append(data["line_uid"])
             if sets:
                 vals.append(clinic_id)
                 conn.execute(f"UPDATE clinics SET {', '.join(sets)} WHERE id=?", vals)
@@ -1056,10 +1074,16 @@ def upsert_clinic(data: dict, requesting_clinic_id: int = None) -> int:
                     if current_count >= max_allowed:
                         raise ValueError(f"アカウント追加上限（{max_allowed}件）に達しています")
             cur = conn.execute(
-                "INSERT INTO clinics (name, license_key, parent_clinic_id) VALUES (?,?,?)",
+                """INSERT INTO clinics 
+                   (name, license_key, parent_clinic_id, representative_name, email, address, line_uid) 
+                   VALUES (?,?,?,?,?,?,?)""",
                 (data.get("name"),
                  data.get("license_key", f"KEY-{int(__import__('time').time())}"),
-                 requesting_clinic_id)
+                 requesting_clinic_id,
+                 data.get("representative_name"),
+                 data.get("email"),
+                 data.get("address"),
+                 data.get("line_uid"))
             )
             clinic_id = cur.lastrowid
             # ads_accountsも自動作成
@@ -1079,7 +1103,7 @@ def set_max_sub_accounts(clinic_id: int, max_accounts: int) -> None:
 def get_admin_overview(start_date: str = None, end_date: str = None):
     """管理者ダッシュボード用：全クリニックの集計データ（詳細広告数値付き）"""
     with get_conn() as conn:
-        clinics = conn.execute("SELECT id, name, max_sub_accounts, plan_status FROM clinics").fetchall()
+        clinics = conn.execute("SELECT id, name, max_sub_accounts, plan_status, representative_name, email, address, line_uid FROM clinics").fetchall()
         result = []
         for c in clinics:
             cid = c["id"]
@@ -1136,6 +1160,10 @@ def get_admin_overview(start_date: str = None, end_date: str = None):
             result.append({
                 "clinic_id": cid,
                 "clinic_name": c["name"],
+                "representative_name": c["representative_name"],
+                "email": c["email"],
+                "address": c["address"],
+                "line_uid": c["line_uid"],
                 "plan_name": contract["plan_name"] if contract else "未契約",
                 "renewal_at": contract["renewal_at"] if contract else None,
                 "status": c["plan_status"] if c["plan_status"] else (contract["status"] if contract else "inactive"),
@@ -1490,4 +1518,53 @@ def create_demo_account(clinic_name: str, email: str, password_hash: str, demo_e
         conn.commit()
 
         return {"clinic_id": clinic_id, "user_id": user_id, "email": email}
+
+
+def delete_clinic(clinic_id: int) -> None:
+    """クリニックとそれに関連するすべてのデータを安全に削除する"""
+    if clinic_id == 1:
+        raise ValueError("システム管理者は削除できません")
+    
+    with get_conn() as conn:
+        # まずクリニック名を確認して「システム管理者」であれば削除不可
+        c = conn.execute("SELECT name FROM clinics WHERE id=?", (clinic_id,)).fetchone()
+        if c and c["name"] == "システム管理者":
+            raise ValueError("システム管理者は削除できません")
+
+        # 関連データの削除
+        tables = [
+            "password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE clinic_id=?)",
+            "users WHERE clinic_id=?",
+            "contracts WHERE clinic_id=?",
+            "campaign_personas WHERE clinic_id=?",
+            "campaign_blacklist WHERE clinic_id=?",
+            "invitations WHERE clinic_id=?",
+            "logiction_sync_log WHERE clinic_id=?",
+            "logiction_patients WHERE clinic_id=?",
+            "onboarding_progress WHERE clinic_id=?",
+            "ai_usage_logs WHERE clinic_id=?",
+            "audit_logs WHERE clinic_id=?",
+            "negative_keywords WHERE clinic_id=?",
+            "ad_copies WHERE clinic_id=?",
+            "alerts WHERE clinic_id=?",
+            "bid_rules WHERE clinic_id=?",
+            "performance_logs WHERE clinic_id=?",
+            "ad_strategy_archives WHERE clinic_id=?",
+            "campaigns WHERE clinic_id=?",
+            "ads_accounts WHERE clinic_id=?",
+            "personas WHERE clinic_id=?",
+        ]
+        
+        for t_spec in tables:
+            try:
+                conn.execute(f"DELETE FROM {t_spec}", (clinic_id,))
+            except Exception as e:
+                # 存在しないテーブル等のエラーは無視
+                print(f"[delete_clinic] Skip table delete error: {e}")
+                pass
+
+        # 最後に親である clinics 内の自分を削除
+        conn.execute("DELETE FROM clinics WHERE id=?", (clinic_id,))
+        conn.commit()
+
 
