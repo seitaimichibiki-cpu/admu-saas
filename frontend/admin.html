@@ -212,6 +212,34 @@
         <button class="btn btn-primary btn-sm" onclick="openClinicModal()">＋ 新規クリニック追加</button>
       </div>
       <div class="card"><div id="clinicsManageTable"></div></div>
+
+      <!-- デモ用アカウント・リンク発行セクション -->
+      <div class="card" style="margin-top:24px;border:1px solid rgba(59,130,246,0.3)">
+        <div class="card-title">⚙️ デモ用アカウント・リンクの発行</div>
+        <p style="font-size:13px;color:var(--text-3);margin-bottom:16px">
+          体験用の新規クリニック、デモユーザー、およびダミーデータを自動生成します。<br>
+          <strong style="color:var(--text-2)">※発行されたデモアカウントはモックモードに固定され、本番Google広告への接続はできません。</strong>
+        </p>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="demoClinicName" class="form-input" placeholder="デモ整体院名（例：デモ体験）" style="width:240px;margin-bottom:0">
+          <button class="btn btn-primary btn-sm" onclick="generateDemoLink()">⚡ デモリンク発行</button>
+        </div>
+        
+        <!-- 発行結果表示エリア -->
+        <div id="demoLinkResult" style="display:none;margin-top:20px;padding:16px;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--green)">✅ デモアカウントを生成しました！</div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:12px">以下のリンク（パスワードなし自動ログインURL）をコピーして希望者に共有してください。</div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="demoLinkUrl" class="form-input" readonly style="flex:1;margin-bottom:0;background:rgba(0,0,0,0.3)">
+            <button class="btn btn-primary btn-sm" onclick="copyDemoLink()">📋 コピー</button>
+          </div>
+          <div style="margin-top:12px;font-size:11px;color:var(--text-3)">
+            アカウント名: <span id="demoResultName" style="color:var(--t1)"></span><br>
+            ログインメール: <span id="demoResultEmail" style="color:var(--t1)"></span><br>
+            パスワード（手動ログイン用）: <span id="demoResultPass" style="color:var(--t1)"></span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- オンボーディング分析 -->
@@ -1095,6 +1123,43 @@ async function saveClinic() {
 
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
+}
+
+async function generateDemoLink() {
+  const clinicNameInput = document.getElementById('demoClinicName');
+  const name = clinicNameInput.value.trim() || 'デモ整体院';
+  const resultEl = document.getElementById('demoLinkResult');
+  
+  try {
+    const res = await api('/admin/demo-link', {
+      method: 'POST',
+      body: JSON.stringify({ clinic_name: name })
+    });
+    
+    if (res.success) {
+      document.getElementById('demoLinkUrl').value = res.demo_link;
+      document.getElementById('demoResultName').textContent = res.clinic_name;
+      document.getElementById('demoResultEmail').textContent = res.email;
+      document.getElementById('demoResultPass').textContent = res.password;
+      
+      resultEl.style.display = 'block';
+      toast('デモアカウントを発行しました ⚡', 'success');
+      
+      // クリニック管理テーブルをリロード
+      loadClinicsManage();
+    } else {
+      toast('デモ発行失敗', 'error');
+    }
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+  }
+}
+
+function copyDemoLink() {
+  const urlEl = document.getElementById('demoLinkUrl');
+  urlEl.select();
+  document.execCommand('copy');
+  toast('デモリンクをコピーしました 📋', 'success');
 }
 
 // Close modal on background click

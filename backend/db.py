@@ -169,6 +169,7 @@ def init_db():
             ltv_conversion_action_id TEXT,
             logiction_integration_key TEXT,
             logiction_base_url TEXT,
+            is_demo INTEGER DEFAULT 0,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -358,6 +359,7 @@ def init_db():
         # 自動セーフティブレーキおよびLTVコンバージョン同期用のカラム
         "ALTER TABLE ads_accounts ADD COLUMN budget_safety_brake_enabled INTEGER DEFAULT 1",
         "ALTER TABLE ads_accounts ADD COLUMN ltv_conversion_action_id TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN is_demo INTEGER DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -548,7 +550,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "monthly_budget_yen", "budget_safety_brake_enabled", "ltv_conversion_action_id",
                   "gemini_api_key", "ai_monthly_limit",
                   "google_link_status", "google_link_requested_at",
-                  "logiction_integration_key", "logiction_base_url"]
+                  "logiction_integration_key", "logiction_base_url",
+                  "is_demo"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]
@@ -1380,3 +1383,109 @@ def mark_stripe_event_processed(event_id: str):
             conn.commit()
         except Exception as e:
             print(f"[DB] stripe_processed_events 記録失敗: {e}")
+
+
+def create_demo_account(clinic_name: str, email: str, password_hash: str) -> dict:
+    """デモ用のクリニック、デモユーザー、デモ設定、およびダミーデータを生成する"""
+    import json
+    import random
+    from datetime import datetime, timedelta
+
+    with get_conn() as conn:
+        # 1. クリニックの作成
+        cur = conn.execute(
+            "INSERT INTO clinics (name, plan_status) VALUES (?, 'active')",
+            (clinic_name,)
+        )
+        clinic_id = cur.lastrowid
+
+        # 2. デモユーザーの作成
+        u_res = conn.execute(
+            "INSERT INTO users (clinic_id, email, password_hash, role) VALUES (?, ?, ?, 'user')",
+            (clinic_id, email, password_hash)
+        )
+        user_id = u_res.lastrowid
+
+        # 3. デモ用 ads_accounts の作成 (mock_mode=1, is_demo=1)
+        conn.execute("""
+            INSERT INTO ads_accounts (
+                clinic_id, customer_id, mock_mode, is_demo, monthly_budget_yen,
+                target_age_gender, target_job_lifestyle, target_pain_point, target_desired_outcome,
+                line_channel_token, line_user_id, notification_email, gemini_api_key
+            ) VALUES (?, 'DEMO-999-999-9999', 1, 1, 150000, 
+                      '30代〜50代の男女、主婦、デスクワーカー', 
+                      '立ち仕事が多い、長時間の運転、パソコン作業が多い',
+                      '慢性的な腰痛、肩こりでどこに行っても治らない。手術を勧められている。',
+                      '痛みから解放されて、趣味の旅行やスポーツを全力で楽しみたい。',
+                      'mock_line_token_12345', 'mock_line_user_67890', 'demo_notify@admu.jp', 'mock_gemini_key_abcde')
+        """, (clinic_id,))
+
+        # 4. オンボーディング進捗を完了（スキップ済み）として登録
+        conn.execute("""
+            INSERT INTO onboarding_progress (
+                clinic_id, step_reached, step1_done, step2_done, step3_done, step4_done, step5_done, completed,
+                gemini_set, google_ads_set, persona_set
+            ) VALUES (?, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+        """, (clinic_id,))
+
+        # 5. ダミーキャンペーンの作成 (2件)
+        c1_res = conn.execute("""
+            INSERT INTO campaigns (clinic_id, google_campaign_id, name, status, budget_micros, campaign_type, target_region)
+            VALUES (?, '1111111111', 'デモ_検索_渋谷駅前腰痛専門', 'ENABLED', 3000000000, 'SEARCH', '東京都渋谷区')
+        """, (clinic_id,))
+        c1_id = c1_res.lastrowid
+
+        c2_res = conn.execute("""
+            INSERT INTO campaigns (clinic_id, google_campaign_id, name, status, budget_micros, campaign_type, target_region)
+            VALUES (?, '2222222222', 'デモ_検索_渋谷産後骨盤矯正', 'ENABLED', 2000000000, 'SEARCH', '東京都渋谷区')
+        """, (clinic_id,))
+        c2_id = c2_res.lastrowid
+
+        # 6. ダミーパフォーマンスログの作成 (直近7日間分)
+        now = datetime.now()
+        for i in range(7):
+            d = (now - timedelta(days=7-i)).strftime("%Y-%m-%d")
+            # キャンペーン1 (腰痛)
+            c1_imp = random.randint(150, 300)
+            c1_click = random.randint(15, 30)
+            c1_ctr = (c1_click / c1_imp) * 100
+            c1_cost = c1_click * random.randint(150, 220) * 1000000 # micros
+            c1_conv = random.randint(1, 3) if random.random() > 0.3 else 0
+            c1_cvr = (c1_conv / c1_click) * 100 if c1_click > 0 else 0
+            conn.execute("""
+                INSERT INTO performance_logs
+                (clinic_id, campaign_id, date, impressions, clicks, ctr, avg_cpc_micros, cost_micros, conversions, cvr)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (clinic_id, c1_id, d, c1_imp, c1_click, c1_ctr, int(c1_cost / c1_click) if c1_click > 0 else 0, c1_cost, c1_conv, c1_cvr))
+
+            # キャンペーン2 (骨盤矯正)
+            c2_imp = random.randint(100, 200)
+            c2_click = random.randint(8, 18)
+            c2_ctr = (c2_click / c2_imp) * 100
+            c2_cost = c2_click * random.randint(120, 180) * 1000000 # micros
+            c2_conv = random.randint(1, 2) if random.random() > 0.5 else 0
+            c2_cvr = (c2_conv / c2_click) * 100 if c2_click > 0 else 0
+            conn.execute("""
+                INSERT INTO performance_logs
+                (clinic_id, campaign_id, date, impressions, clicks, ctr, avg_cpc_micros, cost_micros, conversions, cvr)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (clinic_id, c2_id, d, c2_imp, c2_click, c2_ctr, int(c2_cost / c2_click) if c2_click > 0 else 0, c2_cost, c2_conv, c2_cvr))
+
+        # 7. ダミーのアラートログの作成
+        conn.execute("""
+            INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
+            VALUES (?, ?, 'INFO', '【AI入札】キャンペーン「デモ_検索_渋谷駅前腰痛専門」の入札単価を自動調整しました（CVR良好のため+10%）。', 1)
+        """, (clinic_id, c1_id))
+        conn.execute("""
+            INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
+            VALUES (?, ?, 'INFO', '【LTV同期】Logictionから最新 of LTVデータ（2件、総額12万円）をGoogle広告へ自動Push同期しました。', 1)
+        """, (clinic_id, c1_id))
+        conn.execute("""
+            INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
+            VALUES (?, ?, 'INFO', '【無駄除外】来院患者のいない遠方エリア（千葉県浦安市）を無駄エリアとして自動除外登録しました。', 1)
+        """, (clinic_id, c1_id))
+
+        conn.commit()
+
+        return {"clinic_id": clinic_id, "user_id": user_id, "email": email}
+

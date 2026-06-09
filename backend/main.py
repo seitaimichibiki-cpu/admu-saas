@@ -1735,6 +1735,15 @@ def save_settings(req: SettingsReq):
     data = {k: v for k, v in data.items() if v != MASKED_PLACEHOLDER}
 
     acc_before = db.get_ads_account(req.clinic_id) or {}
+
+    # デモ用アカウントの保護（本番モードへの切り替えをブロック、モック固定）
+    if acc_before.get("is_demo") == 1:
+        data["mock_mode"] = 1
+        # 機密情報の保存をバイパス（デモアカウントでは上書きさせない）
+        for key in ["developer_token", "client_id", "client_secret", "refresh_token", "login_customer_id", "gemini_api_key"]:
+            if key in data:
+                del data[key]
+
     db.save_ads_account(req.clinic_id, data)
 
     # 顧客IDが新たに設定されたか、現在エラー状態の場合、Google Adsリンクリクエストを送信
@@ -2337,6 +2346,152 @@ def send_onboarding_followup(request: Request, body: dict,
         "failed": fail_count,
         "results": results,
     }
+
+# ── デモオートログイン・デモリンク生成API ──
+from fastapi.responses import HTMLResponse
+import secrets
+
+@app.get("/api/auth/demo-login", response_class=HTMLResponse)
+def demo_login(token: str, response: Response):
+    """
+    デモアカウント用のオートログイン。
+    トークン（JWT）を検証してCookieを設定し、
+    クライアントのlocalStorageにユーザー情報を格納してからダッシュボードへ遷移させるHTMLを返す。
+    """
+    import json
+    try:
+        payload = auth.decode_access_token(token)
+        if not payload:
+            raise ValueError("無効なトークンです")
+        
+        user_id = payload.get("user_id")
+        email = payload.get("email")
+        clinic_id = payload.get("clinic_id")
+        role = payload.get("role")
+        
+        # Cookieにセット
+        is_prod = os.environ.get("ENVIRONMENT", "development") == "production"
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=is_prod,
+            samesite="lax",
+            max_age=2592000  # 30 days
+        )
+        
+        # localStorageの書き換えをしてからリダイレクトさせるHTML
+        user_json = json.dumps({
+            "email": email,
+            "role": role,
+            "clinic_id": clinic_id,
+            "plan_type": "trial",
+            "plan_name": "トライアル",
+            "yahoo_enabled": False
+        }, ensure_ascii=False)
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>AdMu デモログイン</title></head>
+        <body style="background:#0f172a;color:#f1f5f9;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+          <div style="text-align:center">
+            <div style="font-size:32px;margin-bottom:12px">⚡</div>
+            <p>デモ環境にログインしています。お待ちください...</p>
+          </div>
+          <script>
+            try {{
+              localStorage.setItem("admu_user", '{user_json}');
+              localStorage.setItem("admu_onboarding_done_{email}", "true");
+              localStorage.setItem("onboarding_done", "1");
+            }} catch (e) {{
+              console.error(e);
+            }}
+            window.location.href = "/";
+          </script>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content, status_code=200)
+        
+    except Exception as e:
+        return HTMLResponse(content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"><title>ログインエラー</title></head>
+        <body style="background:#0f172a;color:#ef4444;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+          <div style="text-align:center">
+            <h3>❌ ログインエラー</h3>
+            <p>デモリンクが無効か、有効期限が切れています。({str(e)})</p>
+            <p><a href="/" style="color:#3b82f6;text-decoration:none">トップページへ戻る</a></p>
+          </div>
+        </body>
+        </html>
+        """, status_code=400)
+
+
+class DemoLinkReq(BaseModel):
+    clinic_name: str = "デモ整体院"
+
+
+@app.post("/api/admin/demo-link")
+def generate_demo_link(request: Request, req: DemoLinkReq):
+    """
+    管理者用：デモ用アカウントとダミーデータを自動生成し、オートログインリンクを発行する。
+    """
+    # 管理者認証チェック
+    user = _get_current_user(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="管理者のみデモリンクを発行できます。")
+    
+    # デモ用のメールとパスワードをランダム生成
+    rand_id = secrets.token_hex(4)
+    demo_email = f"demo_{rand_id}@admu.jp"
+    demo_pw = secrets.token_hex(8)
+    
+    import auth
+    pw_hash = auth.hash_password(demo_pw)
+    
+    try:
+        # デモアカウントとダミーデータの作成
+        res = db.create_demo_account(
+            clinic_name=f"{req.clinic_name}_{rand_id}",
+            email=demo_email,
+            password_hash=pw_hash
+        )
+        
+        clinic_id = res["clinic_id"]
+        user_id = res["user_id"]
+        
+        # モニタースケジューラにデモクリニックのジョブを動的登録（自動ブレーキなどの疑似実行用）
+        try:
+            import monitor
+            monitor.register_clinic_jobs(clinic_id)
+        except Exception as job_err:
+            print(f"[DemoLink] デモジョブ登録失敗（続行）: {job_err}")
+            
+        # オートログイン用の一時的なJWTトークンを生成
+        token = auth.create_access_token(
+            user_id=user_id,
+            email=demo_email,
+            clinic_id=clinic_id,
+            role="user"
+        )
+        
+        # アプリケーションのベースURLを取得
+        base_url = os.environ.get("APP_BASE_URL", "http://localhost:8001")
+        demo_url = f"{base_url}/api/auth/demo-login?token={token}"
+        
+        return {
+            "success": True,
+            "demo_link": demo_url,
+            "email": demo_email,
+            "password": demo_pw,
+            "clinic_name": f"{req.clinic_name}_{rand_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"デモリンク生成エラー: {str(e)}")
+
 
 @app.post("/api/auth/login")
 def login(req: LoginReq, response: Response):
