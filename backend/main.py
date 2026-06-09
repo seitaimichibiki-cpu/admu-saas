@@ -367,6 +367,9 @@ class SettingsReq(BaseModel):
     gemini_api_key: Optional[str] = None
     # AI機能の月間呼び出し上限（0=無効, -1=無制限, 1以上=N回まで）
     ai_monthly_limit: Optional[int] = None
+    sitelink_price_url: Optional[str] = None
+    sitelink_reviews_url: Optional[str] = None
+    sitelink_reserve_url: Optional[str] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -1404,8 +1407,15 @@ def apply_ad_copy_endpoint(req: ApplyAdCopyReq):
     if not g_id:
         raise HTTPException(404, "Google広告キャンペーンIDが紐付いていません")
 
-    # update_campaign_rsaをclinic_name付きで呼び出して、内部でアセット紐付けを行う
-    res = client.update_campaign_rsa(g_id, headlines, descriptions, clinic_name=clinic_name)
+    # DBからサイトリンク用個別URLを取得
+    sitelink_urls = {
+        "price_url": acc.get("sitelink_price_url"),
+        "reviews_url": acc.get("sitelink_reviews_url"),
+        "reserve_url": acc.get("sitelink_reserve_url"),
+    }
+
+    # update_campaign_rsaをclinic_name, sitelink_urls付きで呼び出して、内部でアセット紐付けを行う
+    res = client.update_campaign_rsa(g_id, headlines, descriptions, clinic_name=clinic_name, sitelink_urls=sitelink_urls)
     if not res.get("success"):
         raise HTTPException(500, f"Google広告への適用失敗: {res.get('error')}")
 

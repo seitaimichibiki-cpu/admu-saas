@@ -2590,6 +2590,15 @@ async function loadSettings() {
       geminiApiKeyEl.value = s.gemini_api_key === '***設定済み***' ? '' : (s.gemini_api_key || '');
       geminiApiKeyEl.placeholder = s.gemini_api_key === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : 'AIzaSy...';
     }
+    
+    // アセット用URL設定
+    const sitelinkPriceUrlEl = document.getElementById('settSitelinkPriceUrl');
+    if (sitelinkPriceUrlEl) sitelinkPriceUrlEl.value = s.sitelink_price_url || '';
+    const sitelinkReviewsUrlEl = document.getElementById('settSitelinkReviewsUrl');
+    if (sitelinkReviewsUrlEl) sitelinkReviewsUrlEl.value = s.sitelink_reviews_url || '';
+    const sitelinkReserveUrlEl = document.getElementById('settSitelinkReserveUrl');
+    if (sitelinkReserveUrlEl) sitelinkReserveUrlEl.value = s.sitelink_reserve_url || '';
+
   } catch(e) {
     toast('設定読み込み失敗: ' + e.message, 'error');
   }
@@ -2610,6 +2619,9 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     notification_email: document.getElementById('settNotifyEmail').value || null,
     smtp_user: document.getElementById('settSmtpUser').value || null,
     ga4_property_id: document.getElementById('settGa4PropertyId')?.value || null,
+    sitelink_price_url: document.getElementById('settSitelinkPriceUrl')?.value || null,
+    sitelink_reviews_url: document.getElementById('settSitelinkReviewsUrl')?.value || null,
+    sitelink_reserve_url: document.getElementById('settSitelinkReserveUrl')?.value || null,
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;

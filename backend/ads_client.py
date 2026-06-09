@@ -1130,13 +1130,13 @@ class AdsClient:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
 
-    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None, clinic_name: str = None) -> dict:
+    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None, clinic_name: str = None, sitelink_urls: dict = None) -> dict:
         """
         キャンペーン内の広告グループのアクティブなRSA（レスポンシブ検索広告）を更新する。
         既存のRSAを検索し、headlinesとdescriptions、およびfinal_urlを新しいもので上書きする。
         """
         if self.mock_mode:
-            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions} URL={final_url} clinic_name={clinic_name}")
+            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions} URL={final_url} clinic_name={clinic_name} sitelink_urls={sitelink_urls}")
             return {"success": True, "mock": True}
 
         try:
@@ -1261,7 +1261,7 @@ class AdsClient:
                 
                 # ビジネス名・サイトリンクアセットの自動連携
                 if clinic_name and final_urls:
-                    self.link_business_name_and_sitelinks(google_campaign_id, clinic_name, final_urls[0])
+                    self.link_business_name_and_sitelinks(google_campaign_id, clinic_name, final_urls[0], sitelink_urls=sitelink_urls)
 
                 if ad_rn:
                     print(f"[AdsClient] 既存のRSA広告 {ad_rn} を削除し、新規に作成しました: {new_ad_rn}")
@@ -1576,12 +1576,12 @@ class AdsClient:
             print(f"[AdsClient] キーワード取得エラー: {e}")
             return []
 
-    def link_business_name_and_sitelinks(self, google_campaign_id: str, clinic_name: str, final_url: str) -> dict:
+    def link_business_name_and_sitelinks(self, google_campaign_id: str, clinic_name: str, final_url: str, sitelink_urls: dict = None) -> dict:
         """
         キャンペーンに対して、クリニックの「ビジネス名」アセットと、予約用「サイトリンク」アセットを自動的に紐付け・登録する。
         """
         if self.mock_mode:
-            print(f"[MOCK] ビジネス名・サイトリンクアセット適用: campaign={google_campaign_id} clinic={clinic_name} url={final_url}")
+            print(f"[MOCK] ビジネス名・サイトリンクアセット適用: campaign={google_campaign_id} clinic={clinic_name} url={final_url} sitelink_urls={sitelink_urls}")
             return {"success": True, "mock": True}
 
         try:
@@ -1652,22 +1652,34 @@ class AdsClient:
                     print(f"[AdsClient] ビジネス名紐付け（既に存在するかエラー）: {link_resp.text[:150]}")
 
             # ==========================================
-            # 2. サイトリンクアセット（2件）の検索または作成・紐付け
+            # 2. サイトリンクアセット（2〜3件）の検索または作成・紐付け
             # ==========================================
             sitelinks_to_create = [
                 {
                     "text": "オンライン予約はこちら",
                     "desc1": "24時間LINEから簡単予約受付中",
                     "desc2": "初めての方もお気軽にご相談ください",
-                    "param": "sl=reserve"
+                    "param": "sl=reserve",
+                    "url": sitelink_urls.get("reserve_url") if sitelink_urls else None
                 },
                 {
                     "text": "当院の特徴・施術メニュー",
                     "desc1": "根本改善を目指す独自の整体技術",
                     "desc2": "腰痛や肩こりなど重症例に対応",
-                    "param": "sl=menu"
+                    "param": "sl=menu",
+                    "url": sitelink_urls.get("price_url") if sitelink_urls else None
                 }
             ]
+
+            # お客様の声が設定されている場合は3つ目のサイトリンクを追加
+            if sitelink_urls and sitelink_urls.get("reviews_url"):
+                sitelinks_to_create.append({
+                    "text": "当院の口コミ・お客様の声",
+                    "desc1": "多くの患者様から喜びの声を頂戴",
+                    "desc2": "ご来院前の参考にぜひご覧ください",
+                    "param": "sl=reviews",
+                    "url": sitelink_urls.get("reviews_url")
+                })
 
             # 既存のサイトリンクアセットを取得
             existing_sitelinks = {}
@@ -1686,6 +1698,11 @@ class AdsClient:
                 sl_rn = existing_sitelinks.get(sl_text)
 
                 if not sl_rn:
+                    # 個別URLが指定されていなければダミーパラメータをメインLPに付加
+                    sl_url = sl.get("url")
+                    if not sl_url:
+                        sl_url = self._add_url_parameter(final_url, sl["param"])
+
                     # アセット新規作成
                     sl_op = {
                         "create": {
@@ -1694,7 +1711,7 @@ class AdsClient:
                                 "linkText": sl_text,
                                 "description1": sl["desc1"][:35],
                                 "description2": sl["desc2"][:35],
-                                "finalUrls": [self._add_url_parameter(final_url, sl["param"])]
+                                "finalUrls": [sl_url]
                             }
                         }
                     }

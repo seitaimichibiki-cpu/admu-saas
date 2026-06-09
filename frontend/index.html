@@ -998,6 +998,30 @@
           </div>
           <div class="card settings-card">
             <h3 class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              Google広告アセット用URL設定
+            </h3>
+            <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2); padding:10px 14px; border-radius:6px; margin-bottom:12px;">
+              <span style="font-size:12px; color:#60a5fa; font-weight:bold; display:block; margin-bottom:4px;">💡 広告品質向上のヒント</span>
+              <span style="font-size:11px; color:var(--text-2); line-height:1.5; display:block;">
+                各アセットで全く別の遷移先URLを設定すると、Google広告の品質スコア（広告ランク）が向上し、結果としてクリック単価（CPC）が安くなる効果があります。未入力の場合は、メインLPのURLにダミーパラメータを付加してポリシー重複を回避します。
+              </span>
+            </div>
+            <div class="form-group">
+              <label>料金・施術メニューページのURL (推奨)</label>
+              <input type="url" id="settSitelinkPriceUrl" placeholder="例: https://example.com/menu" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>お客様の声・口コミページのURL (推奨)</label>
+              <input type="url" id="settSitelinkReviewsUrl" placeholder="例: https://example.com/reviews" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>オンライン予約ページのURL (推奨)</label>
+              <input type="url" id="settSitelinkReserveUrl" placeholder="例: https://example.com/reserve" class="form-input">
+            </div>
+          </div>
+          <div class="card settings-card">
+            <h3 class="card-title">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               LINE通知設定
             </h3>

@@ -173,6 +173,9 @@ def init_db():
             logiction_base_url TEXT,
             is_demo INTEGER DEFAULT 0,
             demo_expires_at TEXT,
+            sitelink_price_url TEXT,
+            sitelink_reviews_url TEXT,
+            sitelink_reserve_url TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -368,6 +371,9 @@ def init_db():
         "ALTER TABLE clinics ADD COLUMN email TEXT",
         "ALTER TABLE clinics ADD COLUMN address TEXT",
         "ALTER TABLE clinics ADD COLUMN line_uid TEXT",
+        "ALTER TABLE ads_accounts ADD COLUMN sitelink_price_url TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN sitelink_reviews_url TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN sitelink_reserve_url TEXT DEFAULT NULL",
     ]
     for sql in migrations:
         try:
@@ -559,7 +565,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "gemini_api_key", "ai_monthly_limit",
                   "google_link_status", "google_link_requested_at",
                   "logiction_integration_key", "logiction_base_url",
-                  "is_demo", "demo_expires_at"]
+                  "is_demo", "demo_expires_at",
+                  "sitelink_price_url", "sitelink_reviews_url", "sitelink_reserve_url"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]

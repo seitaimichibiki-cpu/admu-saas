@@ -102,5 +102,59 @@ class TestAdStrengthOptimization(unittest.TestCase):
         self.assertIn("腰痛 整体 藤枝", kws)
         self.assertIn("焼津 腰痛 治療", kws)
 
+    @patch("requests.post")
+    def test_link_business_name_and_sitelinks_with_custom_urls(self, mock_post):
+        self.client.mock_mode = False
+        self.client._get_rest_access_token = MagicMock(return_value="mock_token")
+
+        sitelink_urls = {
+            "price_url": "https://michibiki-seitai.com/menu-detail",
+            "reviews_url": "https://michibiki-seitai.com/voice",
+            "reserve_url": "https://michibiki-seitai.com/reserve-online"
+        }
+
+        post_calls = []
+        def side_effect(url, headers, json):
+            post_calls.append((url, json))
+            r = MagicMock()
+            r.status_code = 200
+            if "searchStream" in url:
+                r.json.return_value = [{"results": []}]
+            else:
+                r.json.return_value = {"results": [{"resourceName": "customers/123/assets/456"}]}
+            return r
+        mock_post.side_effect = side_effect
+
+        self.client.link_business_name_and_sitelinks(
+            google_campaign_id="12345678",
+            clinic_name="整体院導",
+            final_url="https://michibiki-seitai.com",
+            sitelink_urls=sitelink_urls
+        )
+
+        price_url_checked = False
+        reviews_url_checked = False
+        reserve_url_checked = False
+
+        for url, payload in post_calls:
+            if "assets:mutate" in url:
+                operations = payload.get("operations", [])
+                for op in operations:
+                    create = op.get("create", {})
+                    if create.get("type") == "SITELINK":
+                        sl_asset = create.get("sitelinkAsset", {})
+                        urls = sl_asset.get("finalUrls", [])
+                        if urls:
+                            if urls[0] == "https://michibiki-seitai.com/menu-detail":
+                                price_url_checked = True
+                            elif urls[0] == "https://michibiki-seitai.com/voice":
+                                reviews_url_checked = True
+                            elif urls[0] == "https://michibiki-seitai.com/reserve-online":
+                                reserve_url_checked = True
+
+        self.assertTrue(price_url_checked)
+        self.assertTrue(reviews_url_checked)
+        self.assertTrue(reserve_url_checked)
+
 if __name__ == "__main__":
     unittest.main()
