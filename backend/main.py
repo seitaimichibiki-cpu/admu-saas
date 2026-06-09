@@ -4062,7 +4062,12 @@ def admin_change_password(req: ChangePasswordReq):
 @app.get("/api/admin/overview")
 def admin_overview(request: Request, start: Optional[str] = None, end: Optional[str] = None, password: str = "", authorization: Optional[str] = Header(None)):
     _check_admin(password, authorization, request)
-    return {"clinics": db.get_admin_overview(start, end)}
+    try:
+        return {"clinics": db.get_admin_overview(start, end)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Overview error: {str(e)}")
 
 
 @app.get("/api/admin/performance-analysis")
