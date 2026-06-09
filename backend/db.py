@@ -1474,16 +1474,16 @@ def create_demo_account(clinic_name: str, email: str, password_hash: str) -> dic
         # 7. ダミーのアラートログの作成
         conn.execute("""
             INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
-            VALUES (?, ?, 'INFO', '【AI入札】キャンペーン「デモ_検索_渋谷駅前腰痛専門」の入札単価を自動調整しました（CVR良好のため+10%）。', 1)
-        """, (clinic_id, c1_id))
+            VALUES (?, ?, 'INFO', ?, 1)
+        """, (clinic_id, c1_id, '【AI入札】キャンペーン「デモ_検索_渋谷駅前腰痛専門」の入札単価を自動調整しました（CVR良好のため+10%）。'))
         conn.execute("""
             INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
-            VALUES (?, ?, 'INFO', '【LTV同期】Logictionから最新 of LTVデータ（2件、総額12万円）をGoogle広告へ自動Push同期しました。', 1)
-        """, (clinic_id, c1_id))
+            VALUES (?, ?, 'INFO', ?, 1)
+        """, (clinic_id, c1_id, '【LTV同期】Logictionから最新 of LTVデータ（2件、総額12万円）をGoogle広告へ自動Push同期しました。'))
         conn.execute("""
             INSERT INTO alerts (clinic_id, campaign_id, level, message, notified)
-            VALUES (?, ?, 'INFO', '【無駄除外】来院患者のいない遠方エリア（千葉県浦安市）を無駄エリアとして自動除外登録しました。', 1)
-        """, (clinic_id, c1_id))
+            VALUES (?, ?, 'INFO', ?, 1)
+        """, (clinic_id, c1_id, '【無駄除外】来院患者のいない遠方エリア（千葉県浦安市）を無駄エリアとして自動除外登録しました。'))
 
         conn.commit()
 
