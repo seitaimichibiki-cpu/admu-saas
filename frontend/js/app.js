@@ -2198,36 +2198,178 @@ document.getElementById('generateAdCopyBtn').addEventListener('click', async () 
   }
 });
 
+function getGoogleAdsLength(str) {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    if ((c >= 0x0020 && c <= 0x007e) || (c >= 0xff61 && c <= 0xff9f)) {
+      len += 1;
+    } else {
+      len += 2;
+    }
+  }
+  return len;
+}
+
+window.updateAdPreviewAndStats = function() {
+  const headlineInputs = document.querySelectorAll('.ad-headline-input');
+  const descInputs = document.querySelectorAll('.ad-desc-input');
+  
+  const headlines = Array.from(headlineInputs).map(inp => inp.value);
+  const descs = Array.from(descInputs).map(inp => inp.value);
+  
+  // プレビューの更新
+  const previewH = headlines.filter(h => h.trim()).slice(0,3).join(' | ') || '見出し1 | 見出し2 | 見出し3';
+  const previewD = descs.filter(d => d.trim())[0] || '説明文がここに表示されます。';
+  
+  const hPreviewEl = document.querySelector('#adPreviewBox .rsa-headline');
+  const dPreviewEl = document.querySelector('#adPreviewBox .rsa-desc');
+  if (hPreviewEl) hPreviewEl.textContent = previewH;
+  if (dPreviewEl) dPreviewEl.textContent = previewD;
+  
+  // 文字数カウンターの更新
+  headlineInputs.forEach((inp, idx) => {
+    const len = getGoogleAdsLength(inp.value);
+    const counter = inp.nextElementSibling;
+    if (counter && counter.classList.contains('ad-char-counter')) {
+      counter.textContent = `${len}/30`;
+      counter.className = 'ad-char-counter';
+      if (len > 25 && len <= 30) counter.classList.add('warning');
+      else if (len > 30) counter.classList.add('danger');
+    }
+  });
+
+  descInputs.forEach((inp, idx) => {
+    const len = getGoogleAdsLength(inp.value);
+    const counter = inp.nextElementSibling;
+    if (counter && counter.classList.contains('ad-char-counter')) {
+      counter.textContent = `${len}/90`;
+      counter.className = 'ad-char-counter';
+      if (len > 80 && len <= 90) counter.classList.add('warning');
+      else if (len > 90) counter.classList.add('danger');
+    }
+  });
+
+  // 一括コピー用データを最新化
+  window._lastAdCopyData = {
+    headlines: headlines.filter(h => h.trim()),
+    descs: descs.filter(d => d.trim())
+  };
+};
+
+window.addAdHeadline = function() {
+  const container = document.getElementById('adHeadlineEditorList');
+  const currentCount = container.querySelectorAll('.ad-editor-row').length;
+  if (currentCount >= 15) {
+    toast('広告見出しは最大15個までです', 'warning');
+    return;
+  }
+  
+  const div = document.createElement('div');
+  div.className = 'ad-editor-row';
+  div.innerHTML = `
+    <input type="text" class="ad-editor-input ad-headline-input" placeholder="新しい見出し（30半角/15全角文字以内）" oninput="updateAdPreviewAndStats()">
+    <span class="ad-char-counter">0/30</span>
+    <button class="ad-editor-remove-btn" onclick="this.parentElement.remove(); updateAdPreviewAndStats();" title="削除">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  `;
+  container.appendChild(div);
+  updateAdPreviewAndStats();
+};
+
+window.addAdDesc = function() {
+  const container = document.getElementById('adDescEditorList');
+  const currentCount = container.querySelectorAll('.ad-editor-row').length;
+  if (currentCount >= 4) {
+    toast('説明文は最大4個までです', 'warning');
+    return;
+  }
+  
+  const div = document.createElement('div');
+  div.className = 'ad-editor-row';
+  div.innerHTML = `
+    <input type="text" class="ad-editor-input ad-desc-input" placeholder="新しい説明文（90半角/45全角文字以内）" oninput="updateAdPreviewAndStats()">
+    <span class="ad-char-counter">0/90</span>
+    <button class="ad-editor-remove-btn" onclick="this.parentElement.remove(); updateAdPreviewAndStats();" title="削除">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  `;
+  container.appendChild(div);
+  updateAdPreviewAndStats();
+};
+
 function renderAdCopyPreview(data) {
   const headlines = data.headlines || [];
   const descs = data.descriptions || [];
-  const previewH = headlines.slice(0,3).join(' | ');
-  const previewD = descs[0] || '';
+  const previewH = headlines.slice(0,3).join(' | ') || '見出し1 | 見出し2 | 見出し3';
+  const previewD = descs[0] || '説明文がここに表示されます。';
   const genBadge = data.generated_by === 'gemini'
     ? '<span style="font-size:11px;color:#a78bfa;margin-left:8px">✨ Gemini AI生成</span>'
     : '<span style="font-size:11px;color:var(--text-3);margin-left:8px">テンプレート使用</span>';
 
-  // 一括コピー用データを保存
   window._lastAdCopyData = {headlines, descs};
+
   document.getElementById('adPreviewBox').innerHTML = `
     <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
-      <div style="display:flex;align-items:center"><strong style="font-size:13px">RSAプレビュー</strong>${genBadge}</div>
+      <div style="display:flex;align-items:center"><strong style="font-size:13px">RSAプレビュー（配信イメージ）</strong>${genBadge}</div>
       <button onclick="copyAllAdCopy()" style="font-size:11px;font-weight:700;padding:6px 16px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.06);color:#fff;border-radius:99px;cursor:pointer;letter-spacing:1px">📋 一括コピー</button>
     </div>
-    <div class="rsa-preview">
+    <div class="rsa-preview" style="margin-bottom:20px">
       <div class="rsa-url">example.com › 整体院 › 予約</div>
       <div class="rsa-headline">${previewH}</div>
       <div class="rsa-desc">${previewD}</div>
     </div>
-    <div class="headlines-list">
-      <h4>見出し（${headlines.length}個）</h4>
-      ${headlines.map((h,i) => `<span class="headline-chip" data-copy="${h.replace(/"/g,'&quot;')}" data-copy-label="見出し${i+1}" title="クリックでコピー" style="cursor:pointer">${h}</span>`).join('')}
-    </div>
-    <div class="descs-list" style="margin-top:12px">
-      <h4>説明文（${descs.length}個）</h4>
-      ${descs.map((d,i) => `<div class="desc-item" data-copy="${d.replace(/"/g,'&quot;')}" data-copy-label="説明文${i+1}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px"><span>${d}</span><span style="font-size:10px;color:var(--text-3);white-space:nowrap">📋</span></div>`).join('')}
+    
+    <div class="ad-editor-container">
+      <div class="ad-editor-title">
+        <span>広告見出し（最低3個・最大15個）</span>
+      </div>
+      <div id="adHeadlineEditorList">
+        ${headlines.map((h, i) => {
+          const len = getGoogleAdsLength(h);
+          const warnClass = len > 30 ? ' danger' : len > 25 ? ' warning' : '';
+          return `
+            <div class="ad-editor-row">
+              <input type="text" class="ad-editor-input ad-headline-input" value="${h.replace(/"/g,'&quot;')}" oninput="updateAdPreviewAndStats()">
+              <span class="ad-char-counter${warnClass}">${len}/30</span>
+              <button class="ad-editor-remove-btn" onclick="this.parentElement.remove(); updateAdPreviewAndStats();" title="削除">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <button class="ad-editor-add-btn" onclick="addAdHeadline()">
+        <span>＋ 見出しを追加</span>
+      </button>
+
+      <div class="ad-editor-title" style="margin-top:20px">
+        <span>説明文（最低2個・最大4個）</span>
+      </div>
+      <div id="adDescEditorList">
+        ${descs.map((d, i) => {
+          const len = getGoogleAdsLength(d);
+          const warnClass = len > 90 ? ' danger' : len > 80 ? ' warning' : '';
+          return `
+            <div class="ad-editor-row">
+              <input type="text" class="ad-editor-input ad-desc-input" value="${d.replace(/"/g,'&quot;')}" oninput="updateAdPreviewAndStats()">
+              <span class="ad-char-counter${warnClass}">${len}/90</span>
+              <button class="ad-editor-remove-btn" onclick="this.parentElement.remove(); updateAdPreviewAndStats();" title="削除">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <button class="ad-editor-add-btn" onclick="addAdDesc()">
+        <span>＋ 説明文を追加</span>
+      </button>
     </div>
   `;
+  
+  // 初期カウンタ設定
+  updateAdPreviewAndStats();
 }
 
 document.getElementById('applyAdCopyBtn').addEventListener('click', async () => {
@@ -2235,7 +2377,34 @@ document.getElementById('applyAdCopyBtn').addEventListener('click', async () => 
   if (!campaignId) { toast('適用先のキャンペーンを選択してください', 'error'); return; }
   
   const latestCopyId = window._lastAdCopyId;
-  if (!latestCopyId) { toast('先に広告文を生成してください', 'error'); return; }
+
+  // 画面上の見出しと説明文を取得
+  const headlineInputs = document.querySelectorAll('.ad-headline-input');
+  const descInputs = document.querySelectorAll('.ad-desc-input');
+  const headlines = Array.from(headlineInputs).map(inp => inp.value.trim()).filter(Boolean);
+  const descs = Array.from(descInputs).map(inp => inp.value.trim()).filter(Boolean);
+
+  if (headlines.length < 3) {
+    toast('広告見出しは最低3個以上必要です（15個推奨）', 'error');
+    return;
+  }
+  if (descs.length < 2) {
+    toast('説明文は最低2個以上必要です（4個推奨）', 'error');
+    return;
+  }
+
+  // 文字数制限チェック
+  let tooLong = false;
+  headlines.forEach(h => {
+    if (getGoogleAdsLength(h) > 30) tooLong = true;
+  });
+  descs.forEach(d => {
+    if (getGoogleAdsLength(d) > 90) tooLong = true;
+  });
+  if (tooLong) {
+    toast('文字数制限を超過している見出しまたは説明文があります', 'error');
+    return;
+  }
 
   const btn = document.getElementById('applyAdCopyBtn');
   btn.disabled = true;
@@ -2247,10 +2416,12 @@ document.getElementById('applyAdCopyBtn').addEventListener('click', async () => 
       body: JSON.stringify({
         clinic_id: currentClinicId,
         campaign_id: parseInt(campaignId),
-        ad_copy_id: latestCopyId
+        ad_copy_id: latestCopyId || null,
+        headlines: headlines,
+        descriptions: descs
       })
     });
-    toast('✅ 広告文をGoogle広告に適用しました！', 'success');
+    toast('✅ 広告アセットを適用し、ビジネス名とサイトリンクを自動登録・紐付けました！', 'success');
     loadAdCopyHistory();
   } catch(e) {
     toast('適用失敗: ' + e.message, 'error');

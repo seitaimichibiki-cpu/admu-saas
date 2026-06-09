@@ -1326,26 +1326,57 @@ def generate_ad_copy(req: AdCopyReq):
 class ApplyAdCopyReq(BaseModel):
     clinic_id: int = 1
     campaign_id: int
-    ad_copy_id: int
+    ad_copy_id: Optional[int] = None
+    headlines: Optional[list[str]] = None
+    descriptions: Optional[list[str]] = None
 
 @app.post("/api/ad-copy/apply")
 def apply_ad_copy_endpoint(req: ApplyAdCopyReq):
-    """生成された広告コピーをGoogle広告キャンペーンに実適用する。"""
+    """広告コピーをGoogle広告キャンペーンに実適用する。画面からの編集値を優先する。"""
     acc = _require_account(req.clinic_id)
     client = _get_ads_client(acc, "google")
 
-    with db.get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM ad_copies WHERE id=? AND clinic_id=?",
-            (req.ad_copy_id, req.clinic_id)
-        ).fetchone()
+    clinic = db.get_clinic(req.clinic_id) or {}
+    clinic_name = clinic.get("name", "整体院")
+
+    # 画面上の編集値を優先して使用
+    if req.headlines is not None and req.descriptions is not None:
+        headlines = [h.strip() for h in req.headlines if h and h.strip()]
+        descriptions = [d.strip() for d in req.descriptions if d and d.strip()]
         
-    if not row:
-        raise HTTPException(404, "指定された広告コピーが見つかりません")
-    
-    ad_copy = dict(row)
-    headlines = [h.strip() for h in ad_copy.get("headlines", "").split("\n") if h.strip()]
-    descriptions = [d.strip() for d in ad_copy.get("descriptions", "").split("\n") if d.strip()]
+        # 新しい広告コピーとしてDBに保存・更新する
+        if req.ad_copy_id:
+            with db.get_conn() as conn:
+                conn.execute(
+                    "UPDATE ad_copies SET headlines=?, descriptions=? WHERE id=? AND clinic_id=?",
+                    ("\n".join(headlines), "\n".join(descriptions), req.ad_copy_id, req.clinic_id)
+                )
+                conn.commit()
+            ad_copy_id = req.ad_copy_id
+        else:
+            ad_copy_id = db.save_ad_copy(req.clinic_id, {
+                "campaign_id": req.campaign_id,
+                "headlines": "\n".join(headlines),
+                "descriptions": "\n".join(descriptions),
+                "prompt_context": "画面上での手動編集・適用",
+            })
+    else:
+        if not req.ad_copy_id:
+            raise HTTPException(400, "ad_copy_id または headlines/descriptions が必要です")
+            
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM ad_copies WHERE id=? AND clinic_id=?",
+                (req.ad_copy_id, req.clinic_id)
+            ).fetchone()
+            
+        if not row:
+            raise HTTPException(404, "指定された広告コピーが見つかりません")
+        
+        ad_copy = dict(row)
+        headlines = [h.strip() for h in ad_copy.get("headlines", "").split("\n") if h.strip()]
+        descriptions = [d.strip() for d in ad_copy.get("descriptions", "").split("\n") if d.strip()]
+        ad_copy_id = req.ad_copy_id
 
     campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
     g_id = campaign.get("google_campaign_id")
@@ -1353,7 +1384,8 @@ def apply_ad_copy_endpoint(req: ApplyAdCopyReq):
     if not g_id:
         raise HTTPException(404, "Google広告キャンペーンIDが紐付いていません")
 
-    res = client.update_campaign_rsa(g_id, headlines, descriptions)
+    # update_campaign_rsaをclinic_name付きで呼び出して、内部でアセット紐付けを行う
+    res = client.update_campaign_rsa(g_id, headlines, descriptions, clinic_name=clinic_name)
     if not res.get("success"):
         raise HTTPException(500, f"Google広告への適用失敗: {res.get('error')}")
 
@@ -1361,11 +1393,11 @@ def apply_ad_copy_endpoint(req: ApplyAdCopyReq):
     with db.get_conn() as conn:
         conn.execute(
             "UPDATE ad_copies SET status='active', applied_at=? WHERE id=? AND clinic_id=?",
-            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), req.ad_copy_id, req.clinic_id)
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ad_copy_id, req.clinic_id)
         )
         conn.commit()
 
-    return {"success": True, "message": "広告文をGoogle広告に適用しました", "resource": res.get("resource")}
+    return {"success": True, "message": "広告文をGoogle広告に適用しました", "resource": res.get("resource"), "ad_copy_id": ad_copy_id}
 
 @app.post("/api/analyze-report")
 async def analyze_report(clinic_id: int = 1):
@@ -1425,8 +1457,12 @@ async def create_full_campaign_setup(clinic_id: int = 1, request: Request = None
 
         client_ads = AdsClient(acc)
 
+        clinic = db.get_clinic(clinic_id) or {}
+        clinic_name = clinic.get("name", "整体院")
+
         config = {
-            "campaign_name": "整体院導_Search_藤枝商圏",
+            "clinic_name": clinic_name,
+            "campaign_name": f"{clinic_name}_Search_藤枝商圏" if clinic_name != "整体院" else "整体院導_Search_藤枝商圏",
             "daily_budget_yen": 1000,
             "final_url": "https://michibiki-seitai.com",
             "status": "PAUSED",
@@ -4901,37 +4937,53 @@ Markdown不要。純粋なJSONのみ返してください。
         if variant == "A":
             return {
                 "headlines": [
-                    f"{req.clinic_name}｜{req.target_issues}専門",
+                    f"{req.clinic_name}｜{req.target_issues}専門"[:15],
+                    f"{req.region}の{req.target_issues}整体院"[:15],
+                    f"{req.region}で{req.target_issues}なら当院"[:15],
                     "施術実績1,000件以上",
                     "当日予約OK・完全個室",
                     "国家資格保有スタッフ在籍",
-                    f"{req.region}駅から徒歩3分",
+                    f"{req.region}駅から徒歩3分"[:15],
                     "初回限定お試し価格あり",
                     "口コミ評価★4.8以上",
-                    "あなたの痛みを根本改善",
+                    "痛みの原因から根本改善",
+                    "平日は夜20時まで営業中",
+                    "土日祝日も休まず診療",
+                    "産後の骨盤矯正にも対応",
+                    "予約はLINEで24H受付",
+                    "アフターケア指導も充実",
                 ],
                 "descriptions": [
                     f"【{req.clinic_name}】{req.target_issues}でお悩みの方へ。経験豊富なスタッフが丁寧に対応。まずはお気軽にご相談ください。",
                     f"施術実績1,000件超。{req.region}で選ばれる整体院。初回限定割引で今すぐお試しください。",
-                    "完全予約制・個室対応で安心。あなたのペースで通院できます。"
+                    "完全予約制・個室対応で安心。あなたのペースで通院できます。",
+                    "痛みの根本原因を特定し一人ひとりに合わせた施術を提供。LINEから24時間いつでも予約可能です。"
                 ]
             }
         else:
             return {
                 "headlines": [
-                    f"今すぐ{req.target_issues}を治したい方へ",
+                    f"今すぐ{req.target_issues}を改善"[:15],
+                    f"辛い{req.target_issues}でお悩みなら"[:15],
+                    f"{req.region}で評判の専門整体"[:15],
                     "最短当日対応可能",
-                    f"{req.region}の整体院 急募",
-                    "放置すると悪化するリスクあり",
+                    f"{req.region}で今すぐ解決"[:15],
+                    "放置すると悪化するリスクも",
                     "1回で変化を実感できる施術",
                     "空き状況を今すぐ確認",
-                    "痛みの原因から根本アプローチ",
+                    "痛みの原因へ根本アプローチ",
                     "LINE予約で24時間受付中",
+                    "もう痛み止めに頼らない",
+                    "どこに行ってもダメだった方",
+                    "完全予約制・個室で施術",
+                    "藤枝駅近くの通いやすい立地",
+                    "施術後の姿勢指導で予防",
                 ],
                 "descriptions": [
                     f"{req.target_issues}を放置していませんか？早期対応が回復の鍵。今すぐ{req.clinic_name}にご予約を。",
                     "「もう少し様子を見よう」が慢性化の原因。専門スタッフが素早く改善をサポートします。",
-                    "当日対応OK。LINE予約で24時間受付中。まずは症状をお聞かせください。"
+                    "当日対応OK。LINE予約で24時間受付中。まずは症状をお聞かせください。",
+                    "重症の腰痛や肩こりもお任せください。再発防止に向けたセルフケアまで徹底サポートいたします。"
                 ]
             }
 

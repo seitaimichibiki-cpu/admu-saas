@@ -444,6 +444,12 @@ class AdsClient:
                 "ad_created": ad_created,
             })
 
+        # ビジネス名・サイトリンクアセットの自動連携
+        clinic_name = config.get("clinic_name")
+        final_url = config.get("final_url")
+        if campaign_id and clinic_name and final_url:
+            self.link_business_name_and_sitelinks(campaign_id, clinic_name, final_url)
+
         return {
             "campaign_id": campaign_id,
             "campaign_name": config["campaign_name"],
@@ -1116,13 +1122,13 @@ class AdsClient:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
 
-    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None) -> dict:
+    def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None, clinic_name: str = None) -> dict:
         """
         キャンペーン内の広告グループのアクティブなRSA（レスポンシブ検索広告）を更新する。
         既存のRSAを検索し、headlinesとdescriptions、およびfinal_urlを新しいもので上書きする。
         """
         if self.mock_mode:
-            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions} URL={final_url}")
+            print(f"[MOCK] RSA更新: campaign={google_campaign_id} H={headlines} D={descriptions} URL={final_url} clinic_name={clinic_name}")
             return {"success": True, "mock": True}
 
         try:
@@ -1245,6 +1251,10 @@ class AdsClient:
                     if ref_name and "adGroupAds" in ref_name:
                         new_ad_rn = ref_name
                 
+                # ビジネス名・サイトリンクアセットの自動連携
+                if clinic_name and final_urls:
+                    self.link_business_name_and_sitelinks(google_campaign_id, clinic_name, final_urls[0])
+
                 if ad_rn:
                     print(f"[AdsClient] 既存のRSA広告 {ad_rn} を削除し、新規に作成しました: {new_ad_rn}")
                     return {"success": True, "updated": True, "resource": new_ad_rn}
@@ -1506,7 +1516,150 @@ class AdsClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def link_business_name_and_sitelinks(self, google_campaign_id: str, clinic_name: str, final_url: str) -> dict:
+        """
+        キャンペーンに対して、クリニックの「ビジネス名」アセットと、予約用「サイトリンク」アセットを自動的に紐付け・登録する。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] ビジネス名・サイトリンクアセット適用: campaign={google_campaign_id} clinic={clinic_name} url={final_url}")
+            return {"success": True, "mock": True}
 
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
 
+            import requests as _rq
 
+            # ビジネス名は最大25文字
+            clean_clinic_name = clinic_name.strip()[:25]
+            campaign_rn = f"customers/{cid}/campaigns/{google_campaign_id}"
 
+            # ==========================================
+            # 1. ビジネス名アセットの検索または作成
+            # ==========================================
+            business_asset_rn = None
+            search_query = f"SELECT asset.resource_name FROM asset WHERE asset.type = 'BUSINESS_NAME'"
+            search_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": search_query})
+            
+            if search_resp.status_code == 200:
+                for batch in search_resp.json():
+                    for row in batch.get("results", []):
+                        asset = row.get("asset", {})
+                        # 既存アセットがあれば再利用（同名か簡易確認）
+                        if asset.get("businessNameAsset", {}).get("businessName") == clean_clinic_name:
+                            business_asset_rn = asset.get("resourceName")
+                            break
+                    if business_asset_rn: break
+
+            if not business_asset_rn:
+                # 存在しない場合は作成
+                create_op = {
+                    "create": {
+                        "type": "BUSINESS_NAME",
+                        "businessNameAsset": {
+                            "businessName": clean_clinic_name
+                        }
+                    }
+                }
+                asset_resp = _rq.post(f"{BASE}/assets:mutate", headers=headers_rest, json={"operations": [create_op]})
+                if asset_resp.status_code == 200:
+                    business_asset_rn = asset_resp.json().get("results", [{}])[0].get("resourceName")
+                    print(f"[AdsClient] ビジネス名アセットを作成しました: {business_asset_rn}")
+                else:
+                    print(f"[AdsClient] ビジネス名アセット作成スキップ/エラー: {asset_resp.text[:200]}")
+
+            # ビジネス名アセットをキャンペーンに紐付け
+            if business_asset_rn:
+                link_op = {
+                    "create": {
+                        "campaign": campaign_rn,
+                        "asset": business_asset_rn,
+                        "fieldType": "BUSINESS_NAME"
+                    }
+                }
+                # すでに紐付いている場合の重複エラーを許容する
+                link_resp = _rq.post(f"{BASE}/campaignAssets:mutate", headers=headers_rest, json={"operations": [link_op]})
+                if link_resp.status_code == 200:
+                    print(f"[AdsClient] キャンペーンにビジネス名アセットを紐付けました")
+                else:
+                    print(f"[AdsClient] ビジネス名紐付け（既に存在するかエラー）: {link_resp.text[:150]}")
+
+            # ==========================================
+            # 2. サイトリンクアセット（2件）の検索または作成・紐付け
+            # ==========================================
+            sitelinks_to_create = [
+                {
+                    "text": "オンライン予約はこちら",
+                    "desc1": "24時間LINEから簡単予約受付中",
+                    "desc2": "初めての方もお気軽にご相談ください"
+                },
+                {
+                    "text": "当院の特徴・施術メニュー",
+                    "desc1": "根本改善を目指す独自の整体技術",
+                    "desc2": "腰痛や肩こりなど重症例に対応"
+                }
+            ]
+
+            # 既存のサイトリンクアセットを取得
+            existing_sitelinks = {}
+            sl_query = f"SELECT asset.resource_name, asset.sitelink_asset.link_text FROM asset WHERE asset.type = 'SITELINK'"
+            sl_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": sl_query})
+            if sl_resp.status_code == 200:
+                for batch in sl_resp.json():
+                    for row in batch.get("results", []):
+                        asset = row.get("asset", {})
+                        txt = asset.get("sitelinkAsset", {}).get("linkText")
+                        if txt:
+                            existing_sitelinks[txt] = asset.get("resourceName")
+
+            for sl in sitelinks_to_create:
+                sl_text = sl["text"][:25]
+                sl_rn = existing_sitelinks.get(sl_text)
+
+                if not sl_rn:
+                    # アセット新規作成
+                    sl_op = {
+                        "create": {
+                            "type": "SITELINK",
+                            "sitelinkAsset": {
+                                "linkText": sl_text,
+                                "description1": sl["desc1"][:35],
+                                "description2": sl["desc2"][:35],
+                                "finalUrls": [final_url]
+                            }
+                        }
+                    }
+                    asset_resp = _rq.post(f"{BASE}/assets:mutate", headers=headers_rest, json={"operations": [sl_op]})
+                    if asset_resp.status_code == 200:
+                        sl_rn = asset_resp.json().get("results", [{}])[0].get("resourceName")
+                        print(f"[AdsClient] サイトリンクアセットを作成しました: {sl_rn}")
+                    else:
+                        print(f"[AdsClient] サイトリンク作成エラー: {asset_resp.text[:200]}")
+
+                if sl_rn:
+                    # キャンペーンに紐付け
+                    link_op = {
+                        "create": {
+                            "campaign": campaign_rn,
+                            "asset": sl_rn,
+                            "fieldType": "SITELINK"
+                        }
+                    }
+                    link_resp = _rq.post(f"{BASE}/campaignAssets:mutate", headers=headers_rest, json={"operations": [link_op]})
+                    if link_resp.status_code == 200:
+                        print(f"[AdsClient] キャンペーンにサイトリンク「{sl_text}」を紐付けました")
+                    else:
+                        print(f"[AdsClient] サイトリンク紐付け（既に存在するかエラー）: {link_resp.text[:150]}")
+
+            return {"success": True}
+
+        except Exception as e:
+            print(f"[AdsClient] アセット連携に失敗（処理は続行します）: {e}")
+            return {"success": False, "error": str(e)}
