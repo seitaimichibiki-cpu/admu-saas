@@ -932,10 +932,14 @@ def set_monthly_budget(req: MonthlyBudgetReq):
                             google_camp_id = row[0]
                             
                     if google_camp_id:
-                        try:
-                            _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
-                        except Exception as api_err:
-                            raise HTTPException(500, f"Google 広告への予算同期に失敗しました: {api_err}")
+                        if str(google_camp_id).isdigit():
+                            try:
+                                _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
+                            except Exception as api_err:
+                                # 存在しない等のAPIエラー時はクラッシュせず警告ログを出力して続行
+                                print(f"[set_monthly_budget] Google広告予算同期エラー (キャンペーン={google_camp_id}): {api_err}")
+                        else:
+                            print(f"[set_monthly_budget] 非数値キャンペーンIDのためGoogle広告同期をスキップ: {google_camp_id}")
                 conn.commit()
     return result
 
@@ -1012,10 +1016,14 @@ def manual_budget_allocate(req: ManualAllocationReq):
                     google_camp_id = row[0]
                     
             if google_camp_id:
-                try:
-                    _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
-                except Exception as api_err:
-                    raise HTTPException(500, f"Google 広告への予算同期に失敗しました: {api_err}")
+                if str(google_camp_id).isdigit():
+                    try:
+                        _sync_campaign_budget_to_gads(req.clinic_id, google_camp_id, daily_micros)
+                    except Exception as api_err:
+                        # 存在しない等のAPIエラー時はクラッシュせずログ出力のみで次のキャンペーンの同期を継続する
+                        print(f"[manual-allocate] Google広告予算同期エラー (キャンペーン={google_camp_id}): {api_err}")
+                else:
+                    print(f"[manual-allocate] 非数値キャンペーンIDのためGoogle広告同期をスキップ: {google_camp_id}")
         conn.commit()
         
     # 3. 最新のキャンペーン情報を引いて、allocations構造を作って返す

@@ -483,6 +483,11 @@ class AdsClient:
             print(f"[MOCK] 予算更新: campaign_id={google_campaign_id} -> {budget_micros} micros")
             return
         
+        # モックIDなど非数値のキャンペーンIDの場合は同期をスキップ
+        if not google_campaign_id or not str(google_campaign_id).isdigit():
+            print(f"[AdsClient] 数値以外のキャンペーンIDのため予算同期をスキップします: {google_campaign_id}")
+            return
+        
         # 1. キャンペーンに紐づく CampaignBudget の resource_name を取得
         ga_service = self._client.get_service("GoogleAdsService")
         query = f"""
