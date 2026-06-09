@@ -1557,8 +1557,14 @@ def delete_clinic(clinic_id: int) -> None:
         
         for t_spec in tables:
             try:
+                if USE_PG:
+                    conn.execute("SAVEPOINT del_sp")
                 conn.execute(f"DELETE FROM {t_spec}", (clinic_id,))
+                if USE_PG:
+                    conn.execute("RELEASE SAVEPOINT del_sp")
             except Exception as e:
+                if USE_PG:
+                    conn.execute("ROLLBACK TO SAVEPOINT del_sp")
                 # 存在しないテーブル等のエラーは無視
                 print(f"[delete_clinic] Skip table delete error: {e}")
                 pass
