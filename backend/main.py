@@ -4171,7 +4171,7 @@ def admin_performance_analysis(
     # クリニック別KPI計算
     clinic_stats = []
     for r in clinic_rows:
-        cost_yen = round((r["cost_micros"] or 0) / 1_000_000)
+        cost_yen = round(float(r["cost_micros"] or 0) / 1_000_000)
         convs = float(r["conversions"] or 0)
         clicks = int(r["clicks"] or 0)
         imps = int(r["impressions"] or 0)
@@ -4210,7 +4210,7 @@ def admin_performance_analysis(
     trend = [
         {
             "date": r["date"],
-            "cost_yen": round((r["cost_micros"] or 0) / 1_000_000),
+            "cost_yen": round(float(r["cost_micros"] or 0) / 1_000_000),
             "clicks": int(r["clicks"] or 0),
             "conversions": round(float(r["conversions"] or 0), 1),
             "impressions": int(r["impressions"] or 0),
@@ -4752,10 +4752,10 @@ def export_csv(clinic_id: int = 1, days: int = 30, include: str = "performance,c
                 p.get("date", ""),
                 p.get("impressions", 0),
                 p.get("clicks", 0),
-                round(p.get("ctr", 0), 2),
-                round((p.get("cost_micros", 0) or 0) / 1_000_000, 0),
-                round(p.get("conversions", 0), 1),
-                round(p.get("cvr", 0), 2),
+                round(float(p.get("ctr", 0) or 0), 2),
+                round(float(p.get("cost_micros", 0) or 0) / 1_000_000, 0),
+                round(float(p.get("conversions", 0) or 0), 1),
+                round(float(p.get("cvr", 0) or 0), 2),
             ])
         writer.writerow([])
 
@@ -4767,7 +4767,7 @@ def export_csv(clinic_id: int = 1, days: int = 30, include: str = "performance,c
                 c.get("id", ""),
                 c.get("name", ""),
                 c.get("status", ""),
-                round((c.get("budget_micros", 0) or 0) / 1_000_000, 0),
+                round(float(c.get("budget_micros", 0) or 0) / 1_000_000, 0),
                 c.get("created_at", ""),
             ])
         writer.writerow([])

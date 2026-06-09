@@ -905,7 +905,7 @@ def save_ad_copy(clinic_id: int, data: dict) -> Optional[int]:
         return cur.lastrowid
 
 def update_ad_copy_score(copy_id: int, clinic_id: int, impressions: int, clicks: int):
-    ctr = round(clicks / impressions, 4) if impressions > 0 else 0
+    ctr = round(float(clicks) / float(impressions), 4) if impressions > 0 else 0
     with get_conn() as conn:
         conn.execute(
             "UPDATE ad_copies SET impressions=?, clicks=?, ctr_score=? WHERE id=? AND clinic_id=?",
@@ -1119,9 +1119,9 @@ def get_admin_overview(start_date: str = None, end_date: str = None):
 
             def _kpi(row):
                 if not row: return {}
-                cost   = row["cost"] or 0
-                clicks = row["clicks"] or 0
-                imps   = row["imps"] or 0
+                cost   = float(row["cost"] or 0)
+                clicks = int(row["clicks"] or 0)
+                imps   = int(row["imps"] or 0)
                 cv     = float(row["cv"] or 0)
                 ctr    = round(clicks / imps * 100, 2) if imps else 0
                 cvr    = round(cv / clicks * 100, 2) if clicks else 0
