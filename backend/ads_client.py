@@ -1683,26 +1683,33 @@ class AdsClient:
 
             # 既存のサイトリンクアセットを取得
             existing_sitelinks = {}
-            sl_query = f"SELECT asset.resource_name, asset.sitelink_asset.link_text FROM asset WHERE asset.type = 'SITELINK'"
+            sl_query = (
+                "SELECT asset.resource_name, asset.sitelink_asset.link_text, asset.sitelink_asset.final_urls "
+                "FROM asset WHERE asset.type = 'SITELINK'"
+            )
             sl_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": sl_query})
             if sl_resp.status_code == 200:
                 for batch in sl_resp.json():
                     for row in batch.get("results", []):
                         asset = row.get("asset", {})
                         txt = asset.get("sitelinkAsset", {}).get("linkText")
+                        urls = asset.get("sitelinkAsset", {}).get("finalUrls", [])
+                        url = urls[0] if urls else ""
                         if txt:
-                            existing_sitelinks[txt] = asset.get("resourceName")
+                            existing_sitelinks[(txt, url)] = asset.get("resourceName")
+
+            target_asset_rns = set()
 
             for sl in sitelinks_to_create:
                 sl_text = sl["text"][:25]
-                sl_rn = existing_sitelinks.get(sl_text)
+                sl_url = sl.get("url")
+                if not sl_url:
+                    sl_url = self._add_url_parameter(final_url, sl["param"])
+
+                # テキストとURLが両方一致する既存アセットがあるか探す
+                sl_rn = existing_sitelinks.get((sl_text, sl_url))
 
                 if not sl_rn:
-                    # 個別URLが指定されていなければダミーパラメータをメインLPに付加
-                    sl_url = sl.get("url")
-                    if not sl_url:
-                        sl_url = self._add_url_parameter(final_url, sl["param"])
-
                     # アセット新規作成
                     sl_op = {
                         "create": {
@@ -1723,19 +1730,54 @@ class AdsClient:
                         print(f"[AdsClient] サイトリンク作成エラー: {asset_resp.text[:200]}")
 
                 if sl_rn:
-                    # キャンペーンに紐付け
-                    link_op = {
-                        "create": {
-                            "campaign": campaign_rn,
-                            "asset": sl_rn,
-                            "fieldType": "SITELINK"
-                        }
-                    }
-                    link_resp = _rq.post(f"{BASE}/campaignAssets:mutate", headers=headers_rest, json={"operations": [link_op]})
+                    target_asset_rns.add(sl_rn)
+
+            if target_asset_rns:
+                # 現在キャンペーンに紐付いている既存のサイトリンクを検索
+                existing_links = []
+                link_query = (
+                    f"SELECT campaign_asset.resource_name, campaign_asset.asset "
+                    f"FROM campaign_asset "
+                    f"WHERE campaign_asset.campaign = '{campaign_rn}' AND campaign_asset.field_type = 'SITELINK'"
+                )
+                link_resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": link_query})
+                if link_resp.status_code == 200:
+                    for batch in link_resp.json():
+                        for row in batch.get("results", []):
+                            ca = row.get("campaignAsset", {})
+                            if ca.get("resourceName") and ca.get("asset"):
+                                existing_links.append({
+                                    "resource_name": ca.get("resourceName"),
+                                    "asset_rn": ca.get("asset")
+                                })
+
+                # mutate操作の組み立て
+                link_ops = []
+                # 1. 古くなったサイトリンクアセット（今回の候補にないもの）の紐付けを解除
+                for link in existing_links:
+                    if link["asset_rn"] not in target_asset_rns:
+                        link_ops.append({
+                            "remove": link["resource_name"]
+                        })
+
+                # 2. まだ紐付いていない新しいアセットを紐付け
+                already_linked_rns = {link["asset_rn"] for link in existing_links}
+                for target_rn in target_asset_rns:
+                    if target_rn not in already_linked_rns:
+                        link_ops.append({
+                            "create": {
+                                "campaign": campaign_rn,
+                                "asset": target_rn,
+                                "fieldType": "SITELINK"
+                            }
+                        })
+
+                if link_ops:
+                    link_resp = _rq.post(f"{BASE}/campaignAssets:mutate", headers=headers_rest, json={"operations": link_ops})
                     if link_resp.status_code == 200:
-                        print(f"[AdsClient] キャンペーンにサイトリンク「{sl_text}」を紐付けました")
+                        print(f"[AdsClient] キャンペーンへのサイトリンク紐付けを更新しました（追加/削除）")
                     else:
-                        print(f"[AdsClient] サイトリンク紐付け（既に存在するかエラー）: {link_resp.text[:150]}")
+                        print(f"[AdsClient] サイトリンク紐付け更新エラー（既に存在するかエラー）: {link_resp.text[:200]}")
 
             return {"success": True}
 
