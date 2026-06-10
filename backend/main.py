@@ -741,7 +741,43 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                 {"text": "整体院 モック", "match_type": "PHRASE", "status": "ENABLED"},
             ],
             "location": {"type": "proximity", "lat": 34.868, "lon": 138.257, "radius_km": 8},
-            "ads": [{"headlines": ["モック広告見出し1", "モック広告見出し2"], "descriptions": ["モック説明文1"], "final_urls": ["https://example.com"]}],
+            "ads": [{
+                "headlines": ["モック広告見出し1", "モック広告見出し2"],
+                "descriptions": ["モック説明文1"],
+                "final_urls": ["https://example.com"],
+                "status": "ENABLED",
+                "ad_strength": "AVERAGE",
+                "approval_status": "APPROVED",
+                "policy_topics": []
+            }],
+            "policy_statuses": {
+                "ad_strength": "AVERAGE",
+                "ad_approval": "APPROVED",
+                "ad_policy_topics": [],
+                "assets": [
+                    {
+                        "field_type": "BUSINESS_NAME",
+                        "type": "BUSINESS_NAME",
+                        "value": "モック整体院",
+                        "approval_status": "DISAPPROVED",
+                        "policy_topics": ["ビジネスの名前が不適切（適格性確認未完了）"]
+                    },
+                    {
+                        "field_type": "SITELINK",
+                        "type": "SITELINK",
+                        "value": "オンライン予約はこちら",
+                        "approval_status": "APPROVED",
+                        "policy_topics": []
+                    },
+                    {
+                        "field_type": "SITELINK",
+                        "type": "SITELINK",
+                        "value": "料金メニュー",
+                        "approval_status": "APPROVED",
+                        "policy_topics": []
+                    }
+                ]
+            },
             "budget_yen": 1000,
             "mock": True,
         }
@@ -838,14 +874,20 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     except Exception:
         pass
 
-    # ④ 広告文（RSA）
+    # ④ 広告文（RSA）と審査状況
     ads = []
+    ad_strength_global = "UNKNOWN"
+    ad_approval_global = "UNKNOWN"
+    ad_policy_topics_global = []
     try:
         ad_rows = gads_query(f"""
             SELECT ad_group_ad.ad.responsive_search_ad.headlines,
                    ad_group_ad.ad.responsive_search_ad.descriptions,
                    ad_group_ad.ad.final_urls,
-                   ad_group_ad.status
+                   ad_group_ad.status,
+                   ad_group_ad.ad.responsive_search_ad.ad_strength,
+                   ad_group_ad.policy_summary.approval_status,
+                   ad_group_ad.policy_summary.policy_topic_entries
             FROM ad_group_ad
             WHERE campaign.id = {g_id}
             AND ad_group_ad.status != REMOVED
@@ -857,15 +899,79 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             headlines = [h.get("text", "") for h in rsa.get("headlines", []) if h.get("text")]
             descriptions = [d.get("text", "") for d in rsa.get("descriptions", []) if d.get("text")]
             final_urls = ad.get("finalUrls", [])
+            
+            strength = rsa.get("adStrength", "UNKNOWN")
+            p_summary = aga.get("policySummary", {})
+            approval = p_summary.get("approvalStatus", "UNKNOWN")
+            
+            topics = []
+            for entry in p_summary.get("policyTopicEntries", []):
+                topics.append(entry.get("topic", ""))
+
+            # 代表値をセット
+            ad_strength_global = strength
+            ad_approval_global = approval
+            ad_policy_topics_global = topics
+
             if headlines or final_urls:
                 ads.append({
                     "headlines": headlines,
                     "descriptions": descriptions,
                     "final_urls": final_urls,
                     "status": aga.get("status", ""),
+                    "ad_strength": strength,
+                    "approval_status": approval,
+                    "policy_topics": topics
                 })
     except Exception:
         pass
+
+    # ⑤ キャンペーンアセットのステータス
+    assets_status = []
+    try:
+        asset_rows = gads_query(f"""
+            SELECT campaign_asset.field_type,
+                   campaign_asset.asset,
+                   asset.type,
+                   asset.policy_summary.approval_status,
+                   asset.policy_summary.policy_topic_entries,
+                   asset.sitelink_asset.link_text,
+                   asset.sitelink_asset.final_urls,
+                   asset.business_name_asset.business_name
+            FROM campaign_asset
+            WHERE campaign_asset.campaign = 'customers/{CID}/campaigns/{g_id}'
+              AND campaign_asset.status != REMOVED
+        """)
+        for row in asset_rows:
+            ca = row.get("campaignAsset", {})
+            asset = row.get("asset", {})
+            f_type = ca.get("fieldType", "")
+            a_type = asset.get("type", "")
+            
+            val = ""
+            if a_type == "SITELINK":
+                val = asset.get("sitelinkAsset", {}).get("linkText", "")
+            elif a_type == "BUSINESS_NAME":
+                val = asset.get("businessNameAsset", {}).get("businessName", "")
+            else:
+                val = asset.get("resourceName", "").split("/")[-1]
+                
+            p_summary = asset.get("policySummary", {})
+            approval = p_summary.get("approvalStatus", "UNKNOWN")
+            
+            topics = []
+            for entry in p_summary.get("policyTopicEntries", []):
+                topics.append(entry.get("topic", ""))
+                
+            assets_status.append({
+                "field_type": f_type,
+                "type": a_type,
+                "value": val,
+                "approval_status": approval,
+                "policy_topics": topics
+            })
+    except Exception as e:
+        print(f"[DetailAPI] アセットステータス取得中の例外: {e}")
 
     return {
         "google_campaign_id": g_id,
@@ -873,6 +979,12 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
         "keywords": keywords,
         "location": location,
         "ads": ads,
+        "policy_statuses": {
+            "ad_strength": ad_strength_global,
+            "ad_approval": ad_approval_global,
+            "ad_policy_topics": ad_policy_topics_global,
+            "assets": assets_status
+        },
         "mock": False,
     }
 

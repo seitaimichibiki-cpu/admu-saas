@@ -1251,6 +1251,139 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
+  // Google広告 同期・審査ステータスパネル (シンプルイズベスト版)
+  let policyHtml = '';
+  if (d.policy_statuses) {
+    const ps = d.policy_statuses;
+    
+    // 1. 広告の評価（Ad Strength）を噛み砕く
+    const strengthLabels = {
+      EXCELLENT: '🟢 最高 (AIのおすすめ設定が完璧です)',
+      GOOD: '🟢 良好 (十分な効果が期待できます)',
+      AVERAGE: '🟡 平均的 (見出しやリンクを増やすとさらに良くなります)',
+      POOR: '🔴 要改善 (見出しや説明文が不足しています)',
+      PENDING: '⏳ 測定中 (配信開始までお待ちください)',
+      UNKNOWN: '⏳ 判定中',
+      UNSPECIFIED: '未設定'
+    };
+    const strengthVal = ps.ad_strength || 'UNKNOWN';
+    const strengthLabel = strengthLabels[strengthVal] || strengthVal;
+
+    // 2. 全体ステータスの判定
+    const hasDisapprovedAsset = ps.assets && ps.assets.some(a => a.approval_status === 'DISAPPROVED');
+    const adDisapproved = ps.ad_approval === 'DISAPPROVED';
+    const isUnderReview = (ps.ad_approval === 'UNDER_REVIEW') || (ps.assets && ps.assets.some(a => a.approval_status === 'UNDER_REVIEW'));
+
+    let statusHeaderHtml = '';
+    if (adDisapproved || hasDisapprovedAsset) {
+      statusHeaderHtml = `
+        <div style="background:#fef2f2; border:1px solid #fee2e2; border-radius:8px; padding:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#ef4444; font-weight:bold; font-size:14px; margin-bottom:6px;">
+            <span>⚠️ 修正が必要です</span>
+          </div>
+          <p style="font-size:11px; color:#b91c1c; line-height:1.5; margin:0 0 10px 0;">
+            Google広告の審査で一部の項目が却下されています。以下の「対応が必要な項目」を確認して修正を行ってください。
+          </p>
+        </div>
+      `;
+    } else if (isUnderReview) {
+      statusHeaderHtml = `
+        <div style="background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; padding:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#d97706; font-weight:bold; font-size:14px; margin-bottom:6px;">
+            <span>⏳ Googleが確認中です</span>
+          </div>
+          <p style="font-size:11px; color:#b45309; line-height:1.5; margin:0;">
+            現在Google広告側で掲載準備（審査）を行っています。通常数時間〜1日程度で自動的に配信が始まりますので、このままお待ちください。
+          </p>
+        </div>
+      `;
+    } else {
+      statusHeaderHtml = `
+        <div style="background:#f0fdf4; border:1px solid #dcfce7; border-radius:8px; padding:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#16a34a; font-weight:bold; font-size:14px; margin-bottom:6px;">
+            <span>🟢 順調に配信準備完了</span>
+          </div>
+          <p style="font-size:11px; color:#15803d; line-height:1.5; margin:0;">
+            広告および全ての設定リンクがGoogleに承認され、順調に配信できる状態です。AdMuが自動で最適化を行っています。
+          </p>
+        </div>
+      `;
+    }
+
+    // 3. アクション（やるべきこと）リストの抽出
+    let todoItems = [];
+    if (ps.assets && ps.assets.length) {
+      ps.assets.forEach(asset => {
+        if (asset.approval_status === 'DISAPPROVED') {
+          const typeLabels = {
+            BUSINESS_NAME: '「院の名前」',
+            BUSINESS_LOGO: '「院のロゴ」',
+            SITELINK: '「紹介・予約リンク」',
+            MARKETING_IMAGE: '「広告画像」'
+          };
+          const name = typeLabels[asset.field_type] || typeLabels[asset.type] || '広告アセット';
+          
+          let actionText = '設定を見直してください';
+          let actionBtn = '';
+          
+          if (asset.policy_topics.some(r => r.includes('本人確認') || r.includes('身元確認') || r.includes('適格性確認') || r.includes('不適切'))) {
+            actionText = 'Google広告の「本人確認（適格性確認）」が未完了のため却下されています。公的書類をアップロードしてください。';
+            actionBtn = `
+              <a href="https://ads.google.com/aw/identityverification" target="_blank" class="btn btn-secondary btn-sm" style="display:inline-block; text-decoration:none; color:#ef4444; border-color:#fca5a5; background:#fff5f5; font-size:10px; margin-top:6px; padding:4px 8px; border-radius:4px; font-weight:bold;">
+                📢 本人確認ページを開く ↗
+              </a>`;
+          } else if (asset.policy_topics.some(r => r.includes('同一遷移先URL') || r.includes('重複') || r.includes('遷移先'))) {
+            actionText = '複数の紹介リンクに同じURLが使われているため却下されています。料金・口コミ・予約の各入力欄にそれぞれ異なるURLを設定してください。';
+            actionBtn = `
+              <button class="btn btn-secondary btn-sm" style="color:#ef4444; border-color:#fca5a5; background:#fff5f5; font-size:10px; margin-top:6px; padding:4px 8px; border-radius:4px; font-weight:bold;" onclick="scrollToAssetSettings()">
+                🔗 リンク先URLを今すぐ設定する
+              </button>`;
+          }
+
+          todoItems.push(`
+            <div style="padding:10px; background:rgba(239,68,68,0.02); border:1px dashed rgba(239,68,68,0.2); border-radius:6px; margin-bottom:8px;">
+              <div style="font-weight:bold; font-size:11px; color:#ef4444;">🚨 ${name} のエラー</div>
+              <div style="font-size:10px; color:var(--text-2); margin-top:4px; line-height:1.4;">${actionText}</div>
+              ${actionBtn}
+            </div>
+          `);
+        }
+      });
+    }
+
+    let todoHtml = '';
+    if (todoItems.length > 0) {
+      todoHtml = `
+        <div style="margin-top:12px; margin-bottom:12px;">
+          <div style="font-size:11px; color:var(--text-3); font-weight:bold; margin-bottom:6px;">⚠️ すぐに対応が必要なこと</div>
+          ${todoItems.join('')}
+        </div>
+      `;
+    }
+
+    policyHtml = `
+      <div class="drawer-section" style="background:rgba(255,255,255,0.01); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+          <div style="font-size:13px; font-weight:bold; color:var(--text-1); display:flex; align-items:center; gap:4px;">
+            📡 Google広告 連携状況
+          </div>
+          <button class="btn btn-secondary" style="font-size:10px; padding:2px 8px; height:auto; background:rgba(255,255,255,0.03);" onclick="refreshCampDrawerStatus('${d.google_campaign_id}')">
+            🔄 最新に更新
+          </button>
+        </div>
+
+        ${statusHeaderHtml}
+        
+        <div style="background:rgba(255,255,255,0.02); border-radius:6px; padding:10px; margin-bottom:12px;">
+          <div style="font-size:10px; color:var(--text-3); margin-bottom:4px;">AI広告文の充実度（Google評価）</div>
+          <div style="font-size:12px; font-weight:bold; color:var(--text-1);">${strengthLabel}</div>
+        </div>
+
+        ${todoHtml}
+      </div>
+    `;
+  }
+
   // ① 予算セクション
   const budgetHtml = `
     <div class="drawer-section">
@@ -1394,7 +1527,7 @@ function renderCampDrawer(d) {
       </div>
       <div id="manualUrlForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border)">
         <div style="margin-bottom:8px">
-          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">遷移先LPのURL</label>
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">遷移先LP of URL</label>
           <input type="url" id="manualUrlInput" value="${currentUrl}" placeholder="https://michibiki-seitai.com/symptoms/waist/" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
         </div>
         <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="updateCampaignFinalUrl()">設定を適用</button>
@@ -1443,11 +1576,39 @@ function renderCampDrawer(d) {
       </div>
     </div>`;
 
-  body.innerHTML = budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
+  body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
   if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml) {
-    body.innerHTML = '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
+    body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 }
+
+async function refreshCampDrawerStatus(googleCampaignId) {
+  try {
+    toast('最新の審査状況を再読み込み中...', 'info');
+    const d = await api(`/campaigns/${googleCampaignId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
+    renderCampDrawer(d);
+    toast('審査状況を更新しました', 'success');
+  } catch(e) {
+    toast('審査状況の更新に失敗: ' + e.message, 'error');
+  }
+}
+window.refreshCampDrawerStatus = refreshCampDrawerStatus;
+
+function scrollToAssetSettings() {
+  closeCampDrawer();
+  switchPage('settings');
+  setTimeout(() => {
+    const el = document.getElementById('settSitelinkPriceUrl');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
+      // 入力欄を強調させるフラッシュ効果
+      el.style.outline = '2px solid var(--accent)';
+      setTimeout(() => { el.style.outline = ''; }, 2000);
+    }
+  }, 300);
+}
+window.scrollToAssetSettings = scrollToAssetSettings;
 
 function toggleManualUrlForm() {
   const form = document.getElementById('manualUrlForm');
