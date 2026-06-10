@@ -47,6 +47,41 @@ def _check_campaigns(clinic_id: int):
     try:
         client = AdsClient(acc)
         campaigns = client.list_campaigns()
+
+        # --- アセット（ビジネスの名前・ロゴ）不承認チェック ---
+        try:
+            disapproved_assets = client.check_asset_approval_statuses()
+            if disapproved_assets:
+                # すでに最近同じメッセージのアラートがあるか確認（過去30日以内に同一の本人確認警告があればスキップ）
+                existing_alerts = db.list_alerts(clinic_id, limit=30)
+                has_alert = any("本人確認" in a.get("message", "") for a in existing_alerts)
+                if not has_alert:
+                    asset_names = ", ".join([
+                        f"「{a['business_name']}」" if a.get("business_name") else "ビジネスの名前/ロゴ"
+                        for a in disapproved_assets
+                    ])
+                    msg = (
+                        f"🚨 {asset_names}アセットがGoogle広告側で不承認になっています。"
+                        "広告主の本人確認（適格性確認）が未完了である可能性があります。"
+                        "Google広告の管理画面から本人確認手続きを完了させてください。"
+                    )
+                    db.create_alert(clinic_id, msg, level="WARNING")
+                    
+                    # LINE通知
+                    token = acc.get("line_channel_token", "")
+                    uid = acc.get("line_user_id", "")
+                    if token and uid:
+                        try:
+                            import line_notifier
+                            line_notifier.send_text(
+                                token, uid, 
+                                f"【AdMu警告】\n{msg}\n\n※公的書類（登記簿謄本や運転免許証など）のアップロードが必要なため、所有者様ご本人による手続きが必要です。"
+                            )
+                        except Exception as ne:
+                            print(f"[Monitor] 本人確認LINE通知失敗: {ne}")
+        except Exception as asset_err:
+            print(f"[Monitor] アセット審査状況チェック中にエラー clinic_id={clinic_id}: {asset_err}")
+
     except Exception as e:
         error_msg = str(e)
         print(f"[Monitor] API接続エラー clinic_id={clinic_id}: {error_msg}")

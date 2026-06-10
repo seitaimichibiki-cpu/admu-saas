@@ -1784,3 +1784,65 @@ class AdsClient:
         except Exception as e:
             print(f"[AdsClient] アセット連携に失敗（処理は続行します）: {e}")
             return {"success": False, "error": str(e)}
+
+    def check_asset_approval_statuses(self) -> list:
+        """
+        BUSINESS_NAME および BUSINESS_LOGO アセットの審査ステータスを取得する。
+        不承認（DISAPPROVED）のアセット情報をリストで返す。
+        """
+        if self.mock_mode:
+            import os
+            # MOCK_DISAPPROVED_ASSETS=1 が設定されている場合、デバッグ用にモックアセットを返す
+            if os.environ.get("MOCK_DISAPPROVED_ASSETS") == "1":
+                return [
+                    {
+                        "resource_name": f"customers/{self.customer_id}/assets/mock_biz_name",
+                        "type": "BUSINESS_NAME",
+                        "approval_status": "DISAPPROVED",
+                        "business_name": "モック整体院"
+                    }
+                ]
+            return []
+
+        try:
+            token = self._get_rest_access_token()
+            cid = self.customer_id
+            BASE = f"https://googleads.googleapis.com/v23/customers/{cid}"
+            headers_rest = {
+                "Authorization": f"Bearer {token}",
+                "developer-token": self._developer_token,
+                "login-customer-id": self._login_customer_id,
+                "Content-Type": "application/json",
+            }
+            import requests as _rq
+
+            query = (
+                "SELECT asset.resource_name, asset.type, "
+                "asset.policy_summary.approval_status, "
+                "asset.business_name_asset.business_name "
+                "FROM asset "
+                "WHERE asset.type IN ('BUSINESS_NAME', 'BUSINESS_LOGO')"
+            )
+
+            resp = _rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": query})
+            disapproved = []
+
+            if resp.status_code == 200:
+                for batch in resp.json():
+                    for row in batch.get("results", []):
+                        asset = row.get("asset", {})
+                        p_summary = asset.get("policySummary", {})
+                        status = p_summary.get("approvalStatus")
+                        if status == "DISAPPROVED":
+                            disapproved.append({
+                                "resource_name": asset.get("resourceName"),
+                                "type": asset.get("type"),
+                                "approval_status": status,
+                                "business_name": asset.get("businessNameAsset", {}).get("businessName")
+                            })
+            else:
+                print(f"[AdsClient] アセットステータス取得エラー: {resp.text[:500]}")
+            return disapproved
+        except Exception as e:
+            print(f"[AdsClient] アセットステータス取得中の例外: {e}")
+            return []

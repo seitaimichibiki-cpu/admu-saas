@@ -2506,6 +2506,13 @@ async function loadAlerts() {
           <div class="alert-level-icon">${icons[a.level]||'📌'}</div>
           <div>
             <div class="alert-msg">${a.message}</div>
+            ${a.message.includes('本人確認') || a.message.includes('適格性確認') ? `
+              <div style="margin-top: 8px;">
+                <a href="https://ads.google.com/aw/identityverification" target="_blank" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; font-size:11px; padding:4px 8px; text-decoration:none; color:#f87171; border-color:rgba(239,68,68,0.2); background:rgba(239,68,68,0.05); border-radius:4px; font-weight:bold;">
+                  📢 Google広告本人確認を開く ↗
+                </a>
+              </div>
+            ` : ''}
             <div class="alert-time">${fmtDate(a.created_at)}</div>
           </div>
           <span class="status-badge ${a.level.toLowerCase()}">${a.level}</span>
