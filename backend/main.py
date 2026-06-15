@@ -531,7 +531,7 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
     total_clicks = sum(p.get("clicks", 0) for p in perf_series)
     total_impressions = sum(p.get("impressions", 0) for p in perf_series)
     total_conv = sum(p.get("conversions", 0) for p in perf_series)
-    avg_ctr = sum(p.get("ctr", 0) for p in perf_series) / len(perf_series) if perf_series else 0
+    avg_ctr = (total_clicks / total_impressions * 100) if total_impressions else 0
 
     result = {
         "summary": {
