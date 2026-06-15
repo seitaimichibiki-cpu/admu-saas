@@ -179,9 +179,11 @@ def _check_campaigns(clinic_id: int):
                         f"配信を再開するにはダッシュボードから月間予算を増やすか、手動でキャンペーンを再起動（ENABLED）してください。"
                     )
                     
+                    is_mock_or_demo = acc.get("mock_mode", 1) == 1 or acc.get("is_demo") == 1
+                    
                     line_token = acc.get("line_channel_token", "")
                     line_uid = acc.get("line_user_id", "")
-                    if line_token and line_uid:
+                    if line_token and line_uid and not is_mock_or_demo:
                         try:
                             import line_notifier
                             line_notifier.send_text(line_token, line_uid, stop_msg)
@@ -189,7 +191,7 @@ def _check_campaigns(clinic_id: int):
                             print(f"[Monitor] ブレーキLINE通知失敗: {ne}")
                             
                     notify_email = acc.get("notification_email", "")
-                    if notify_email:
+                    if notify_email and not is_mock_or_demo:
                         try:
                             import email_notifier
                             email_notifier.send_alert_email(
