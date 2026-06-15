@@ -90,7 +90,7 @@ def _mock_performance_series(days: str = "7", start_date: str = None, end_date: 
         imp_base = int(random.randint(400, 1600) * day_mult)
         ctr      = round(random.uniform(2.8, 6.5) * (1.1 if dow < 2 else 0.95 if dow >= 5 else 1.0), 2)
         clk      = max(1, int(imp_base * ctr / 100))
-        cpc      = random.randint(150_000, 350_000)  # ¥150〜¥350
+        cpc      = random.randint(150, 350) * 1_000_000  # ¥150〜¥350 in micros
         cost     = clk * cpc
         cvr      = round(random.uniform(2.5, 9.0) * day_mult, 2)
         conv     = round(clk * cvr / 100, 1)
@@ -518,7 +518,12 @@ class AdsClient:
     def get_this_month_cost(self) -> int:
         """今月の総消化コスト（micros）を取得する。"""
         if self.mock_mode:
-            return 280_000 * 1_000_000  # モックデータ: 28万円分
+            # 整合性を保つため、当月の経過日数分のモックデータを生成して合計する
+            from datetime import datetime
+            today = datetime.now()
+            days_so_far = today.day
+            series = _mock_performance_series(days=str(days_so_far))
+            return sum(item["cost_micros"] for item in series)
         ga_service = self._client.get_service("GoogleAdsService")
         query = """
             SELECT metrics.cost_micros 

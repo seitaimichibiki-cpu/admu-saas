@@ -871,8 +871,14 @@ async function loadClinics() {
     const sel = document.getElementById('clinicSelect');
     sel.innerHTML = data.clinics.map(c =>
       `<option value="${c.id}">${c.name}</option>`).join('');
-    if(data.clinics.length > 0) {
+    
+    // すでに有効な currentClinicId が存在し、かつ選択肢の中にある場合はそれを選択する
+    const exists = data.clinics.some(c => c.id === currentClinicId);
+    if (exists) {
+      sel.value = currentClinicId;
+    } else if (data.clinics.length > 0) {
       currentClinicId = data.clinics[0].id;
+      sel.value = currentClinicId;
     }
   } catch(e) {
     console.warn('クリニック一覧取得失敗:', e);
