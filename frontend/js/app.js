@@ -5349,10 +5349,10 @@ async function loadBudgetPage() {
       }
     }
     
-    const data = await api(`/campaigns?clinic_id=${currentClinicId}`);
-    const rawList = (data.campaigns && data.campaigns.length)
-      ? data.campaigns
-      : (data.local_campaigns || []);
+    const campData = await api(`/campaigns?clinic_id=${currentClinicId}`);
+    const rawList = (campData.campaigns && campData.campaigns.length)
+      ? campData.campaigns
+      : (campData.local_campaigns || []);
     const local = rawList.filter(c => c.status === 'ENABLED');
     
     if (local.length > 0) {
