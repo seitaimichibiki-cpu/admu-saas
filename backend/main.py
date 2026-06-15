@@ -480,24 +480,33 @@ def _generate_action_guidance(clinic_id: int, total_clicks: int, total_impressio
     from datetime import datetime
     import db
     
-    # 経過日数の取得
-    campaigns = db.list_campaigns(clinic_id)
+    campaigns = []
     days_elapsed = 0
-    if campaigns:
-        dates = []
-        for c in campaigns:
-            c_at = c.get("created_at")
-            if c_at:
-                try:
-                    dates.append(datetime.strptime(c_at, "%Y-%m-%d %H:%M:%S"))
-                except ValueError:
-                    try:
-                        dates.append(datetime.strptime(c_at.split()[0], "%Y-%m-%d"))
-                    except Exception:
-                        pass
-        if dates:
-            oldest = min(dates)
-            days_elapsed = (datetime.now() - oldest).days
+    
+    try:
+        # 経過日数の取得
+        campaigns = db.list_campaigns(clinic_id)
+        if campaigns:
+            dates = []
+            for c in campaigns:
+                c_at = c.get("created_at")
+                if c_at:
+                    if isinstance(c_at, datetime):
+                        dates.append(c_at.replace(tzinfo=None))
+                    elif isinstance(c_at, str):
+                        try:
+                            c_at_clean = c_at.split('.')[0].split('+')[0].strip()
+                            dates.append(datetime.strptime(c_at_clean, "%Y-%m-%d %H:%M:%S"))
+                        except Exception:
+                            try:
+                                dates.append(datetime.strptime(c_at.split()[0], "%Y-%m-%d"))
+                            except Exception:
+                                pass
+            if dates:
+                oldest = min(dates)
+                days_elapsed = (datetime.now() - oldest).days
+    except Exception as e:
+        print(f"Error in _generate_action_guidance: {e}")
             
     # ① 開始初期 (7日未満)
     if campaigns and days_elapsed < 7:
