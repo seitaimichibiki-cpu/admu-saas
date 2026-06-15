@@ -476,6 +476,89 @@ def delete_announcement_api(aid: int, request: Request):
     db.delete_announcement(aid)
     return {"success": True}
 
+def _generate_action_guidance(clinic_id: int, total_clicks: int, total_impressions: int, total_conversions: float) -> dict:
+    from datetime import datetime
+    import db
+    
+    # 経過日数の取得
+    campaigns = db.list_campaigns(clinic_id)
+    days_elapsed = 0
+    if campaigns:
+        dates = []
+        for c in campaigns:
+            c_at = c.get("created_at")
+            if c_at:
+                try:
+                    dates.append(datetime.strptime(c_at, "%Y-%m-%d %H:%M:%S"))
+                except ValueError:
+                    try:
+                        dates.append(datetime.strptime(c_at.split()[0], "%Y-%m-%d"))
+                    except Exception:
+                        pass
+        if dates:
+            oldest = min(dates)
+            days_elapsed = (datetime.now() - oldest).days
+            
+    # ① 開始初期 (7日未満)
+    if campaigns and days_elapsed < 7:
+        return {
+            "status": "info",
+            "title": "🚀 配信開始初期：データ蓄積期間",
+            "message": "広告配信が始まったばかりです。AIが入札やターゲット調整のデータを学習しています。現在は設定などを変更せず、このまま様子を見ましょう。",
+            "actions": [
+                "設定を変更せず、データが貯まるのを待つ",
+                "店舗ホームページが正しく表示されるかスマートフォンで確認する"
+            ]
+        }
+        
+    # ② アクセスはあるがCVが0 (クリック数30以上でCV 0)
+    if total_clicks >= 30 and total_conversions == 0:
+        return {
+            "status": "warning",
+            "title": "⚠️ ホームページ（LP）の改善を推奨",
+            "message": "広告はクリックされていますが、予約（新規獲得）が発生していません。ホームページの予約ボタンの押しやすさや、サービス内容の訴求に改善の余地があります。",
+            "actions": [
+                "スマートフォンで予約ボタン（LINEや電話）の位置がわかりやすいか確認する",
+                "ホームページのURLをADMuのAIチャットに送り「LP診断」を依頼する",
+                "不要な検索語句でのクリックがないか、除外キーワードスキャンを確認する"
+            ]
+        }
+        
+    # ③ 広告露出不足 (表示回数が極端に少ない)
+    if campaigns and days_elapsed >= 7 and total_impressions < 200:
+        return {
+            "status": "danger",
+            "title": "🚨 広告の表示回数が不足しています",
+            "message": "広告がユーザーにほとんど表示されていません。広告配信エリア（キーワード）が狭すぎるか、月間予算（日予算）が低すぎて入札に負けている可能性があります。",
+            "actions": [
+                "「地域一般」などの広めのキャンペーンのキーワード範囲を広げる",
+                "設定している月間予算を引き上げて表示回数を増やす"
+            ]
+        }
+        
+    # ④ 順調
+    if total_conversions > 0:
+        return {
+            "status": "success",
+            "title": "🟢 順調に配信・獲得ができています",
+            "message": "広告効果が出ており、予約の獲得も順調です。このままADMuの自動最適化にお任せください。",
+            "actions": [
+                "このまま自動運用に任せて様子を見る"
+            ]
+        }
+        
+    # デフォルト (キャンペーンがない場合など)
+    return {
+        "status": "info",
+        "title": "💡 広告運用の準備をしましょう",
+        "message": "まだキャンペーンが作成されていないか、配信が開始されていません。「新規キャンペーン自動生成」から広告を作成して運用を開始しましょう。",
+        "actions": [
+            "新規キャンペーン自動生成から広告を作成する",
+            "Google広告との連携状態を設定画面で確認する"
+        ]
+    }
+
+
 # ---- API: ダッシュボード ----
 @app.get("/api/dashboard")
 def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7", start_date: Optional[str] = None, end_date: Optional[str] = None):
@@ -512,7 +595,7 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
             campaigns = []
             print(f"[Dashboard] list_campaigns error: {e}")
 
-    # 2. パフォーマンスログの取得（キャッシュ優先）
+    # 2. パフォーマンスログ of 取得（キャッシュ優先）
     if use_cache:
         perf_series = ads_cache.get(perf_cache_key)
 
@@ -533,6 +616,8 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
     total_conv = sum(p.get("conversions", 0) for p in perf_series)
     avg_ctr = (total_clicks / total_impressions * 100) if total_impressions else 0
 
+    action_guidance = _generate_action_guidance(clinic_id, total_clicks, total_impressions, total_conv)
+
     result = {
         "summary": {
             "total_cost_micros": total_cost,
@@ -548,6 +633,7 @@ def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7",
         "monitor_status": monitor.get_status(),
         "mock_mode": client.mock_mode,
         "platform": platform,
+        "action_guidance": action_guidance,
         "settings": {
             "monthly_budget_yen": acc.get("monthly_budget_yen", 300000) or 300000,
         },
@@ -6611,7 +6697,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260615-login-fix-v3', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260615-ai-guidance-v1', html)
 
 
         return HTMLResponse(

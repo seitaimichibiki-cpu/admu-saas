@@ -166,41 +166,73 @@ def _check_campaigns(clinic_id: int):
                         paused_campaigns.append(c_name)
                 
                 if paused_campaigns:
-                    db.create_alert(
-                        clinic_id, 
-                        f"予算自動ブレーキ作動: 月間予算上限(¥{monthly_budget:,})を超過したため配信を自動停止しました。", 
-                        level="ERROR"
-                    )
-                    
-                    stop_msg = (
-                        f"🚨【予算自動ブレーキ作動】\n"
-                        f"当月の総消化コスト（¥{int(total_month_cost_yen):,}）が設定月間予算（¥{monthly_budget:,}）の上限に達したため、以下のキャンペーンの配信を自動停止（PAUSE）しました。\n"
-                        f"・" + "\n・".join(paused_campaigns) + "\n\n"
-                        f"配信を再開するにはダッシュボードから月間予算を増やすか、手動でキャンペーンを再起動（ENABLED）してください。"
-                    )
-                    
-                    is_mock_or_demo = acc.get("mock_mode", 1) == 1 or acc.get("is_demo") == 1
-                    
-                    line_token = acc.get("line_channel_token", "")
-                    line_uid = acc.get("line_user_id", "")
-                    if line_token and line_uid and not is_mock_or_demo:
-                        try:
-                            import line_notifier
-                            line_notifier.send_text(line_token, line_uid, stop_msg)
-                        except Exception as ne:
-                            print(f"[Monitor] ブレーキLINE通知失敗: {ne}")
-                            
-                    notify_email = acc.get("notification_email", "")
-                    if notify_email and not is_mock_or_demo:
-                        try:
-                            import email_notifier
-                            email_notifier.send_alert_email(
-                                notify_email,
-                                "【重要】予算自動ブレーキ作動による配信停止 - AdMu 広告AI",
-                                stop_msg
-                            )
-                        except Exception as ee:
-                            print(f"[Monitor] ブレーキメール通知失敗: {ee}")
+                    # 過去24時間以内に既にブレーキアラートを送信済みかチェック（二重送信防止）
+                    has_recent_brake_alert = False
+                    try:
+                        recent_alerts = db.list_alerts(clinic_id, limit=20)
+                        for alert in recent_alerts:
+                            msg = alert.get("message", "")
+                            if "予算自動ブレーキ作動" in msg:
+                                created_at_str = alert.get("created_at")
+                                if created_at_str:
+                                    try:
+                                        if isinstance(created_at_str, str):
+                                            # SQLite: YYYY-MM-DD HH:MM:SS
+                                            clean_str = created_at_str.replace(" ", "T").split(".")[0]
+                                            created_at = datetime.fromisoformat(clean_str)
+                                        else:
+                                            created_at = created_at_str
+                                        
+                                        if (datetime.now() - created_at).total_seconds() < 24 * 3600:
+                                            has_recent_brake_alert = True
+                                            break
+                                    except Exception as parse_err:
+                                        # パースに失敗した場合は、今日の日付文字列が含まれるかだけでフォールバック判定
+                                        today_str = datetime.now().strftime("%Y-%m-%d")
+                                        if today_str in str(created_at_str):
+                                            has_recent_brake_alert = True
+                                            break
+                    except Exception as ae:
+                        print(f"[Monitor] 二重送信チェックエラー (clinic_id={clinic_id}): {ae}")
+
+                    if not has_recent_brake_alert:
+                        db.create_alert(
+                            clinic_id, 
+                            f"予算自動ブレーキ作動: 月間予算上限(¥{monthly_budget:,})を超過したため配信を自動停止しました。", 
+                            level="ERROR"
+                        )
+                        
+                        stop_msg = (
+                            f"🚨【予算自動ブレーキ作動】\n"
+                            f"当月の総消化コスト（¥{int(total_month_cost_yen):,}）が設定月間予算（¥{monthly_budget:,}）の上限に達したため、以下のキャンペーンの配信を自動停止（PAUSE）しました。\n"
+                            f"・" + "\n・".join(paused_campaigns) + "\n\n"
+                            f"配信を再開するにはダッシュボードから月間予算を増やすか、手動でキャンペーンを再起動（ENABLED）してください。"
+                        )
+                        
+                        is_mock_or_demo = acc.get("mock_mode", 1) == 1 or acc.get("is_demo") == 1
+                        
+                        line_token = acc.get("line_channel_token", "")
+                        line_uid = acc.get("line_user_id", "")
+                        if line_token and line_uid and not is_mock_or_demo:
+                            try:
+                                import line_notifier
+                                line_notifier.send_text(line_token, line_uid, stop_msg)
+                            except Exception as ne:
+                                print(f"[Monitor] ブレーキLINE通知失敗: {ne}")
+                                
+                        notify_email = acc.get("notification_email", "")
+                        if notify_email and not is_mock_or_demo:
+                            try:
+                                import email_notifier
+                                email_notifier.send_alert_email(
+                                    notify_email,
+                                    "【重要】予算自動ブレーキ作動による配信停止 - AdMu 広告AI",
+                                    stop_msg
+                                )
+                            except Exception as ee:
+                                print(f"[Monitor] ブレーキメール通知失敗: {ee}")
+                    else:
+                        print(f"[Monitor] 過去24時間以内にブレーキアラート送信済のため、メール/LINE/アラート作成をスキップします (clinic_id={clinic_id})")
         except Exception as brake_err:
             print(f"[Monitor] 月間予算セーフティブレーキエラー clinic_id={clinic_id}: {brake_err}")
 

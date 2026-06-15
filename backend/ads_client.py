@@ -23,8 +23,16 @@ _CAMPAIGN_TEMPLATES = [
     {"name": "リターゲティング | 再来院","budget": 4_000_000_000,  "ctr_base": 5.9, "cvr_base": 7.2,  "status": "ENABLED"},
 ]
 
+# モックキャンペーンのステータス保存用（インメモリ）
+_mock_campaign_statuses = {}
+
 def _mock_campaign(i: int, name: str = None, customer_id: str = "DEMO"):
     tpl = _CAMPAIGN_TEMPLATES[i % len(_CAMPAIGN_TEMPLATES)]
+    google_id = f"MOCK-{customer_id}-{1000+i}"
+    
+    # 保存されたステータスがあればそれを使用、なければデフォルト
+    status = _mock_campaign_statuses.get(google_id, tpl["status"])
+    
     random.seed(i * 7 + 13)  # 固定シード（毎回同じ値）
     ctr  = round(tpl["ctr_base"]  + random.uniform(-0.5, 0.5), 2)
     cvr  = round(tpl["cvr_base"]  + random.uniform(-0.8, 0.8), 2)
@@ -33,9 +41,9 @@ def _mock_campaign(i: int, name: str = None, customer_id: str = "DEMO"):
     cost = clk * random.randint(150_000, 380_000)  # CPC ¥150〜¥380
     conv = round(clk * cvr / 100, 1)
     return {
-        "id": f"MOCK-{customer_id}-{1000+i}",
+        "id": google_id,
         "name": name or tpl["name"],
-        "status": tpl["status"],
+        "status": status,
         "budget_micros": tpl["budget"],
         "impressions": imp,
         "clicks": clk,
@@ -461,6 +469,7 @@ class AdsClient:
     def update_campaign_status(self, google_campaign_id: str, status: str):
         if self.mock_mode:
             print(f"[MOCK] ステータス更新: {google_campaign_id} -> {status}")
+            _mock_campaign_statuses[google_campaign_id] = status
             return
         campaign_service = self._client.get_service("CampaignService")
         campaign_op = self._client.get_type("CampaignOperation")

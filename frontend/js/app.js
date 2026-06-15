@@ -908,6 +908,7 @@ async function loadDashboard() {
     renderDashCampaigns(data.campaigns);
     updateMonitorStatus(data.monitor_status);
     updateMockBadge(data.mock_mode);
+    renderActionGuidance(data.action_guidance);
     document.getElementById('lastUpdated').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
 
     // アラートバッジ
@@ -948,6 +949,114 @@ async function loadDashboard() {
     toast('ダッシュボードの読み込みに失敗しました: ' + e.message, 'error');
   }
 }
+
+function renderActionGuidance(g) {
+  const container = document.getElementById('actionGuidanceContainer');
+  if (!container) return;
+  if (!g || !g.title) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // ステータスごとの配色とアイコン
+  const statusConfig = {
+    info: {
+      color: '#3b82f6',
+      bg: 'rgba(59, 130, 246, 0.08)',
+      border: 'rgba(59, 130, 246, 0.25)',
+      icon: '💡'
+    },
+    warning: {
+      color: '#eab308',
+      bg: 'rgba(234, 179, 8, 0.08)',
+      border: 'rgba(234, 179, 8, 0.25)',
+      icon: '⚠️'
+    },
+    danger: {
+      color: '#ef4444',
+      bg: 'rgba(239, 68, 68, 0.08)',
+      border: 'rgba(239, 68, 68, 0.25)',
+      icon: '🚨'
+    },
+    success: {
+      color: '#22c55e',
+      bg: 'rgba(34, 197, 94, 0.08)',
+      border: 'rgba(34, 197, 94, 0.25)',
+      icon: '🟢'
+    }
+  };
+
+  const cfg = statusConfig[g.status] || statusConfig.info;
+
+  // ToDoリストの生成
+  const actionItemsHtml = (g.actions || []).map(act => {
+    // LP診断のアクションの場合、特別にリンクボタンにする
+    if (act.includes('LP診断') || act.includes('AIチャット')) {
+      return `
+        <li style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;color:var(--text-2)">
+          <input type="checkbox" style="accent-color:${cfg.color};cursor:pointer">
+          <span>${act}</span>
+          <button onclick="goToLpChatDiagnose()" class="btn btn-primary" style="font-size:11px;padding:2px 8px;height:22px;min-height:22px;margin-left:4px;display:inline-flex;align-items:center;gap:2px">
+            💬 AIチャットを開く
+          </button>
+        </li>
+      `;
+    }
+    return `
+      <li style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;color:var(--text-2)">
+        <input type="checkbox" style="accent-color:${cfg.color};cursor:pointer">
+        <span>${act}</span>
+      </li>
+    `;
+  }).join('');
+
+  let actionsHtml = '';
+  if (g.actions && g.actions.length) {
+    actionsHtml = `
+      <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;margin-top:8px">
+        <div style="font-size:11px;font-weight:700;color:${cfg.color};letter-spacing:1px;margin-bottom:8px;text-transform:uppercase">📋 推奨されるToDo</div>
+        <ul style="list-style:none;padding:0;margin:0">
+          ${actionItemsHtml}
+        </ul>
+      </div>
+    `;
+  }
+
+  container.style.display = 'block';
+  container.style.cssText = `
+    display: block;
+    background: ${cfg.bg};
+    border: 1px solid ${cfg.border};
+    border-left: 5px solid ${cfg.color};
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  `;
+
+  container.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px">
+      <span style="font-size:20px;line-height:1;margin-top:2px">${cfg.icon}</span>
+      <div style="flex:1">
+        <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin:0 0 6px 0;letter-spacing:0.5px">${g.title}</h4>
+        <p style="font-size:13px;color:var(--text-3);line-height:1.6;margin:0 0 12px 0">${g.message}</p>
+        ${actionsHtml}
+      </div>
+    </div>
+  `;
+}
+
+// AIチャット画面へ遷移し、メッセージプレースホルダーを自動入力する
+window.goToLpChatDiagnose = function() {
+  switchPage('ai-chat');
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.value = 'ホームページのURL診断をお願いします。 [こちらにホームページのURLを入力してください]';
+    chatInput.focus();
+    chatInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+};
 
 // CSVエクスポート機能
 window.exportCsv = function() {
