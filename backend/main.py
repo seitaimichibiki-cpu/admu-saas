@@ -372,6 +372,9 @@ class SettingsReq(BaseModel):
     sitelink_price_url: Optional[str] = None
     sitelink_reviews_url: Optional[str] = None
     sitelink_reserve_url: Optional[str] = None
+    line_harness_url: Optional[str] = None
+    line_harness_api_key: Optional[str] = None
+    line_harness_account_id: Optional[str] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -2012,7 +2015,7 @@ def send_line_report_now(request: Request, clinic_id: int = 1, days: int = 7):
 def get_settings(clinic_id: int = 1):
     acc = db.get_ads_account(clinic_id) or {}
     # シークレット系はマスク
-    for secret_key in ["developer_token", "client_secret", "refresh_token", "yahoo_client_secret", "yahoo_refresh_token", "smtp_pass", "gemini_api_key"]:
+    for secret_key in ["developer_token", "client_secret", "refresh_token", "yahoo_client_secret", "yahoo_refresh_token", "smtp_pass", "gemini_api_key", "line_harness_api_key"]:
         if acc.get(secret_key):
             acc[secret_key] = "***設定済み***"
     return {"settings": acc}
@@ -2030,7 +2033,7 @@ def save_settings(req: SettingsReq):
     if acc_before.get("is_demo") == 1:
         data["mock_mode"] = 1
         # 機密情報の保存をバイパス（デモアカウントでは上書きさせない）
-        for key in ["developer_token", "client_id", "client_secret", "refresh_token", "login_customer_id", "gemini_api_key"]:
+        for key in ["developer_token", "client_id", "client_secret", "refresh_token", "login_customer_id", "gemini_api_key", "line_harness_api_key"]:
             if key in data:
                 del data[key]
 
@@ -3458,12 +3461,13 @@ async def create_conversion_action(req: CreateConversionActionReq):
         return {"success": False, "error": f"Google Ads API エラー: {ads_res.get('error')}"}
         
     # 2. LINE Harness 側の API をキックして同じコンバージョンポイントを登録
-    line_harness_url = os.environ.get("LINE_HARNESS_URL")
-    api_key = os.environ.get("LINE_HARNESS_API_KEY")
-    account_id = os.environ.get("LINE_HARNESS_ACCOUNT_ID")
+    # DB設定から取得し、無ければ環境変数からフォールバック
+    line_harness_url = acc.get("line_harness_url") or os.environ.get("LINE_HARNESS_URL")
+    api_key = acc.get("line_harness_api_key") or os.environ.get("LINE_HARNESS_API_KEY")
+    account_id = acc.get("line_harness_account_id") or os.environ.get("LINE_HARNESS_ACCOUNT_ID")
     
     if not line_harness_url or not api_key:
-        print("[AdMu-Warning] LINE_HARNESS_URL or LINE_HARNESS_API_KEY is not configured. Skipping LH sync.")
+        print("[AdMu-Warning] LINE_HARNESS_URL or LINE_HARNESS_API_KEY is not configured in DB or environment. Skipping LH sync.")
         return {
             "success": True, 
             "message": "Google広告側にのみコンバージョンを作成しました（LINE Harness連携未設定）",

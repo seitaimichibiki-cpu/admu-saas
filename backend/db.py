@@ -176,6 +176,9 @@ def init_db():
             sitelink_price_url TEXT,
             sitelink_reviews_url TEXT,
             sitelink_reserve_url TEXT,
+            line_harness_url TEXT,
+            line_harness_api_key TEXT,
+            line_harness_account_id TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -374,6 +377,9 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN sitelink_price_url TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN sitelink_reviews_url TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN sitelink_reserve_url TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN line_harness_url TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN line_harness_api_key TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN line_harness_account_id TEXT DEFAULT NULL",
     ]
     for sql in migrations:
         try:
@@ -532,7 +538,7 @@ def get_ads_account(clinic_id: int):
         if not row:
             return None
         data = dict(row)
-        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "gemini_api_key"]
+        SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "gemini_api_key", "line_harness_api_key"]
         for field in SECRET_FIELDS:
             if data.get(field):
                 try:
@@ -550,7 +556,7 @@ def save_ads_account(clinic_id: int, data: dict):
         if id_field in secure_data and secure_data[id_field]:
             secure_data[id_field] = str(secure_data[id_field]).replace("-", "").replace(" ", "").strip()
 
-    SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key"]
+    SECRET_FIELDS = ["developer_token", "client_secret", "refresh_token", "line_channel_token", "ga4_api_secret", "smtp_pass", "yahoo_client_secret", "yahoo_refresh_token", "gemini_api_key", "line_harness_api_key"]
     for field in SECRET_FIELDS:
         if field in secure_data and secure_data[field]:
             secure_data[field] = crypto_utils.encrypt(secure_data[field])
@@ -566,7 +572,8 @@ def save_ads_account(clinic_id: int, data: dict):
                   "google_link_status", "google_link_requested_at",
                   "logiction_integration_key", "logiction_base_url",
                   "is_demo", "demo_expires_at",
-                  "sitelink_price_url", "sitelink_reviews_url", "sitelink_reserve_url"]
+                  "sitelink_price_url", "sitelink_reviews_url", "sitelink_reserve_url",
+                  "line_harness_url", "line_harness_api_key", "line_harness_account_id"]
         if existing:
             sets = ", ".join(f"{f}=?" for f in fields if f in secure_data)
             vals = [secure_data[f] for f in fields if f in secure_data] + [clinic_id]

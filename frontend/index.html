@@ -960,6 +960,42 @@
               <input type="text" id="settGa4PropertyId" placeholder="例: G-XXXXXX" class="form-input">
             </div>
 
+            <hr style="border:0;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0">
+
+            <h4 style="font-size:14px;color:var(--text-1);margin-bottom:12px;font-weight:600">💬 LINE Harness 連携設定</h4>
+            <div class="form-group">
+              <label>LINE Harness API URL <span style="font-size:11px;color:var(--text-3);font-weight:400">（LINE Harness Worker のURL）</span></label>
+              <input type="text" id="settLineHarnessUrl" placeholder="https://line-harness.xxxx.workers.dev" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>LINE Harness API キー</label>
+              <input type="password" id="settLineHarnessApiKey" placeholder="APIキーを入力（***設定済み***）" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>LINE Harness アカウントID</label>
+              <input type="text" id="settLineHarnessAccountId" placeholder="例: line-account-xxx" class="form-input">
+            </div>
+
+            <!-- コンバージョンアクションの自動作成ボタン -->
+            <div style="margin-top:16px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.15);border-radius:8px;padding:12px">
+              <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;line-height:1.5">
+                <strong>💡 ワンクリック コンバージョン作成:</strong><br>
+                Google広告にオフラインコンバージョン（UPLOAD_CLICKS）を作成し、同時にLINE Harnessにも全く同じ名前のコンバージョンポイントを同期作成します。
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label style="font-size:11px">コンバージョン名</label>
+                <input type="text" id="settNewCvName" placeholder="例: LINE友だち追加" value="LINE友だち追加" class="form-input" style="height:32px;font-size:12px">
+              </div>
+              <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:11px">コンバージョン値（円）</label>
+                <input type="number" id="settNewCvValue" placeholder="例: 10000" value="10000" class="form-input" style="height:32px;font-size:12px">
+              </div>
+              <button type="button" class="btn btn-success btn-full" id="btnCreateSyncCv" onclick="createAndSyncConversionAction()" style="height:36px;font-size:13px;padding:0">
+                🚀 Google広告・LINE Harness 連携CVを自動作成
+              </button>
+              <div id="createSyncCvResult" style="display:none;margin-top:8px;padding:8px;border-radius:6px;font-size:11px;line-height:1.4"></div>
+            </div>
+
           </div>
 
           <!-- AI (Gemini) 設定 -->

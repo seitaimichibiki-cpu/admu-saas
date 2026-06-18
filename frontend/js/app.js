@@ -2882,6 +2882,17 @@ async function loadSettings() {
     const sitelinkReserveUrlEl = document.getElementById('settSitelinkReserveUrl');
     if (sitelinkReserveUrlEl) sitelinkReserveUrlEl.value = s.sitelink_reserve_url || '';
 
+    // LINE Harness 設定
+    const lhUrlEl = document.getElementById('settLineHarnessUrl');
+    if (lhUrlEl) lhUrlEl.value = s.line_harness_url || '';
+    const lhApiKeyEl = document.getElementById('settLineHarnessApiKey');
+    if (lhApiKeyEl) {
+      lhApiKeyEl.value = '';
+      lhApiKeyEl.placeholder = s.line_harness_api_key === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : 'APIキーを入力';
+    }
+    const lhAccountIdEl = document.getElementById('settLineHarnessAccountId');
+    if (lhAccountIdEl) lhAccountIdEl.value = s.line_harness_account_id || '';
+
   } catch(e) {
     toast('設定読み込み失敗: ' + e.message, 'error');
   }
@@ -2905,6 +2916,8 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     sitelink_price_url: document.getElementById('settSitelinkPriceUrl')?.value || null,
     sitelink_reviews_url: document.getElementById('settSitelinkReviewsUrl')?.value || null,
     sitelink_reserve_url: document.getElementById('settSitelinkReserveUrl')?.value || null,
+    line_harness_url: document.getElementById('settLineHarnessUrl')?.value || null,
+    line_harness_account_id: document.getElementById('settLineHarnessAccountId')?.value || null,
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;
@@ -2912,6 +2925,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   const lineToken = document.getElementById('settLineToken').value;
   const smtpPass  = document.getElementById('settSmtpPass').value;
   const geminiApiKey = document.getElementById('settGeminiApiKey')?.value;
+  const lhApiKey = document.getElementById('settLineHarnessApiKey')?.value;
   
   if(devToken)  body.developer_token  = devToken;
   if(clientSecret) body.client_secret = clientSecret;
@@ -2919,6 +2933,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
   if(lineToken) body.line_channel_token = lineToken;
   if(smtpPass)  body.smtp_pass = smtpPass;
   if(geminiApiKey) body.gemini_api_key = geminiApiKey;
+  if(lhApiKey) body.line_harness_api_key = lhApiKey;
 
   try {
     await api('/settings', { method:'POST', body: JSON.stringify(body) });
@@ -6125,4 +6140,59 @@ async function applyManualLocation() {
   }
 }
 window.applyManualLocation = applyManualLocation;
+
+async function createAndSyncConversionAction() {
+  const resultEl = document.getElementById('createSyncCvResult');
+  const btn = document.getElementById('btnCreateSyncCv');
+  const name = document.getElementById('settNewCvName').value.trim();
+  const valueVal = parseFloat(document.getElementById('settNewCvValue').value);
+
+  if (!name) {
+    toast('コンバージョン名を入力してください', 'error');
+    return;
+  }
+  if (isNaN(valueVal) || valueVal < 0) {
+    toast('正しいコンバージョン値を入力してください', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '作成・同期中...';
+  resultEl.style.display = 'block';
+  resultEl.style.background = 'rgba(255,255,255,0.05)';
+  resultEl.style.color = 'var(--text-2)';
+  resultEl.textContent = '処理中...';
+
+  try {
+    const res = await api('/integration/create-conversion-action', {
+      method: 'POST',
+      body: JSON.stringify({
+        conversion_name: name,
+        conversion_value: valueVal,
+        clinic_id: currentClinicId
+      })
+    });
+
+    if (res.success) {
+      resultEl.style.background = 'rgba(16,185,129,0.1)';
+      resultEl.style.color = '#10b981';
+      resultEl.innerHTML = `✅ ${res.message}`;
+      toast('コンバージョン同期成功 ✅', 'success');
+    } else {
+      resultEl.style.background = 'rgba(239,68,68,0.1)';
+      resultEl.style.color = '#ef4444';
+      resultEl.innerHTML = `❌ エラー: ${res.error || res.message}`;
+      toast('コンバージョン同期失敗 ❌', 'error');
+    }
+  } catch (e) {
+    resultEl.style.background = 'rgba(239,68,68,0.1)';
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = `❌ 通信エラー: ${e.message}`;
+    toast('通信エラーが発生しました', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 Google広告・LINE Harness 連携CVを自動作成';
+  }
+}
+window.createAndSyncConversionAction = createAndSyncConversionAction;
 
