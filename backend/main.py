@@ -122,7 +122,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.middleware("http")
 async def verify_tenant_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and not path.startswith("/api/logiction/") and path not in ["/api/csrf-token", "/api/config"]:
+    if path.startswith("/api/") and not path.startswith("/api/auth") and not path.startswith("/api/users/me") and not path.startswith("/api/admin") and not path.startswith("/api/lp/") and not path.startswith("/api/logiction/") and not path.startswith("/api/integration/") and path not in ["/api/csrf-token", "/api/config"]:
         user = auth.get_current_user_from_request(request)
         if not user:
             return JSONResponse({"detail": "認証されていませんので再度ログインしてください"}, status_code=401)
@@ -208,6 +208,8 @@ async def security_middleware(request: Request, call_next):
                 "/api/logiction/test-connection",
                 "/api/logiction/generate-key",
                 "/api/logiction/save-settings",
+                "/api/integration/offline-conversion",
+                "/api/integration/create-conversion-action",
             ]
             if request.url.path not in CSRF_EXEMPT:
                 token_in_header = request.headers.get("X-CSRF-Token")
@@ -3424,6 +3426,93 @@ async def receive_admu_cv(req: AdmuCvReq):
         "is_churned": req.is_churned,
     }
 
+
+class CreateConversionActionReq(BaseModel):
+    conversion_name: str
+    conversion_value: float = 10000.0
+    clinic_id: int = 1
+
+@app.post("/api/integration/create-conversion-action")
+async def create_conversion_action(req: CreateConversionActionReq):
+    """
+    Google広告にコンバージョンを自動作成し、同時にLINE Harness側にそのコンバージョンポイントを登録する。
+    """
+    log_msg = f"[AdMu] コンバージョンアクション自動作成開始: {req.conversion_name} (clinic_id={req.clinic_id})"
+    print(log_msg)
+    
+    # 1. Google Ads API へのコンバージョンアクション作成
+    try:
+        acc = _require_account(req.clinic_id)
+    except Exception as e:
+        return {"success": False, "message": f"Ads account error: {e}"}
+        
+    from ads_client import AdsClient
+    client = AdsClient(acc)
+    
+    ads_res = client.create_conversion_action(
+        name=req.conversion_name,
+        value=req.conversion_value
+    )
+    
+    if not ads_res.get("success"):
+        return {"success": False, "error": f"Google Ads API エラー: {ads_res.get('error')}"}
+        
+    # 2. LINE Harness 側の API をキックして同じコンバージョンポイントを登録
+    line_harness_url = os.environ.get("LINE_HARNESS_URL")
+    api_key = os.environ.get("LINE_HARNESS_API_KEY")
+    account_id = os.environ.get("LINE_HARNESS_ACCOUNT_ID")
+    
+    if not line_harness_url or not api_key:
+        print("[AdMu-Warning] LINE_HARNESS_URL or LINE_HARNESS_API_KEY is not configured. Skipping LH sync.")
+        return {
+            "success": True, 
+            "message": "Google広告側にのみコンバージョンを作成しました（LINE Harness連携未設定）",
+            "ads_data": ads_res.get("data")
+        }
+        
+    try:
+        import requests as _rq
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        if account_id:
+            headers["X-Line-Account-Id"] = account_id
+            
+        payload = {
+            "name": req.conversion_name,
+            "eventType": "custom",
+            "value": req.conversion_value
+        }
+        
+        lh_res = _rq.post(
+            f"{line_harness_url}/api/conversions/points",
+            headers=headers,
+            json=payload,
+            timeout=5
+        )
+        
+        if lh_res.status_code != 201:
+            lh_err = lh_res.text
+            print(f"[AdMu-Error] LINE Harness sync failed: {lh_res.status_code} - {lh_err}")
+            return {
+                "success": False, 
+                "error": f"Google広告側には作成できましたが、LINE Harness側の同期に失敗しました: {lh_err}"
+            }
+            
+        print("[AdMu-Success] Google Ads & LINE Harness sync completed successfully!")
+        return {
+            "success": True, 
+            "message": "Google広告とLINE Harnessの両方にコンバージョンアクションを自動作成・同期しました",
+            "ads_data": ads_res.get("data"),
+            "lh_data": lh_res.json()
+        }
+    except Exception as e:
+        print(f"[AdMu-Error] Exception during LINE Harness sync: {e}")
+        return {
+            "success": False, 
+            "error": f"Google広告側には作成できましたが、LINE Harnessとの同期中に例外が発生しました: {str(e)}"
+        }
 
 class OfflineConversionReq(BaseModel):
     gclid: str

@@ -1860,3 +1860,36 @@ class AdsClient:
         except Exception as e:
             print(f"[AdsClient] アセットステータス取得中の例外: {e}")
             return []
+
+    def create_conversion_action(self, name: str, value: float = 10000.0) -> dict:
+        """
+        Google広告にオフラインコンバージョンアクション（UPLOAD_CLICKS）を自動作成する。
+        """
+        if self.mock_mode:
+            print(f"[AdsClient-Mock] Create conversion action: {name} with default value: {value}")
+            return {
+                "success": True, 
+                "data": {"resource_name": f"customers/{self.customer_id}/conversionActions/mock_action_id"}
+            }
+
+        try:
+            token = self._get_rest_access_token()
+            ops = [
+                {
+                    "create": {
+                        "name": name,
+                        "type": "UPLOAD_CLICKS",
+                        "category": "DEFAULT",
+                        "status": "ENABLED",
+                        "valueSettings": {
+                            "defaultValue": value,
+                            "alwaysUseDefaultValue": True
+                        }
+                    }
+                }
+            ]
+            resp = self._rest_post("conversionActions", ops, token)
+            return {"success": True, "data": resp}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
