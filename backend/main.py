@@ -575,7 +575,7 @@ def _generate_action_guidance(clinic_id: int, total_clicks: int, total_impressio
 
 # ---- API: ダッシュボード ----
 @app.get("/api/dashboard")
-def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "7", start_date: Optional[str] = None, end_date: Optional[str] = None):
+def get_dashboard(clinic_id: int = 1, platform: str = "google", days: str = "this_month", start_date: Optional[str] = None, end_date: Optional[str] = None):
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
 
@@ -6799,7 +6799,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260615-ai-guidance-v1', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260627-this-month-auto-adcopy', html)
 
 
         return HTMLResponse(

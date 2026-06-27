@@ -351,7 +351,7 @@ window.switchPlatform = function switchPlatform(platform) {
 }
 
 let currentClinicId = 1;
-let currentDaysRange = '7';   // '7'/'14'/'30'/'this_year'/'last_year'/'custom'
+let currentDaysRange = 'this_month';   // 'this_month'/'7'/'14'/'30'/'this_year'/'last_year'/'custom'
 let dashCustomStart = '';
 let dashCustomEnd = '';
 let monthlyBudgetYen = 300000; // 月予算（設定画面から変更可）
@@ -363,8 +363,8 @@ let lastData = null;
 window.setDateRange = function(days) {
   currentDaysRange = String(days);
   // ボタンの見た目を更新
-  ['7', '14', '30', 'this_year', 'last_year', 'custom'].forEach(d => {
-    let suffix = d === 'this_year' ? 'ThisYear' : (d === 'last_year' ? 'LastYear' : (d === 'custom' ? 'Custom' : d));
+  ['this_month', '7', '14', '30', 'this_year', 'last_year', 'custom'].forEach(d => {
+    let suffix = d === 'this_month' ? 'ThisMonth' : (d === 'this_year' ? 'ThisYear' : (d === 'last_year' ? 'LastYear' : (d === 'custom' ? 'Custom' : d)));
     const btn = document.getElementById(`rangeBtn${suffix}`);
     if (btn) btn.classList.toggle('range-active', d === currentDaysRange);
   });
@@ -374,6 +374,7 @@ window.setDateRange = function(days) {
 
   if (currentDaysRange !== 'custom') {
     let label = `${currentDaysRange}日間`;
+    if(currentDaysRange === 'this_month') label = '今月';
     if(currentDaysRange === 'this_year') label = '今年';
     if(currentDaysRange === 'last_year') label = '昨年';
     const chartTitle = document.querySelector('#page-dashboard .chart-header h3');
@@ -1134,6 +1135,7 @@ window.exportCampaignsCSV = function() {
 
 function renderKPIs(summary) {
   let periodLabel = `${currentDaysRange}日`;
+  if(currentDaysRange === 'this_month') periodLabel = '今月';
   if(currentDaysRange === 'this_year') periodLabel = '今年';
   if(currentDaysRange === 'last_year') periodLabel = '昨年';
   if(currentDaysRange === 'custom') periodLabel = '指定期間';
@@ -1150,7 +1152,11 @@ function renderKPIs(summary) {
   // 予算消化率ゲージ計算（設定画面の月予算変数を使用）
   const MONTHLY_BUDGET_YEN = monthlyBudgetYen;
   const DAILY_BUDGET_YEN = MONTHLY_BUDGET_YEN / 30;
-  const PERIOD_BUDGET = DAILY_BUDGET_YEN * currentDaysRange;
+  let periodDays = parseInt(currentDaysRange) || 0;
+  if (currentDaysRange === 'this_month') periodDays = new Date().getDate();
+  else if (currentDaysRange === 'this_year') periodDays = Math.floor((Date.now() - new Date(new Date().getFullYear(),0,1)) / 86400000);
+  else if (currentDaysRange === 'last_year') periodDays = 365;
+  const PERIOD_BUDGET = periodDays > 0 ? DAILY_BUDGET_YEN * periodDays : MONTHLY_BUDGET_YEN;
   const spentYen = Math.round((summary.total_cost_micros || 0) / 1e6);
   const burnPct = Math.min(100, Math.round(spentYen / PERIOD_BUDGET * 100));
   const burnColor = burnPct >= 90 ? '#ef4444' : burnPct >= 70 ? '#f59e0b' : '#10b981';

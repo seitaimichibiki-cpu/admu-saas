@@ -203,7 +203,7 @@ class AdsClient:
                    metrics.average_cpc, metrics.cost_micros,
                    metrics.conversions, metrics.conversions_from_interactions_rate
             FROM campaign
-            WHERE segments.date DURING LAST_7_DAYS
+            WHERE segments.date DURING THIS_MONTH
         """
         resp = ga_service.search(customer_id=self.customer_id, query=query)
         results = []
@@ -554,6 +554,8 @@ class AdsClient:
         where_clause = ""
         if start_date and end_date:
             where_clause = f"segments.date BETWEEN '{start_date}' AND '{end_date}'"
+        elif str(days) == "this_month":
+            where_clause = "segments.date DURING THIS_MONTH"
         elif str(days) == "this_year":
             where_clause = "segments.date DURING THIS_YEAR"
         elif str(days) == "last_year":

@@ -776,6 +776,214 @@ def _run_onboarding_followup_check():
     except Exception as e:
         print(f"[Monitor] オンボーディング自動フォローアップエラー: {e}")
 
+
+def _run_auto_ad_copy_optimization(clinic_id: int):
+    """毎週金曜 5:00: CV0のキャンペーンの広告文を自動最適化（AI生成→適用）"""
+    acc = _get_account_and_notify_config(clinic_id)
+    if not acc:
+        return
+
+    try:
+        client = AdsClient(acc)
+        
+        # 直近14日間のパフォーマンスをキャンペーン別に取得
+        campaigns = client.list_campaigns()
+        if not campaigns:
+            print(f"[Monitor] 広告文自動最適化: キャンペーンなし clinic_id={clinic_id}")
+            return
+        
+        optimized_campaigns = []
+        
+        for camp in campaigns:
+            # ENABLEDでないキャンペーンはスキップ
+            if camp.get("status") != "ENABLED":
+                continue
+            
+            clicks = camp.get("clicks", 0)
+            conversions = camp.get("conversions", 0)
+            
+            # クリック50以上 かつ CV 0 のキャンペーンのみ対象
+            if clicks < 50 or conversions > 0:
+                continue
+            
+            camp_id = camp.get("id")
+            camp_name = camp.get("name", "")
+            
+            # 過去24時間以内に同じキャンペーンで自動最適化アラートがあればスキップ（週1回制限）
+            existing_alerts = db.list_alerts(clinic_id, limit=50)
+            already_optimized = False
+            for alert in existing_alerts:
+                if f"広告文自動最適化" in alert.get("message", "") and camp_name in alert.get("message", ""):
+                    alert_time = alert.get("created_at")
+                    if alert_time:
+                        try:
+                            if isinstance(alert_time, str):
+                                at_clean = alert_time.split('.')[0].split('+')[0].strip()
+                                at_dt = datetime.strptime(at_clean, "%Y-%m-%d %H:%M:%S")
+                            else:
+                                at_dt = alert_time.replace(tzinfo=None)
+                            if (datetime.now() - at_dt).total_seconds() < 7 * 86400:
+                                already_optimized = True
+                                break
+                        except Exception:
+                            pass
+            
+            if already_optimized:
+                print(f"[Monitor] 広告文自動最適化: {camp_name} は7日以内に最適化済み、スキップ")
+                continue
+            
+            # AI広告文を生成
+            clinic = db.get_clinic(clinic_id) or {}
+            clinic_name = clinic.get("name", "整体院")
+            
+            gemini_key = db.get_gemini_api_key(clinic_id)
+            if not gemini_key:
+                print(f"[Monitor] 広告文自動最適化: Gemini APIキー未設定 clinic_id={clinic_id}")
+                return
+            
+            # AIクォータチェック
+            ok, reason = db.check_ai_limit(clinic_id)
+            if not ok:
+                print(f"[Monitor] 広告文自動最適化: AIクォータ上限 clinic_id={clinic_id}: {reason}")
+                return
+            
+            try:
+                import ad_copy_generator as adcopy
+                generator = adcopy.AdCopyGenerator(api_key=gemini_key)
+                
+                context = {
+                    "clinic_name": clinic_name,
+                    "region": acc.get("target_region", ""),
+                    "appeal_points": acc.get("appeal_points", ""),
+                    "target_issues": "腰痛、肩こり",
+                    "extra_instructions": f"現在の広告（{camp_name}）はクリック{clicks}回に対しコンバージョンが0です。ユーザーの行動を促す訴求力の高い広告文に改善してください。予約・問い合わせへの導線を強化する表現を使ってください。",
+                    "target_age_gender": acc.get("target_age_gender"),
+                    "target_job_lifestyle": acc.get("target_job_lifestyle"),
+                    "target_pain_point": acc.get("target_pain_point"),
+                    "target_desired_outcome": acc.get("target_desired_outcome"),
+                }
+                
+                # キーワード取得
+                try:
+                    keywords = client.get_campaign_keywords(camp_id)
+                    context["keywords"] = keywords
+                except Exception:
+                    context["keywords"] = []
+                
+                result = generator.generate(context)
+                headlines = result.get("headlines", [])
+                descriptions = result.get("descriptions", [])
+                
+                if not headlines or not descriptions:
+                    print(f"[Monitor] 広告文自動最適化: AI生成結果が空 camp={camp_name}")
+                    continue
+                
+                # DBに保存
+                copy_id = db.save_ad_copy(clinic_id, {
+                    "campaign_id": camp_id,
+                    "headlines": "\n".join(headlines),
+                    "descriptions": "\n".join(descriptions),
+                    "prompt_context": "自動最適化（CV0検知による自動生成）",
+                })
+                db.increment_ai_quota(clinic_id, feature_name="auto_ad_copy_optimization")
+                
+                # Google広告に適用
+                # DB上のキャンペーンからgoogle_campaign_idを解決
+                db_campaigns = db.list_campaigns(clinic_id)
+                g_id = None
+                for dc in db_campaigns:
+                    if str(dc.get("google_campaign_id")) == str(camp_id) or str(dc.get("id")) == str(camp_id):
+                        g_id = dc.get("google_campaign_id") or camp_id
+                        break
+                if not g_id:
+                    g_id = camp_id
+                
+                # サイトリンクURL取得
+                sitelink_urls = {}
+                for k in ["sitelink_price_url", "sitelink_reviews_url", "sitelink_reserve_url"]:
+                    if acc.get(k):
+                        sitelink_urls[k] = acc[k]
+                
+                apply_result = client.update_campaign_rsa(
+                    g_id, headlines, descriptions,
+                    clinic_name=clinic_name,
+                    sitelink_urls=sitelink_urls if sitelink_urls else None
+                )
+                
+                if apply_result.get("success"):
+                    # 適用成功 → DBのステータスを更新
+                    with db.get_conn() as conn:
+                        conn.execute(
+                            "UPDATE ad_copies SET status='active', applied_at=? WHERE id=? AND clinic_id=?",
+                            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), copy_id, clinic_id)
+                        )
+                        conn.commit()
+                    
+                    optimized_campaigns.append({
+                        "name": camp_name,
+                        "clicks": clicks,
+                        "headlines_count": len(headlines),
+                    })
+                    
+                    # アラート登録
+                    db.create_alert(
+                        clinic_id,
+                        f"広告文自動最適化: 「{camp_name}」CV0のため新しい広告文をAI生成・自動適用しました（見出し{len(headlines)}件）",
+                        level="INFO"
+                    )
+                    print(f"[Monitor] 広告文自動最適化: {camp_name} → AI生成・適用成功")
+                else:
+                    error_msg = apply_result.get("error", "不明なエラー")
+                    db.create_alert(
+                        clinic_id,
+                        f"広告文自動最適化失敗: 「{camp_name}」Google広告への適用でエラー: {error_msg[:100]}",
+                        level="WARNING"
+                    )
+                    print(f"[Monitor] 広告文自動最適化: {camp_name} → 適用失敗: {error_msg}")
+                    
+            except Exception as e:
+                print(f"[Monitor] 広告文自動最適化: {camp_name} 処理中にエラー: {e}")
+                db.create_alert(
+                    clinic_id,
+                    f"広告文自動最適化エラー: 「{camp_name}」処理中に例外: {str(e)[:100]}",
+                    level="WARNING"
+                )
+                continue
+        
+        # 最適化結果をLINE通知
+        if optimized_campaigns:
+            token = acc.get("line_channel_token", "")
+            uid = acc.get("line_user_id", "")
+            if token and uid:
+                summary_lines = "\n".join(
+                    f"・「{c['name']}」（クリック{c['clicks']}回→CV0）→ 新広告文{c['headlines_count']}件適用"
+                    for c in optimized_campaigns[:5]
+                )
+                msg = (
+                    f"🤖 広告文自動最適化完了\n"
+                    f"{len(optimized_campaigns)}件のキャンペーンの広告文をAIが自動更新しました。\n\n"
+                    f"{summary_lines}\n\n"
+                    f"コンバージョンの改善にご期待ください。\n"
+                    f"AdMuダッシュボードで新しい広告文を確認できます。"
+                )
+                line_notifier.send_text(token, uid, msg)
+            
+            # メール通知
+            notify_email = acc.get("notification_email", "")
+            if notify_email:
+                try:
+                    email_notifier.send_report_email(notify_email, clinic.get("name", ""), {
+                        "subject": "【ADMu】広告文自動最適化完了",
+                        "body": f"{len(optimized_campaigns)}件のキャンペーンの広告文をAIが自動更新しました。",
+                    })
+                except Exception as e:
+                    print(f"[Monitor] 広告文自動最適化メール送信エラー: {e}")
+        
+        print(f"[Monitor] 広告文自動最適化完了 clinic_id={clinic_id} 最適化={len(optimized_campaigns)}件")
+    
+    except Exception as e:
+        print(f"[Monitor] 広告文自動最適化エラー clinic_id={clinic_id}: {e}")
+
 def start_scheduler():
     """スケジューラを起動"""
     global _scheduler, _monitor_status
@@ -826,6 +1034,11 @@ def start_scheduler():
         _scheduler.add_job(
             _run_auto_ltv_upload_scan, CronTrigger(hour=3, minute=0),
             id=f"ltv_sync_{cid}", args=[cid], replace_existing=True
+        )
+        # ⑥ 広告文自動最適化（毎週金曜 5:00）
+        _scheduler.add_job(
+            _run_auto_ad_copy_optimization, CronTrigger(day_of_week='fri', hour=5, minute=0),
+            id=f"adcopy_optimize_{cid}", args=[cid], replace_existing=True
         )
 
     # システム全体の日次稼働レポート（毎日 9:00 管理者宛）
@@ -913,6 +1126,11 @@ def register_clinic_jobs(clinic_id: int):
         _run_auto_ltv_upload_scan, CronTrigger(hour=3, minute=0),
         id=f"ltv_sync_{clinic_id}", args=[clinic_id], replace_existing=True
     )
+    # ⑥ 広告文自動最適化（毎週金曜 5:00）
+    _scheduler.add_job(
+        _run_auto_ad_copy_optimization, CronTrigger(day_of_week='fri', hour=5, minute=0),
+        id=f"adcopy_optimize_{clinic_id}", args=[clinic_id], replace_existing=True
+    )
     print(f"[Monitor] 新規クリニックのジョブを動的登録完了 (clinic_id={clinic_id})")
 
 
@@ -921,7 +1139,7 @@ def unregister_clinic_jobs(clinic_id: int):
     global _scheduler
     if not _scheduler or not _scheduler.running:
         return
-    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_", "area_exclude_scan_", "ltv_sync_"]:
+    for job_prefix in ["check_", "bid_", "daily_", "weekly_", "nkw_scan_", "perf_collect_", "area_exclude_scan_", "ltv_sync_", "adcopy_optimize_"]:
         job_id = f"{job_prefix}{clinic_id}"
         try:
             _scheduler.remove_job(job_id)
