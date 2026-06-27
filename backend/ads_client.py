@@ -516,6 +516,7 @@ class AdsClient:
                 "name": f"{config['campaign_name']}_budget_{random.randint(1000,9999)}",
                 "amountMicros": str(daily_micros),
                 "deliveryMethod": "STANDARD",
+                "explicitlyShared": False,
             }}], token)
             budget_rn = r["results"][0]["resourceName"]
             print(f"[AdsClient-DG] バジェット作成: {budget_rn}")
