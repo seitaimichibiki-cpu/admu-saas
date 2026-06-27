@@ -198,6 +198,7 @@ class AdsClient:
         ga_service = self._client.get_service("GoogleAdsService")
         query = """
             SELECT campaign.id, campaign.name, campaign.status,
+                   campaign.advertising_channel_type,
                    campaign_budget.amount_micros,
                    metrics.impressions, metrics.clicks, metrics.ctr,
                    metrics.average_cpc, metrics.cost_micros,
@@ -210,10 +211,12 @@ class AdsClient:
         for row in resp:
             c = row.campaign
             m = row.metrics
+            channel_type = c.advertising_channel_type.name if hasattr(c, 'advertising_channel_type') else "SEARCH"
             results.append({
                 "id": str(c.id),
                 "name": c.name,
                 "status": c.status.name,
+                "campaign_type": channel_type,
                 "budget_micros": row.campaign_budget.amount_micros if row.campaign_budget.amount_micros is not None else 0,
                 "impressions": m.impressions if m.impressions is not None else 0,
                 "clicks": m.clicks if m.clicks is not None else 0,
@@ -465,6 +468,163 @@ class AdsClient:
             "mock": False,
             "ad_groups": ad_groups_result,
         }
+
+    def create_demand_gen_campaign_setup(self, config: dict) -> dict:
+        """
+        Demand Gen キャンペーン（YouTube・Discover・Gmail面への動画広告配信）を一括作成。
+        config = {
+            "campaign_name": str,
+            "daily_budget_yen": int,
+            "final_url": str,
+            "status": "PAUSED" | "ENABLED",
+            "youtube_video_id": str,            # YouTube動画ID（例: "dQw4w9WgXcQ"）
+            "headlines": [str],                 # 最大5件・各40文字以内
+            "long_headlines": [str],            # 最大5件・各90文字以内
+            "descriptions": [str],              # 最大5件・各90文字以内
+            "business_name": str,               # ビジネス名（25文字以内）
+            "lat": float, "lon": float, "radius_km": int,  # 位置ターゲティング
+        }
+        """
+        if self.mock_mode:
+            cid = f"MOCK-DG-{self.customer_id}-{random.randint(3000,9999)}"
+            result = {
+                "success": True,
+                "campaign_id": cid,
+                "campaign_name": config["campaign_name"],
+                "campaign_type": "DEMAND_GEN",
+                "status": config.get("status", "PAUSED"),
+                "mock": True,
+                "youtube_video_id": config.get("youtube_video_id", ""),
+            }
+            print(f"[MOCK] create_demand_gen_campaign_setup: {result}")
+            return result
+
+        cid = self.customer_id
+        token = self._get_rest_access_token()
+        import requests as _rq
+        _rest_headers = {
+            "Authorization": f"Bearer {token}",
+            "developer-token": self._developer_token,
+            "login-customer-id": self._login_customer_id,
+            "Content-Type": "application/json",
+        }
+
+        try:
+            # ① バジェット作成
+            daily_micros = config["daily_budget_yen"] * 1_000_000
+            r = self._rest_post("campaignBudgets", [{"create": {
+                "name": f"{config['campaign_name']}_budget_{random.randint(1000,9999)}",
+                "amountMicros": str(daily_micros),
+                "deliveryMethod": "STANDARD",
+            }}], token)
+            budget_rn = r["results"][0]["resourceName"]
+            print(f"[AdsClient-DG] バジェット作成: {budget_rn}")
+
+            # ② Demand Gen キャンペーン作成
+            campaign_payload = {
+                "name": config["campaign_name"],
+                "status": config.get("status", "PAUSED"),
+                "advertisingChannelType": "DEMAND_GEN",
+                "campaignBudget": budget_rn,
+                "maximizeConversions": {},
+                "containsEuPoliticalAdvertising": 3,
+            }
+            r2 = self._rest_post("campaigns", [{"create": campaign_payload}], token)
+            campaign_rn = r2["results"][0]["resourceName"]
+            campaign_id = campaign_rn.split("/")[-1]
+            print(f"[AdsClient-DG] Demand Genキャンペーン作成: {campaign_rn} (id={campaign_id})")
+
+            # ③ 位置ターゲティング（半径指定）
+            if config.get("lat") and config.get("lon"):
+                try:
+                    self._rest_post("campaignCriteria", [{"create": {
+                        "campaign": campaign_rn,
+                        "proximity": {
+                            "geoPoint": {
+                                "longitudeInMicroDegrees": int(config["lon"] * 1_000_000),
+                                "latitudeInMicroDegrees": int(config["lat"] * 1_000_000),
+                            },
+                            "radius": config.get("radius_km", 20),
+                            "radiusUnits": "KILOMETERS",
+                        }
+                    }}], token)
+                    print(f"[AdsClient-DG] 位置ターゲティング設定完了")
+                except Exception as e:
+                    print(f"[AdsClient-DG] 位置ターゲティング設定エラー（続行）: {e}")
+
+            # ④ 広告グループ作成（Demand Gen Video Responsive）
+            r4 = self._rest_post("adGroups", [{"create": {
+                "name": f"{config['campaign_name']}_AG",
+                "campaign": campaign_rn,
+                "status": "ENABLED",
+                "type": "DEMAND_GEN_VIDEO_RESPONSIVE",
+            }}], token)
+            ag_rn = r4["results"][0]["resourceName"]
+            ag_id = ag_rn.split("/")[-1]
+            print(f"[AdsClient-DG] 広告グループ作成: {ag_id}")
+
+            # ⑤ YouTube動画アセット作成
+            yt_video_id = config.get("youtube_video_id", "")
+            r5 = self._rest_post("assets", [{"create": {
+                "name": f"YT_{config['campaign_name']}_{random.randint(100,999)}",
+                "type": "YOUTUBE_VIDEO",
+                "youtubeVideoAsset": {
+                    "youtubeVideoId": yt_video_id,
+                },
+            }}], token)
+            video_asset_rn = r5["results"][0]["resourceName"]
+            print(f"[AdsClient-DG] YouTube動画アセット作成: {video_asset_rn}")
+
+            # ⑥ Demand Gen Video Responsive 広告作成
+            headlines = config.get("headlines", ["整体院の施術をご紹介"])[:5]
+            long_headlines = config.get("long_headlines", ["お体のお悩みを根本から改善する施術をご覧ください"])[:5]
+            descriptions = config.get("descriptions", ["あなたのお悩みに寄り添う整体院です。"])[:5]
+            business_name = config.get("business_name", "整体院")[:25]
+
+            ad_headlines = [{"text": h[:40]} for h in headlines]
+            ad_long_headlines = [{"text": lh[:90]} for lh in long_headlines]
+            ad_descriptions = [{"text": d[:90]} for d in descriptions]
+
+            ad_payload = {
+                "adGroup": ag_rn,
+                "status": "ENABLED",
+                "ad": {
+                    "finalUrls": [config.get("final_url", "")],
+                    "demandGenVideoResponsiveAd": {
+                        "headlines": ad_headlines,
+                        "longHeadlines": ad_long_headlines,
+                        "descriptions": ad_descriptions,
+                        "videos": [{"asset": video_asset_rn}],
+                        "businessName": {"text": business_name},
+                        "callToActions": [{"text": "詳しくはこちら"}],
+                    }
+                }
+            }
+
+            ad_url = f"https://googleads.googleapis.com/v23/customers/{cid}/adGroupAds:mutate"
+            ad_resp = _rq.post(ad_url, headers=_rest_headers, json={"operations": [{"create": ad_payload}]})
+            if ad_resp.status_code == 200:
+                print(f"[AdsClient-DG] Demand Gen動画広告作成完了")
+                ad_created = True
+            else:
+                print(f"[AdsClient-DG] 動画広告作成エラー: {ad_resp.text[:300]}")
+                ad_created = False
+
+            return {
+                "success": True,
+                "campaign_id": campaign_id,
+                "campaign_name": config["campaign_name"],
+                "campaign_type": "DEMAND_GEN",
+                "status": config.get("status", "PAUSED"),
+                "mock": False,
+                "youtube_video_id": yt_video_id,
+                "ad_group_id": ag_id,
+                "ad_created": ad_created,
+            }
+
+        except Exception as e:
+            print(f"[AdsClient-DG] Demand Genキャンペーン作成エラー: {e}")
+            return {"success": False, "error": str(e)}
 
     def update_campaign_status(self, google_campaign_id: str, status: str):
         if self.mock_mode:

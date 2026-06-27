@@ -419,33 +419,94 @@
 
           <!-- 2. 新規キャンペーン作成 -->
           <div class="tab-pane" id="tab-campaign-new">
-            <div class="card" style="max-width: 600px; margin: 0 auto 24px;">
-              <h3 class="card-title">🆕 新規キャンペーン自動生成</h3>
-              <p style="font-size:12px; color:var(--text-3); margin-bottom:16px;">必要な情報を入力するだけで、AIが最適なキャンペーン構成とキーワード、入札ルールを自動で生成します。</p>
+            <div class="card" style="max-width: 640px; margin: 0 auto 24px;">
+              <h3 class="card-title">🆕 新規キャンペーン作成</h3>
+              <p style="font-size:12px; color:var(--text-3); margin-bottom:16px;">必要な情報を入力するだけで、AIが最適なキャンペーン構成を自動で生成します。</p>
+
+              <!-- キャンペーンタイプ選択 -->
+              <div class="form-group">
+                <label>キャンペーンタイプ</label>
+                <div style="display:flex; gap:8px; margin-top:4px;">
+                  <button type="button" id="campTypeSearch" class="range-btn range-active" onclick="selectCampaignType('search')" style="flex:1; padding:12px; font-size:14px;">
+                    🔍 検索広告
+                  </button>
+                  <button type="button" id="campTypeYouTube" class="range-btn" onclick="selectCampaignType('youtube')" style="flex:1; padding:12px; font-size:14px;">
+                    🎬 YouTube広告
+                  </button>
+                </div>
+              </div>
+
+              <!-- 共通フィールド -->
               <div class="form-group">
                 <label>クリニック名</label>
                 <input type="text" id="newClinicName" class="form-input" placeholder="〇〇整体院">
               </div>
-              <div class="form-group">
+              <div class="form-group" id="newRegionGroup">
                 <label>地域</label>
                 <input type="text" id="newRegion" class="form-input" placeholder="渋谷区">
               </div>
               <div class="form-group">
-                <label>カテゴリ（訴求軸）</label>
-                <select id="newCategory" class="form-input">
-                  <option value="腰痛">腰痛</option>
-                  <option value="肩こり">肩こり</option>
-                  <option value="産後骨盤">産後骨盤</option>
-                  <option value="姿勢矯正">姿勢矯正</option>
-                  <option value="スポーツ">スポーツ</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>予算（円/日） ※後から変更可</label>
+                <label id="budgetLabel">予算（円/日） ※後から変更可</label>
                 <input type="number" id="newBudget" class="form-input" value="3000" min="1000" step="500">
               </div>
-              <div style="display:flex; justify-content: flex-end; margin-top: 20px;">
+
+              <!-- 検索広告専用フィールド -->
+              <div id="searchOnlyFields">
+                <div class="form-group">
+                  <label>カテゴリ（訴求軸）</label>
+                  <select id="newCategory" class="form-input">
+                    <option value="腰痛">腰痛</option>
+                    <option value="肩こり">肩こり</option>
+                    <option value="産後骨盤">産後骨盤</option>
+                    <option value="姿勢矯正">姿勢矯正</option>
+                    <option value="スポーツ">スポーツ</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- YouTube広告専用フィールド -->
+              <div id="youtubeOnlyFields" style="display:none;">
+                <div class="form-group">
+                  <label>キャンペーン名</label>
+                  <input type="text" id="ytCampaignName" class="form-input" placeholder="例: 整体院導_YouTube広告_腰痛">
+                </div>
+                <div class="form-group">
+                  <label>YouTube動画URL <span style="color:#ef4444;">*必須</span></label>
+                  <input type="url" id="ytVideoUrl" class="form-input" placeholder="https://www.youtube.com/watch?v=xxxxx">
+                  <p style="font-size:11px; color:var(--text-3); margin-top:4px;">YouTubeにアップロード済みの動画URLを入力してください</p>
+                </div>
+                <div class="form-group">
+                  <label>ランディングページURL（空欄の場合は設定画面のHPを使用）</label>
+                  <input type="url" id="ytFinalUrl" class="form-input" placeholder="https://example.com">
+                </div>
+                <div class="form-group">
+                  <label>見出し（最大5件・各40文字以内）</label>
+                  <input type="text" id="ytHeadline1" class="form-input" placeholder="見出し1（例: 腰痛でお悩みの方へ）" style="margin-bottom:6px;">
+                  <input type="text" id="ytHeadline2" class="form-input" placeholder="見出し2（例: 初回限定プラン）" style="margin-bottom:6px;">
+                  <input type="text" id="ytHeadline3" class="form-input" placeholder="見出し3（任意）">
+                </div>
+                <div class="form-group">
+                  <label>長い見出し（最大5件・各90文字以内）</label>
+                  <input type="text" id="ytLongHeadline1" class="form-input" placeholder="長い見出し1（例: 慢性的な腰痛を根本から改善しませんか？）" style="margin-bottom:6px;">
+                  <input type="text" id="ytLongHeadline2" class="form-input" placeholder="長い見出し2（任意）">
+                </div>
+                <div class="form-group">
+                  <label>説明文（最大5件・各90文字以内）</label>
+                  <textarea id="ytDescription1" class="form-input" rows="2" placeholder="説明文1（例: お一人おひとりのお悩みに合わせた施術をご提供）" style="margin-bottom:6px;"></textarea>
+                  <textarea id="ytDescription2" class="form-input" rows="2" placeholder="説明文2（任意）"></textarea>
+                </div>
+                <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2); border-radius:8px; padding:12px; margin-bottom:16px;">
+                  <p style="font-size:12px; color:var(--text-2); margin:0;">
+                    💡 <b>配信先:</b> YouTube・Discover・Gmailに動画広告が配信されます。<br>
+                    💡 <b>入札戦略:</b> コンバージョン数の最大化（自動入札）<br>
+                    💡 <b>ヒント:</b> 見出し・説明文を空欄にすると、クリニック情報からAIが自動補完します。
+                  </p>
+                </div>
+              </div>
+
+              <div style="display:flex; justify-content: flex-end; margin-top: 20px; gap: 8px;">
                 <button class="btn btn-primary" id="confirmNewCampaign" style="padding:10px 24px;">🤖 キャンペーン自動生成</button>
+                <button class="btn btn-primary" id="confirmYtCampaign" style="padding:10px 24px; display:none;">🎬 YouTube広告を作成</button>
               </div>
             </div>
           </div>

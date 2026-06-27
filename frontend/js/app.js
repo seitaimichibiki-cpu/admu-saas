@@ -1241,17 +1241,19 @@ function renderDashCampaigns(campaigns) {
         <th>CTR</th><th>平均CPC</th><th>費用</th><th>CV数</th>
       </tr></thead>
       <tbody>
-        ${campaigns.map(c => `
+        ${campaigns.map(c => {
+          const typeBadge = c.campaign_type === 'VIDEO' ? '🎬' : c.campaign_type === 'DEMAND_GEN' ? '🎬' : c.campaign_type === 'DISPLAY' ? '🖼' : '🔍';
+          return `
           <tr>
-            <td><strong>${c.name}</strong></td>
+            <td><span style="font-size:11px;margin-right:4px;">${typeBadge}</span><strong>${c.name}</strong></td>
             <td><span class="status-badge ${c.status?.toLowerCase()}">${c.status}</span></td>
             <td>${fmtNum(c.impressions)}</td>
             <td><span style="color:${c.ctr>3?'#10b981':c.ctr>1?'#f59e0b':'#ef4444'}">${fmtPct(c.ctr)}</span></td>
             <td>${microsToYen(c.avg_cpc_micros)}</td>
             <td>${microsToYen(c.cost_micros)}</td>
             <td>${(c.conversions||0).toFixed(1)}</td>
-          </tr>
-        `).join('')}
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`;
 }
@@ -1285,10 +1287,16 @@ async function loadCampaigns() {
       updateCampaignSelects();
       return;
     }
-    wrap.innerHTML = campaigns.map(c => `
+    wrap.innerHTML = campaigns.map(c => {
+      const typeBadge = c.campaign_type === 'VIDEO' ? '🎬' : c.campaign_type === 'DEMAND_GEN' ? '🎬' : c.campaign_type === 'DISPLAY' ? '🖼' : '🔍';
+      const typeLabel = c.campaign_type === 'VIDEO' ? 'YouTube' : c.campaign_type === 'DEMAND_GEN' ? 'YouTube' : c.campaign_type === 'DISPLAY' ? 'Display' : '検索';
+      return `
       <div class="campaign-item" id="campaign-item-${c.id}" onclick="openCampDrawer('${c.id}', '${(c.name||'').replace(/'/g,"\\'")}', '${c.status||''}', event)">
         <div class="campaign-header">
-          <div class="campaign-name">${c.name}</div>
+          <div class="campaign-name">
+            <span style="font-size:10px; background:rgba(255,255,255,0.08); padding:2px 6px; border-radius:4px; margin-right:6px;">${typeBadge} ${typeLabel}</span>
+            ${c.name}
+          </div>
           <span class="status-badge ${c.status?.toLowerCase()}">${c.status}</span>
           ${c.status==='ENABLED'
             ? `<button class="btn btn-secondary" onclick="toggleCampaign('${c.id}','PAUSED')">一時停止</button>`
@@ -1304,7 +1312,8 @@ async function loadCampaigns() {
           <div class="campaign-stat"><div class="campaign-stat-label">CV数</div><div class="campaign-stat-value">${(c.conversions||0).toFixed(1)}</div></div>
         </div>
       </div>
-    `).join('');
+    `;}).join('');
+
     updateCampaignSelects();
   } catch(e) {
     toast('キャンペーンの読み込みに失敗: ' + e.message, 'error');
@@ -2196,7 +2205,35 @@ document.getElementById('newCampaignBtn')?.addEventListener('click', () => {
   if (tabBtn) tabBtn.click();
 });
 
-// 静的な新規キャンペーン自動生成の確認ボタン処理
+// キャンペーンタイプ切り替え（検索 / YouTube）
+let selectedCampaignType = 'search';
+window.selectCampaignType = function(type) {
+  selectedCampaignType = type;
+  const searchBtn = document.getElementById('campTypeSearch');
+  const ytBtn = document.getElementById('campTypeYouTube');
+  const searchFields = document.getElementById('searchOnlyFields');
+  const ytFields = document.getElementById('youtubeOnlyFields');
+  const searchSubmit = document.getElementById('confirmNewCampaign');
+  const ytSubmit = document.getElementById('confirmYtCampaign');
+
+  if (type === 'youtube') {
+    searchBtn?.classList.remove('range-active');
+    ytBtn?.classList.add('range-active');
+    if (searchFields) searchFields.style.display = 'none';
+    if (ytFields) ytFields.style.display = 'block';
+    if (searchSubmit) searchSubmit.style.display = 'none';
+    if (ytSubmit) ytSubmit.style.display = 'inline-flex';
+  } else {
+    searchBtn?.classList.add('range-active');
+    ytBtn?.classList.remove('range-active');
+    if (searchFields) searchFields.style.display = 'block';
+    if (ytFields) ytFields.style.display = 'none';
+    if (searchSubmit) searchSubmit.style.display = 'inline-flex';
+    if (ytSubmit) ytSubmit.style.display = 'none';
+  }
+};
+
+// 静的な新規キャンペーン自動生成の確認ボタン処理（検索広告）
 document.getElementById('confirmNewCampaign')?.addEventListener('click', async () => {
   const body = {
     clinic_id: currentClinicId,
@@ -2221,6 +2258,70 @@ document.getElementById('confirmNewCampaign')?.addEventListener('click', async (
     if (tabBtn) tabBtn.click();
   } catch(e) {
     toast('作成失敗: ' + e.message, 'error');
+  }
+});
+
+// YouTube広告キャンペーン作成ボタン処理
+document.getElementById('confirmYtCampaign')?.addEventListener('click', async () => {
+  const videoUrl = document.getElementById('ytVideoUrl')?.value || '';
+  if (!videoUrl) {
+    toast('YouTube動画URLを入力してください', 'error');
+    return;
+  }
+
+  const campaignName = document.getElementById('ytCampaignName')?.value
+    || `${document.getElementById('newClinicName')?.value || '整体院'}_YouTube広告`;
+
+  // 見出し収集（空欄除外）
+  const headlines = [
+    document.getElementById('ytHeadline1')?.value,
+    document.getElementById('ytHeadline2')?.value,
+    document.getElementById('ytHeadline3')?.value,
+  ].filter(v => v && v.trim());
+
+  const longHeadlines = [
+    document.getElementById('ytLongHeadline1')?.value,
+    document.getElementById('ytLongHeadline2')?.value,
+  ].filter(v => v && v.trim());
+
+  const descriptions = [
+    document.getElementById('ytDescription1')?.value,
+    document.getElementById('ytDescription2')?.value,
+  ].filter(v => v && v.trim());
+
+  const body = {
+    clinic_id: currentClinicId,
+    campaign_name: campaignName,
+    youtube_video_url: videoUrl,
+    daily_budget_yen: parseInt(document.getElementById('newBudget')?.value) || 1000,
+    final_url: document.getElementById('ytFinalUrl')?.value || '',
+    headlines: headlines,
+    long_headlines: longHeadlines,
+    descriptions: descriptions,
+    status: 'PAUSED',
+  };
+
+  const btn = document.getElementById('confirmYtCampaign');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 作成中…'; }
+
+  try {
+    const res = await api('/campaigns/create-youtube', { method:'POST', body: JSON.stringify(body) });
+    toast(res.message || 'YouTube広告キャンペーンを作成しました', 'success', 5000);
+    
+    // 入力欄クリア
+    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytHeadline1','ytHeadline2','ytHeadline3',
+     'ytLongHeadline1','ytLongHeadline2','ytDescription1','ytDescription2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    
+    // 一覧タブに切り替え
+    const tabBtn = document.querySelector('.tab-btn[data-tab="campaign-list"]');
+    if (tabBtn) tabBtn.click();
+  } catch(e) {
+    toast('YouTube広告作成失敗: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🎬 YouTube広告を作成'; }
   }
 });
 

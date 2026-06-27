@@ -1813,6 +1813,126 @@ async def create_full_campaign_setup(clinic_id: int = 1, request: Request = None
         print(f"[create-full-setup] エラー: {tb}")
         raise HTTPException(status_code=500, detail=f"キャンペーン作成エラー: {str(e)}")
 
+
+class YouTubeCampaignReq(BaseModel):
+    clinic_id: int = 1
+    campaign_name: str
+    youtube_video_url: str
+    daily_budget_yen: int = 1000
+    final_url: str = ""
+    headlines: list[str] = []
+    long_headlines: list[str] = []
+    descriptions: list[str] = []
+    status: str = "PAUSED"
+
+
+def _extract_youtube_video_id(url: str) -> str:
+    """YouTube URLから動画IDを抽出する"""
+    import re
+    patterns = [
+        r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
+        r'^([a-zA-Z0-9_-]{11})$',
+    ]
+    for p in patterns:
+        m = re.search(p, url)
+        if m:
+            return m.group(1)
+    return ""
+
+
+@app.post("/api/campaigns/create-youtube")
+async def create_youtube_campaign(req: YouTubeCampaignReq):
+    """YouTube広告（Demand Genキャンペーン）を作成する"""
+    import traceback
+    try:
+        acc = db.get_ads_account(req.clinic_id)
+        if not acc:
+            raise HTTPException(status_code=404, detail="広告アカウントが設定されていません")
+
+        # YouTube URLからvideo_idを抽出
+        video_id = _extract_youtube_video_id(req.youtube_video_url)
+        if not video_id:
+            raise HTTPException(status_code=400, detail="YouTube動画URLが不正です。正しいURLを入力してください。")
+
+        client_ads = AdsClient(acc)
+        clinic = db.get_clinic(req.clinic_id) or {}
+        clinic_name = clinic.get("name", "整体院")
+
+        # デフォルト値の補完
+        headlines = req.headlines if req.headlines else [
+            f"{clinic_name}の施術をご紹介",
+            "お体の不調を根本改善",
+            "初回限定のお得なプラン",
+        ]
+        long_headlines = req.long_headlines if req.long_headlines else [
+            f"{clinic_name}で慢性的な腰痛・肩こりを根本から改善しませんか？",
+            "国家資格保有スタッフが丁寧にカウンセリング＆施術いたします",
+        ]
+        descriptions = req.descriptions if req.descriptions else [
+            f"{clinic_name}では、お一人おひとりのお悩みに合わせた施術をご提供しています。",
+            "初回限定プランあり。まずはお気軽にご相談ください。",
+        ]
+        final_url = req.final_url or acc.get("hp_url", "")
+        if not final_url:
+            raise HTTPException(status_code=400, detail="ランディングページのURLが設定されていません。")
+
+        # 位置情報の取得
+        lat = acc.get("lat") or acc.get("target_lat")
+        lon = acc.get("lon") or acc.get("target_lon")
+
+        config = {
+            "campaign_name": req.campaign_name,
+            "daily_budget_yen": req.daily_budget_yen,
+            "final_url": final_url,
+            "status": req.status,
+            "youtube_video_id": video_id,
+            "headlines": headlines,
+            "long_headlines": long_headlines,
+            "descriptions": descriptions,
+            "business_name": clinic_name,
+            "lat": float(lat) if lat else None,
+            "lon": float(lon) if lon else None,
+            "radius_km": 25,
+        }
+
+        result = client_ads.create_demand_gen_campaign_setup(config)
+
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=f"キャンペーン作成エラー: {result.get('error', '不明なエラー')}")
+
+        # DBに保存
+        db.upsert_campaign(req.clinic_id, {
+            "google_campaign_id": result["campaign_id"],
+            "name": req.campaign_name,
+            "status": result.get("status", "PAUSED"),
+            "campaign_type": "DEMAND_GEN",
+            "budget_micros": req.daily_budget_yen * 1_000_000,
+            "target_region": acc.get("target_region", ""),
+        })
+
+        # アラート登録
+        db.create_alert(
+            req.clinic_id,
+            f"YouTube広告キャンペーン作成: 「{req.campaign_name}」(動画ID: {video_id})",
+            level="INFO"
+        )
+
+        return {
+            "success": True,
+            "campaign": result,
+            "message": (
+                f"🎬 YouTube広告キャンペーン「{req.campaign_name}」を作成しました。"
+                if not result.get("mock") else
+                f"📋 [モック] YouTube広告キャンペーン「{req.campaign_name}」を擬似作成しました。"
+            )
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[create-youtube] エラー: {tb}")
+        raise HTTPException(status_code=500, detail=f"YouTube広告キャンペーン作成エラー: {str(e)}")
+
 @app.post("/api/negative-keywords/push-to-google")
 async def push_negative_keywords_to_google(clinic_id: int = 1):
     """
@@ -6799,7 +6919,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260627-this-month-auto-adcopy', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260627-youtube-campaign', html)
 
 
         return HTMLResponse(
