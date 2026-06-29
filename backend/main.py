@@ -7023,7 +7023,7 @@ _YT_AD_GAQL = """
            ad_group_ad.ad.demand_gen_video_responsive_ad.call_to_action
     FROM ad_group_ad
     WHERE campaign.id = {campaign_id}
-      AND ad_group_ad.ad.type = 'DEMAND_GEN_VIDEO_RESPONSIVE_AD'
+      AND ad_group_ad.status != REMOVED
     LIMIT 1
 """
 
