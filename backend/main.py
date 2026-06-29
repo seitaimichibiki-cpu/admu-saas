@@ -1980,6 +1980,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             "campaign_type": "DEMAND_GEN",
             "budget_micros": req.daily_budget_yen * 1_000_000,
             "target_region": acc.get("target_region", ""),
+            "youtube_video_id": result.get("youtube_video_id", video_id),
         })
 
         # アラート登録
@@ -7162,52 +7163,107 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         acc = _require_account(req.clinic_id)
         client = _get_ads_client(acc, "google")
 
-        # ローカルDBからGoogle IDを解決
+        # ローカルDBからキャンペーン情報を解決
+        campaign_db = None
         try:
-            campaign = _resolve_campaign(campaign_id, req.clinic_id)
-            g_id = campaign.get("google_campaign_id") or campaign_id
+            campaign_db = _resolve_campaign(campaign_id, req.clinic_id)
+            g_id = campaign_db.get("google_campaign_id") or campaign_id
         except Exception:
             g_id = campaign_id
 
         if client.mock_mode:
             return {
-                "success": True,
-                "mock": True,
+                "success": True, "mock": True,
                 "message": "[モック] YouTube広告を更新しました",
-                "headlines": req.headlines,
-                "long_headlines": req.long_headlines,
-                "descriptions": req.descriptions,
-                "business_name": req.business_name,
+                "headlines": req.headlines, "long_headlines": req.long_headlines,
+                "descriptions": req.descriptions, "business_name": req.business_name,
                 "final_url": req.final_url,
             }
 
         token = client._get_rest_access_token()
-        query = _YT_AD_GAQL.format(campaign_id=g_id)
-        rows = _gaql_search(client, query, token)
+        CID = client.customer_id
 
-        if not rows:
-            raise HTTPException(404, "この campaign に Demand Gen 動画広告が見つかりません")
+        # ① 既存広告をGAQLで取得（失敗しても続行）
+        rows = _gaql_search(client, _YT_AD_GAQL.format(campaign_id=g_id), token)
+        print(f"[youtube-ad-update] GAQL rows={len(rows)} for g_id={g_id}")
 
-        row = rows[0]
-        ad_group_ad = row.get("adGroupAd", {})
-        old_resource_name = ad_group_ad.get("resourceName", "")
-        ad_group_rn = ad_group_ad.get("adGroup", "")
-        old_ad = ad_group_ad.get("ad", {})
-        old_dg = old_ad.get("demandGenVideoResponsiveAd", {})
+        old_resource_name = ""
+        ad_group_rn = ""
+        call_to_action = "LEARN_MORE"
+        video_asset_resource = ""
 
-        # 既存の動画アセットを保持
-        videos = old_dg.get("videos", [])
-        if not videos:
-            raise HTTPException(400, "既存の広告に動画アセットが見つかりません")
+        if rows:
+            row = rows[0]
+            ad_group_ad = row.get("adGroupAd", {})
+            old_resource_name = ad_group_ad.get("resourceName", "")
+            ad_group_rn = ad_group_ad.get("adGroup", "")
+            old_dg = ad_group_ad.get("ad", {}).get("demandGenVideoResponsiveAd", {})
+            call_to_action = old_dg.get("callToAction", "LEARN_MORE")
+            videos = old_dg.get("videos", [])
+            if videos:
+                video_asset_resource = videos[0].get("asset", "")
 
-        # callToAction を保持（デフォルト: LEARN_MORE）
-        call_to_action = old_dg.get("callToAction", "LEARN_MORE")
+        # ② ad_group が不明の場合はGAQLで取得
+        if not ad_group_rn:
+            ag_rows = _gaql_search(client, f"""
+                SELECT ad_group.resource_name, ad_group.id
+                FROM ad_group
+                WHERE campaign.id = {g_id} AND ad_group.status != REMOVED
+                LIMIT 1
+            """, token)
+            if ag_rows:
+                ad_group_rn = ag_rows[0].get("adGroup", {}).get("resourceName", "")
+                print(f"[youtube-ad-update] AdGroup from fallback GAQL: {ad_group_rn}")
 
-        # ① 旧広告を削除
-        _rest_mutate(client, "adGroupAds", [{"remove": old_resource_name}], token)
-        print(f"[youtube-ad-update] 旧広告削除完了: {old_resource_name}")
+        if not ad_group_rn:
+            raise HTTPException(400, "広告グループが見つかりません。キャンペーンが正しく作成されているか確認してください。")
 
-        # ② 新広告を作成（同じ動画アセット、新しい広告文）
+        # ③ 動画アセットを解決（DBのyoutube_video_idからアセットを検索）
+        if not video_asset_resource:
+            # DBからyoutube_video_idを取得
+            db_video_id = ""
+            if campaign_db:
+                db_video_id = campaign_db.get("youtube_video_id", "")
+            print(f"[youtube-ad-update] DB youtube_video_id={db_video_id}")
+
+            if db_video_id:
+                # youtube_video_idでアセットを検索
+                asset_rows = _gaql_search(client, f"""
+                    SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id
+                    FROM asset
+                    WHERE asset.youtube_video_asset.youtube_video_id = '{db_video_id}'
+                    LIMIT 1
+                """, token)
+                if asset_rows:
+                    video_asset_resource = asset_rows[0].get("asset", {}).get("resourceName", "")
+                    print(f"[youtube-ad-update] Found asset from video_id: {video_asset_resource}")
+
+            if not video_asset_resource:
+                # 全アセット一覧からYouTube動画アセットを検索
+                all_assets = _gaql_search(client, """
+                    SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id, asset.type
+                    FROM asset
+                    WHERE asset.type = YOUTUBE_VIDEO
+                    LIMIT 10
+                """, token)
+                print(f"[youtube-ad-update] All YouTube assets: {len(all_assets)}")
+                for a in all_assets:
+                    print(f"  asset: {a}")
+                if all_assets:
+                    video_asset_resource = all_assets[0].get("asset", {}).get("resourceName", "")
+
+        if not video_asset_resource:
+            raise HTTPException(400, f"動画アセットが見つかりません。DBのyoutube_video_id={campaign_db.get('youtube_video_id','') if campaign_db else '不明'}")
+
+        # ④ 旧広告を削除（存在する場合のみ）
+        if old_resource_name:
+            try:
+                _rest_mutate(client, "adGroupAds", [{"remove": old_resource_name}], token)
+                print(f"[youtube-ad-update] 旧広告削除完了: {old_resource_name}")
+            except Exception as e:
+                print(f"[youtube-ad-update] 旧広告削除エラー（続行）: {e}")
+
+        # ⑤ 新広告を作成
         ad_headlines = [{"text": h[:40]} for h in req.headlines[:5]]
         ad_long_headlines = [{"text": lh[:90]} for lh in req.long_headlines[:5]]
         ad_descriptions = [{"text": d[:90]} for d in req.descriptions[:5]]
@@ -7222,16 +7278,14 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
                     "headlines": ad_headlines,
                     "longHeadlines": ad_long_headlines,
                     "descriptions": ad_descriptions,
-                    "videos": videos,
+                    "videos": [{"asset": video_asset_resource}],
                     "businessName": business_name,
                     "callToAction": call_to_action,
                 }
             }
         }
 
-        create_result = _rest_mutate(
-            client, "adGroupAds", [{"create": new_ad_payload}], token
-        )
+        create_result = _rest_mutate(client, "adGroupAds", [{"create": new_ad_payload}], token)
         print(f"[youtube-ad-update] 新広告作成完了: {create_result}")
 
         new_resource_name = ""
@@ -7239,22 +7293,14 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         if results:
             new_resource_name = results[0].get("resourceName", "")
 
-        # アラート登録
-        db.create_alert(
-            req.clinic_id,
-            f"YouTube広告を更新しました (campaign_id: {g_id})",
-            level="INFO"
-        )
+        db.create_alert(req.clinic_id, f"YouTube広告を更新しました (campaign_id: {g_id})", level="INFO")
 
         return {
-            "success": True,
-            "mock": False,
+            "success": True, "mock": False,
             "message": "YouTube広告を更新しました",
             "new_resource_name": new_resource_name,
-            "headlines": req.headlines,
-            "long_headlines": req.long_headlines,
-            "descriptions": req.descriptions,
-            "business_name": req.business_name,
+            "headlines": req.headlines, "long_headlines": req.long_headlines,
+            "descriptions": req.descriptions, "business_name": req.business_name,
             "final_url": req.final_url,
         }
     except HTTPException:

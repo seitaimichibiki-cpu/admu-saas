@@ -185,6 +185,7 @@ def init_db():
             name TEXT NOT NULL, status TEXT DEFAULT 'ENABLED',
             budget_micros BIGINT DEFAULT 0, budget_locked INTEGER DEFAULT 0,
             campaign_type TEXT DEFAULT 'SEARCH', target_region TEXT,
+            youtube_video_id TEXT DEFAULT '',
             created_at {TS}, updated_at {TS},
             FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS ad_strategy_archives (
@@ -676,6 +677,12 @@ def get_campaign(campaign_id: int):
 
 def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
     with get_conn() as conn:
+        # youtube_video_idカラムが無ければ追加（既存DB互換）
+        try:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass  # カラム既存の場合は無視
         if data.get("id"):
             conn.execute("""
                 UPDATE campaigns SET name=?,status=?,budget_micros=?,target_region=?,updated_at=?
@@ -686,11 +693,12 @@ def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
             return data["id"]
         else:
             cur = conn.execute("""
-                INSERT INTO campaigns (clinic_id,name,status,budget_micros,campaign_type,target_region,google_campaign_id)
-                VALUES (?,?,?,?,?,?,?)
+                INSERT INTO campaigns (clinic_id,name,status,budget_micros,campaign_type,target_region,google_campaign_id,youtube_video_id)
+                VALUES (?,?,?,?,?,?,?,?)
             """, (clinic_id, data["name"], data.get("status","ENABLED"),
                   data.get("budget_micros",0), data.get("campaign_type","SEARCH"),
-                  data.get("target_region",""), data.get("google_campaign_id","")))
+                  data.get("target_region",""), data.get("google_campaign_id",""),
+                  data.get("youtube_video_id","")))
             conn.commit()
             return cur.lastrowid
 
