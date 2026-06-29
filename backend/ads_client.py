@@ -556,12 +556,11 @@ class AdsClient:
                 except Exception as e:
                     print(f"[AdsClient-DG] 位置ターゲティング設定エラー（続行）: {e}")
 
-            # ④ 広告グループ作成（Demand Gen Video Responsive）
+            # ④ 広告グループ作成（Demand Gen — typeは指定不要、キャンペーンから推定される）
             r4 = self._rest_post("adGroups", [{"create": {
-                "name": f"{config['campaign_name']}_AG",
+                "name": f"{unique_name}_AG",
                 "campaign": campaign_rn,
                 "status": "ENABLED",
-                "type": "DEMAND_GEN_VIDEO_RESPONSIVE",
             }}], token)
             ag_rn = r4["results"][0]["resourceName"]
             ag_id = ag_rn.split("/")[-1]
@@ -570,8 +569,7 @@ class AdsClient:
             # ⑤ YouTube動画アセット作成
             yt_video_id = config.get("youtube_video_id", "")
             r5 = self._rest_post("assets", [{"create": {
-                "name": f"YT_{config['campaign_name']}_{random.randint(100,999)}",
-                "type": "YOUTUBE_VIDEO",
+                "name": f"YT_{unique_name}_{random.randint(100,999)}",
                 "youtubeVideoAsset": {
                     "youtubeVideoId": yt_video_id,
                 },
@@ -591,7 +589,7 @@ class AdsClient:
 
             ad_payload = {
                 "adGroup": ag_rn,
-                "status": "ENABLED",
+                "status": "PAUSED",
                 "ad": {
                     "finalUrls": [config.get("final_url", "")],
                     "demandGenVideoResponsiveAd": {
@@ -599,8 +597,8 @@ class AdsClient:
                         "longHeadlines": ad_long_headlines,
                         "descriptions": ad_descriptions,
                         "videos": [{"asset": video_asset_rn}],
-                        "businessName": {"text": business_name},
-                        "callToActions": [{"text": "詳しくはこちら"}],
+                        "businessName": business_name,
+                        "callToAction": "LEARN_MORE",
                     }
                 }
             }
@@ -611,7 +609,7 @@ class AdsClient:
                 print(f"[AdsClient-DG] Demand Gen動画広告作成完了")
                 ad_created = True
             else:
-                print(f"[AdsClient-DG] 動画広告作成エラー: {ad_resp.text[:300]}")
+                print(f"[AdsClient-DG] 動画広告作成エラー: {ad_resp.text[:500]}")
                 ad_created = False
 
             return {
