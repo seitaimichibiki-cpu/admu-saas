@@ -522,8 +522,11 @@ class AdsClient:
             print(f"[AdsClient-DG] バジェット作成: {budget_rn}")
 
             # ② Demand Gen キャンペーン作成
+            import datetime as _dt
+            _suffix = _dt.datetime.now().strftime("%m%d%H%M")
+            unique_name = f"{config['campaign_name']}_{_suffix}"
             campaign_payload = {
-                "name": config["campaign_name"],
+                "name": unique_name,
                 "status": config.get("status", "PAUSED"),
                 "advertisingChannelType": "DEMAND_GEN",
                 "campaignBudget": budget_rn,
@@ -614,7 +617,7 @@ class AdsClient:
             return {
                 "success": True,
                 "campaign_id": campaign_id,
-                "campaign_name": config["campaign_name"],
+                "campaign_name": unique_name,
                 "campaign_type": "DEMAND_GEN",
                 "status": config.get("status", "PAUSED"),
                 "mock": False,
