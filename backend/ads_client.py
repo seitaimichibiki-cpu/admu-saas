@@ -522,8 +522,8 @@ class AdsClient:
             print(f"[AdsClient-DG] バジェット作成: {budget_rn}")
 
             # ② Demand Gen キャンペーン作成
-            import datetime as _dt
-            _suffix = _dt.datetime.now().strftime("%m%d%H%M")
+            import time as _time
+            _suffix = f"{int(_time.time())}_{random.randint(100,999)}"
             unique_name = f"{config['campaign_name']}_{_suffix}"
             campaign_payload = {
                 "name": unique_name,
