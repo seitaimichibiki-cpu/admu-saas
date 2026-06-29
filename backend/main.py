@@ -7220,6 +7220,209 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         raise HTTPException(500, f"YouTube広告更新エラー: {str(e)}")
 
 
+# ── コンバージョントラッキング状態確認 ──────────────────────────────
+
+@app.get("/api/conversion-tracking/status")
+def get_conversion_tracking_status(clinic_id: int = 1, platform: str = "google"):
+    """Google広告アカウントのコンバージョンアクション設定状況を確認する"""
+    import requests as rq
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, platform)
+
+    if client.mock_mode:
+        return {
+            "success": True, "mock": True,
+            "has_conversion_actions": False,
+            "conversion_actions": [],
+            "warning": "コンバージョンアクションが設定されていません。広告の自動最適化が機能しません。",
+        }
+
+    try:
+        token = client._get_rest_access_token()
+    except Exception as e:
+        raise HTTPException(500, f"認証エラー: {e}")
+
+    CID = client.customer_id
+    url = f"https://googleads.googleapis.com/v23/customers/{CID}/googleAds:searchStream"
+    headers_rest = {
+        "Authorization": f"Bearer {token}",
+        "developer-token": client._developer_token,
+        "login-customer-id": client._login_customer_id,
+        "Content-Type": "application/json",
+    }
+
+    query = """
+        SELECT conversion_action.id,
+               conversion_action.name,
+               conversion_action.type,
+               conversion_action.status,
+               conversion_action.category,
+               conversion_action.counting_type,
+               conversion_action.tag_snippets
+        FROM conversion_action
+        WHERE conversion_action.status = ENABLED
+    """
+    resp = rq.post(url, headers=headers_rest, json={"query": query})
+    actions = []
+    if resp.status_code == 200:
+        for batch in resp.json():
+            for row in batch.get("results", []):
+                ca = row.get("conversionAction", {})
+                actions.append({
+                    "id": ca.get("id", ""),
+                    "name": ca.get("name", ""),
+                    "type": ca.get("type", ""),
+                    "status": ca.get("status", ""),
+                    "category": ca.get("category", ""),
+                    "counting_type": ca.get("countingType", ""),
+                })
+
+    # フィルタ: Google自動のデフォルトアクション（store_visits等）を除外
+    custom_actions = [a for a in actions if a["type"] not in ("STORE_VISIT", "STORE_SALE", "GOOGLE_PLAY_DOWNLOAD", "GOOGLE_PLAY_IN_APP_PURCHASE")]
+    has_actions = len(custom_actions) > 0
+
+    warning = ""
+    if not has_actions:
+        warning = "⚠️ コンバージョンアクションが設定されていません。「予約完了」等のCV地点を設定しないと、入札戦略（コンバージョン最大化）が最適化されません。"
+
+    return {
+        "success": True,
+        "mock": False,
+        "has_conversion_actions": has_actions,
+        "conversion_actions": custom_actions,
+        "total_including_defaults": len(actions),
+        "warning": warning,
+    }
+
+
+# ── 広告スケジュール（配信時間帯）設定 ──────────────────────────────
+
+class AdScheduleReq(BaseModel):
+    clinic_id: int = 1
+    schedules: list  # [{day: "MONDAY", start_hour: 9, end_hour: 20}, ...]
+
+@app.get("/api/campaigns/{campaign_id}/ad-schedule")
+def get_ad_schedule(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
+    """キャンペーンの広告配信スケジュールを取得"""
+    import requests as rq
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, platform)
+
+    try:
+        campaign = _resolve_campaign(campaign_id, clinic_id)
+        g_id = campaign.get("google_campaign_id") or campaign_id
+    except Exception:
+        g_id = campaign_id
+
+    if client.mock_mode:
+        return {"success": True, "mock": True, "schedules": []}
+
+    try:
+        token = client._get_rest_access_token()
+    except Exception as e:
+        raise HTTPException(500, f"認証エラー: {e}")
+
+    rows = _gaql_search(client, f"""
+        SELECT campaign_criterion.ad_schedule.day_of_week,
+               campaign_criterion.ad_schedule.start_hour,
+               campaign_criterion.ad_schedule.start_minute,
+               campaign_criterion.ad_schedule.end_hour,
+               campaign_criterion.ad_schedule.end_minute,
+               campaign_criterion.resource_name
+        FROM campaign_criterion
+        WHERE campaign.id = {g_id}
+        AND campaign_criterion.type = AD_SCHEDULE
+        AND campaign_criterion.status != REMOVED
+    """, token)
+
+    schedules = []
+    for row in rows:
+        cc = row.get("campaignCriterion", {})
+        sched = cc.get("adSchedule", {})
+        if sched.get("dayOfWeek"):
+            schedules.append({
+                "day": sched.get("dayOfWeek", ""),
+                "start_hour": sched.get("startHour", 0),
+                "start_minute": sched.get("startMinute", "ZERO"),
+                "end_hour": sched.get("endHour", 24),
+                "end_minute": sched.get("endMinute", "ZERO"),
+                "resource_name": cc.get("resourceName", ""),
+            })
+
+    return {"success": True, "mock": False, "schedules": schedules}
+
+
+@app.post("/api/campaigns/{campaign_id}/ad-schedule")
+def set_ad_schedule(campaign_id: str, req: AdScheduleReq):
+    """キャンペーンに広告配信スケジュール（営業時間帯のみ配信）を設定する"""
+    import requests as rq
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc, "google")
+
+    try:
+        campaign = _resolve_campaign(campaign_id, req.clinic_id)
+        g_id = campaign.get("google_campaign_id") or campaign_id
+    except Exception:
+        g_id = campaign_id
+
+    if client.mock_mode:
+        return {"success": True, "mock": True, "message": "[モック] スケジュールを設定しました"}
+
+    try:
+        token = client._get_rest_access_token()
+    except Exception as e:
+        raise HTTPException(500, f"認証エラー: {e}")
+
+    CID = client.customer_id
+    campaign_rn = f"customers/{CID}/campaigns/{g_id}"
+
+    # ① 既存のスケジュールを全削除
+    existing = _gaql_search(client, f"""
+        SELECT campaign_criterion.resource_name
+        FROM campaign_criterion
+        WHERE campaign.id = {g_id}
+        AND campaign_criterion.type = AD_SCHEDULE
+        AND campaign_criterion.status != REMOVED
+    """, token)
+
+    if existing:
+        remove_ops = []
+        for row in existing:
+            rn = row.get("campaignCriterion", {}).get("resourceName", "")
+            if rn:
+                remove_ops.append({"remove": rn})
+        if remove_ops:
+            try:
+                _rest_mutate(client, "campaignCriteria", remove_ops, token)
+                print(f"[AdSchedule] 既存スケジュール{len(remove_ops)}件を削除")
+            except Exception as e:
+                print(f"[AdSchedule] 既存スケジュール削除エラー（続行）: {e}")
+
+    # ② 新しいスケジュールを作成
+    if not req.schedules:
+        return {"success": True, "message": "スケジュールをクリアしました（24時間配信）"}
+
+    create_ops = []
+    for sched in req.schedules:
+        create_ops.append({"create": {
+            "campaign": campaign_rn,
+            "adSchedule": {
+                "dayOfWeek": sched.get("day", "MONDAY"),
+                "startHour": sched.get("start_hour", 9),
+                "startMinute": "ZERO",
+                "endHour": sched.get("end_hour", 20),
+                "endMinute": "ZERO",
+            }
+        }})
+
+    try:
+        _rest_mutate(client, "campaignCriteria", create_ops, token)
+        db.create_alert(req.clinic_id, f"広告スケジュールを設定しました ({len(create_ops)}件)", level="INFO")
+        return {"success": True, "message": f"広告スケジュールを{len(create_ops)}件設定しました"}
+    except Exception as e:
+        raise HTTPException(500, f"スケジュール設定エラー: {str(e)}")
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def serve_spa(path: str = ""):
     # admin.html・onboarding.htmlは専用ルートで処理済み

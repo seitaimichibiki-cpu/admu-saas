@@ -60,3 +60,6 @@ node_modules/
 .coverage
 htmlcov/
 .pytest_cache/
+cookies.txt
+scratch/
+logiction_backup.json

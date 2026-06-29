@@ -1315,6 +1315,8 @@ async function loadCampaigns() {
     `;}).join('');
 
     updateCampaignSelects();
+    // CVトラッキング設定確認（バナー表示）
+    if (typeof checkConversionTracking === 'function') checkConversionTracking();
   } catch(e) {
     toast('キャンペーンの読み込みに失敗: ' + e.message, 'error');
   }
@@ -1644,6 +1646,27 @@ function renderCampDrawer(d) {
       <div id="drawerAiResult"></div>
     </div>`;
 
+  // ⑤-B 広告配信スケジュール設定
+  const scheduleHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">⏰ 広告配信スケジュール</div>
+      <p style="font-size:11px;color:var(--text-3);margin:0 0 8px 0">営業時間帯のみ配信して、深夜帯の無駄な広告費を削減できます</p>
+      <div id="scheduleLoadArea">
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.05)" onclick="loadAdSchedule('${d.google_campaign_id}')">📅 現在のスケジュールを表示</button>
+      </div>
+      <div id="scheduleEditArea" style="display:none;margin-top:8px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border)">
+        <div style="margin-bottom:8px">
+          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">配信する曜日と時間帯</label>
+          <div id="scheduleDaysContainer"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-primary" style="flex:1;font-size:11px;padding:6px" onclick="saveAdSchedule('${d.google_campaign_id}')">💾 スケジュール保存</button>
+          <button class="btn btn-danger" style="flex:1;font-size:11px;padding:6px" onclick="clearAdSchedule('${d.google_campaign_id}')">🗑 24時間配信に戻す</button>
+        </div>
+        <div id="scheduleResult" style="margin-top:8px"></div>
+      </div>
+    </div>`;
+
   // 遷移先URL (LP) セクション
   const currentUrl = (d.ads && d.ads[0] && d.ads[0].final_urls && d.ads[0].final_urls[0]) || '';
   const urlHtml = `
@@ -1720,11 +1743,11 @@ function renderCampDrawer(d) {
 
   // Demand Genの場合はキーワード・RSA広告文セクションを非表示にし、YouTube編集を表示
   if (d.campaign_type === 'DEMAND_GEN') {
-    body.innerHTML = policyHtml + budgetHtml + ytEditHtml + aiActionsHtml;
+    body.innerHTML = policyHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
     // 別APIからYouTube広告データを非同期取得
     loadYouTubeAdEditForm(d.google_campaign_id);
   } else {
-    body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
+    body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
   }
   if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml && !ytEditHtml) {
     body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
@@ -1850,6 +1873,112 @@ async function saveYouTubeAdChanges(googleCampaignId) {
   }
 }
 window.saveYouTubeAdChanges = saveYouTubeAdChanges;
+
+// ── 広告配信スケジュール管理 ──
+const DAY_LABELS = {MONDAY:'月',TUESDAY:'火',WEDNESDAY:'水',THURSDAY:'木',FRIDAY:'金',SATURDAY:'土',SUNDAY:'日'};
+const DAYS_ORDER = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
+
+async function loadAdSchedule(googleCampaignId) {
+  const loadArea = document.getElementById('scheduleLoadArea');
+  const editArea = document.getElementById('scheduleEditArea');
+  loadArea.innerHTML = '<span style="font-size:11px;color:var(--text-3)">⏳ 読み込み中...</span>';
+  try {
+    const data = await api(`/campaigns/${googleCampaignId}/ad-schedule?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
+    editArea.style.display = 'block';
+    const container = document.getElementById('scheduleDaysContainer');
+    const existing = {};
+    (data.schedules || []).forEach(s => { existing[s.day] = s; });
+    container.innerHTML = DAYS_ORDER.map(day => {
+      const s = existing[day];
+      const checked = !!s;
+      const startH = s ? s.start_hour : 9;
+      const endH = s ? s.end_hour : 20;
+      return `
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <label style="width:24px;font-size:12px;font-weight:bold;color:var(--text-2)">${DAY_LABELS[day]}</label>
+          <input type="checkbox" id="sched_chk_${day}" ${checked?'checked':''} style="accent-color:var(--accent)">
+          <input type="number" id="sched_start_${day}" min="0" max="23" value="${startH}" style="width:50px;padding:2px 4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:center">
+          <span style="font-size:11px;color:var(--text-3)">時 〜</span>
+          <input type="number" id="sched_end_${day}" min="1" max="24" value="${endH}" style="width:50px;padding:2px 4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:3px;font-size:11px;text-align:center">
+          <span style="font-size:11px;color:var(--text-3)">時</span>
+        </div>`;
+    }).join('');
+    loadArea.innerHTML = data.schedules.length 
+      ? `<span style="font-size:11px;color:#10b981">✅ ${data.schedules.length}曜日にスケジュール設定済み</span>`
+      : '<span style="font-size:11px;color:#f59e0b">⚠️ スケジュール未設定（24時間配信中）</span>';
+  } catch(e) {
+    loadArea.innerHTML = `<span style="font-size:11px;color:#ef4444">❌ 取得失敗: ${e.message}</span>`;
+  }
+}
+window.loadAdSchedule = loadAdSchedule;
+
+async function saveAdSchedule(googleCampaignId) {
+  const schedules = [];
+  DAYS_ORDER.forEach(day => {
+    const chk = document.getElementById(`sched_chk_${day}`);
+    if (chk && chk.checked) {
+      const sh = parseInt(document.getElementById(`sched_start_${day}`).value) || 9;
+      const eh = parseInt(document.getElementById(`sched_end_${day}`).value) || 20;
+      schedules.push({ day, start_hour: sh, end_hour: eh });
+    }
+  });
+  if (!schedules.length) { toast('最低1曜日はチェックしてください', 'error'); return; }
+  try {
+    const r = await api(`/campaigns/${googleCampaignId}/ad-schedule`, {
+      method: 'POST', body: JSON.stringify({ clinic_id: parseInt(currentClinicId), schedules })
+    });
+    toast('✅ ' + r.message, 'success');
+    document.getElementById('scheduleResult').innerHTML = '<div style="color:#10b981;font-size:11px;padding:6px;background:rgba(16,185,129,0.1);border-radius:4px">✅ 保存完了</div>';
+  } catch(e) { toast('❌ スケジュール保存失敗: ' + e.message, 'error'); }
+}
+window.saveAdSchedule = saveAdSchedule;
+
+async function clearAdSchedule(googleCampaignId) {
+  if (!confirm('広告配信スケジュールをクリアして24時間配信に戻しますか？')) return;
+  try {
+    const r = await api(`/campaigns/${googleCampaignId}/ad-schedule`, {
+      method: 'POST', body: JSON.stringify({ clinic_id: parseInt(currentClinicId), schedules: [] })
+    });
+    toast('✅ ' + r.message, 'success');
+    loadAdSchedule(googleCampaignId);
+  } catch(e) { toast('❌ クリア失敗: ' + e.message, 'error'); }
+}
+window.clearAdSchedule = clearAdSchedule;
+
+// ── コンバージョントラッキング確認バナー ──
+async function checkConversionTracking() {
+  try {
+    const data = await api(`/conversion-tracking/status?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
+    const banner = document.getElementById('cvTrackingBanner');
+    if (!banner) return;
+    if (!data.has_conversion_actions) {
+      banner.innerHTML = `
+        <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:8px;padding:12px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:18px">⚠️</span>
+            <span style="font-weight:bold;font-size:13px;color:#92400e">コンバージョン設定が必要です</span>
+          </div>
+          <p style="font-size:11px;color:#78350f;line-height:1.5;margin:0 0 8px 0">
+            Google広告アカウントに「予約完了」等のコンバージョンアクションが設定されていません。<br>
+            これがないと入札戦略（コンバージョン最大化）が正常に機能せず、広告費が最適化されません。
+          </p>
+          <a href="https://ads.google.com/aw/conversions/new" target="_blank" 
+            style="display:inline-block;background:#92400e;color:#fff;font-size:11px;padding:6px 12px;border-radius:4px;text-decoration:none;font-weight:bold">
+            🔧 Google広告でコンバージョンを設定 ↗
+          </a>
+        </div>`;
+    } else {
+      banner.innerHTML = `
+        <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px">✅</span>
+          <span style="font-size:11px;color:#10b981">CV計測設定済み（${data.conversion_actions.length}件のアクション）</span>
+        </div>`;
+    }
+  } catch(e) {
+    console.log('[CVCheck] エラー:', e.message);
+  }
+}
+window.checkConversionTracking = checkConversionTracking;
 
 async function refreshCampDrawerStatus(googleCampaignId) {
   try {
