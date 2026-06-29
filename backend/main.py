@@ -906,16 +906,24 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             rows.extend(batch.get("results", []))
         return rows
 
-    # ① キャンペーン予算
+    # ① キャンペーン予算 + キャンペーンタイプ
     budget_yen = 0
+    campaign_type = "SEARCH"
     try:
         camp_rows = gads_query(f"""
-            SELECT campaign_budget.amount_micros
+            SELECT campaign_budget.amount_micros, campaign.advertising_channel_type
             FROM campaign
             WHERE campaign.id = {g_id}
         """)
         if camp_rows:
             budget_yen = int(camp_rows[0].get("campaignBudget", {}).get("amountMicros", 0)) // 1_000_000
+            ch_type = camp_rows[0].get("campaign", {}).get("advertisingChannelType", "SEARCH")
+            if ch_type == "DEMAND_GEN":
+                campaign_type = "DEMAND_GEN"
+            elif ch_type == "VIDEO":
+                campaign_type = "VIDEO"
+            elif ch_type == "DISPLAY":
+                campaign_type = "DISPLAY"
     except Exception:
         pass
 
@@ -974,12 +982,14 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     except Exception:
         pass
 
-    # ④ 広告文（RSA）と審査状況
+    # ④ 広告文（RSA + DemandGen）と審査状況
     ads = []
+    demand_gen_ad = None  # YouTube/DemandGen広告の編集用データ
     ad_strength_global = "UNKNOWN"
     ad_approval_global = "UNKNOWN"
     ad_policy_topics_global = []
     try:
+        # RSA広告の取得
         ad_rows = gads_query(f"""
             SELECT ad_group_ad.ad.responsive_search_ad.headlines,
                    ad_group_ad.ad.responsive_search_ad.descriptions,
@@ -1008,7 +1018,6 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             for entry in p_summary.get("policyTopicEntries", []):
                 topics.append(entry.get("topic", ""))
 
-            # 代表値をセット
             ad_strength_global = strength
             ad_approval_global = approval
             ad_policy_topics_global = topics
@@ -1025,6 +1034,65 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                 })
     except Exception:
         pass
+
+    # ④-B DemandGen動画広告の取得（YouTube広告編集用）
+    if campaign_type == "DEMAND_GEN":
+        try:
+            dg_rows = gads_query(f"""
+                SELECT ad_group_ad.resource_name,
+                       ad_group_ad.ad.id,
+                       ad_group_ad.ad_group,
+                       ad_group_ad.ad.final_urls,
+                       ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
+                       ad_group_ad.ad.demand_gen_video_responsive_ad.long_headlines,
+                       ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
+                       ad_group_ad.ad.demand_gen_video_responsive_ad.videos,
+                       ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
+                       ad_group_ad.status,
+                       ad_group_ad.policy_summary.approval_status,
+                       ad_group_ad.policy_summary.policy_topic_entries
+                FROM ad_group_ad
+                WHERE campaign.id = {g_id}
+                AND ad_group_ad.status != REMOVED
+                LIMIT 1
+            """)
+            if dg_rows:
+                dg_row = dg_rows[0]
+                dg_aga = dg_row.get("adGroupAd", {})
+                dg_ad = dg_aga.get("ad", {})
+                dg_vid = dg_ad.get("demandGenVideoResponsiveAd", {})
+                
+                dg_headlines = [h.get("text", "") for h in dg_vid.get("headlines", []) if h.get("text")]
+                dg_long_headlines = [h.get("text", "") for h in dg_vid.get("longHeadlines", []) if h.get("text")]
+                dg_descriptions = [d.get("text", "") for d in dg_vid.get("descriptions", []) if d.get("text")]
+                dg_business_name = dg_vid.get("businessName", "")
+                dg_final_urls = dg_ad.get("finalUrls", [])
+                dg_videos = dg_vid.get("videos", [])
+                
+                # 審査状況も取得
+                dg_p = dg_aga.get("policySummary", {})
+                dg_approval = dg_p.get("approvalStatus", "UNKNOWN")
+                dg_topics = [e.get("topic", "") for e in dg_p.get("policyTopicEntries", [])]
+                ad_strength_global = dg_vid.get("adStrength", ad_strength_global)
+                ad_approval_global = dg_approval
+                ad_policy_topics_global = dg_topics
+                
+                demand_gen_ad = {
+                    "resource_name": dg_aga.get("resourceName", ""),
+                    "ad_id": dg_ad.get("id", ""),
+                    "ad_group": dg_aga.get("adGroup", ""),
+                    "headlines": dg_headlines,
+                    "long_headlines": dg_long_headlines,
+                    "descriptions": dg_descriptions,
+                    "business_name": dg_business_name,
+                    "final_urls": dg_final_urls,
+                    "videos": dg_videos,
+                    "status": dg_aga.get("status", ""),
+                    "approval_status": dg_approval,
+                    "policy_topics": dg_topics,
+                }
+        except Exception as e:
+            print(f"[DetailAPI] DemandGen広告取得エラー: {e}")
 
     # ⑤ キャンペーンアセットのステータス
     assets_status = []
@@ -1073,8 +1141,9 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     except Exception as e:
         print(f"[DetailAPI] アセットステータス取得中の例外: {e}")
 
-    return {
+    result = {
         "google_campaign_id": g_id,
+        "campaign_type": campaign_type,
         "budget_yen": budget_yen,
         "keywords": keywords,
         "location": location,
@@ -1087,6 +1156,9 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
         },
         "mock": False,
     }
+    if demand_gen_ad:
+        result["demand_gen_ad"] = demand_gen_ad
+    return result
 
 
 # ---- API: 月間予算ターゲット設定（具体パスを先に定義）----
@@ -6888,6 +6960,264 @@ async def smart_keywords_for_campaign(req: SmartKeywordReq):
                 detail="Gemini APIキーの利用上限（無料枠の制限）に達しました。Google AI Studioの管理画面で課金設定（Pay-as-you-go）を有効にするか、別の有効なAPIキーを設定してください。"
             )
         raise HTTPException(500, f"AI生成エラー: {err_msg}")
+
+
+# ── YouTube / Demand Gen 広告 詳細取得・更新 ──────────────────────────────
+
+class YouTubeAdUpdateReq(BaseModel):
+    clinic_id: int = 1
+    headlines: list[str]
+    long_headlines: list[str]
+    descriptions: list[str]
+    business_name: str
+    final_url: str
+
+
+def _gaql_search(client, query: str, token: str) -> list:
+    """Google Ads REST GAQL検索を実行し結果行を返す"""
+    import requests as rq
+    CID = client.customer_id
+    url = f"https://googleads.googleapis.com/v23/customers/{CID}/googleAds:searchStream"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "developer-token": client._developer_token,
+        "login-customer-id": client._login_customer_id,
+        "Content-Type": "application/json",
+    }
+    resp = rq.post(url, headers=headers, json={"query": query})
+    if resp.status_code != 200:
+        return []
+    rows = []
+    for batch in resp.json():
+        rows.extend(batch.get("results", []))
+    return rows
+
+
+def _rest_mutate(client, endpoint: str, operations: list, token: str) -> dict:
+    """Google Ads REST API v23 mutate呼び出し"""
+    import requests as rq
+    CID = client.customer_id
+    url = f"https://googleads.googleapis.com/v23/customers/{CID}/{endpoint}:mutate"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "developer-token": client._developer_token,
+        "login-customer-id": client._login_customer_id,
+        "Content-Type": "application/json",
+    }
+    resp = rq.post(url, headers=headers, json={"operations": operations})
+    if resp.status_code != 200:
+        raise Exception(f"REST APIエラー [{endpoint}]: {resp.text[:500]}")
+    return resp.json()
+
+
+_YT_AD_GAQL = """
+    SELECT ad_group_ad.resource_name,
+           ad_group_ad.ad.id,
+           ad_group_ad.ad_group,
+           ad_group_ad.ad.final_urls,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.long_headlines,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.videos,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
+           ad_group_ad.ad.demand_gen_video_responsive_ad.call_to_action
+    FROM ad_group_ad
+    WHERE campaign.id = {campaign_id}
+      AND ad_group_ad.ad.type = 'DEMAND_GEN_VIDEO_RESPONSIVE_AD'
+    LIMIT 1
+"""
+
+
+@app.get("/api/campaigns/{campaign_id}/youtube-ad-details")
+async def get_youtube_ad_details(campaign_id: str, request: Request):
+    """YouTube広告（Demand Gen）の広告詳細を取得する"""
+    import traceback
+    clinic_id = int(request.query_params.get("clinic_id", "1"))
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        # ローカルDBからGoogle IDを解決
+        try:
+            campaign = _resolve_campaign(campaign_id, clinic_id)
+            g_id = campaign.get("google_campaign_id") or campaign_id
+        except Exception:
+            g_id = campaign_id
+
+        if client.mock_mode:
+            return {
+                "success": True,
+                "mock": True,
+                "headlines": ["モック見出し1", "モック見出し2"],
+                "long_headlines": ["モック長い見出し"],
+                "descriptions": ["モック説明文1"],
+                "business_name": "モック整体院",
+                "final_url": "https://example.com",
+                "youtube_video_id": "dQw4w9WgXcQ",
+            }
+
+        token = client._get_rest_access_token()
+        query = _YT_AD_GAQL.format(campaign_id=g_id)
+        rows = _gaql_search(client, query, token)
+
+        if not rows:
+            raise HTTPException(404, "この campaign に Demand Gen 動画広告が見つかりません")
+
+        ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
+        dg = ad_data.get("demandGenVideoResponsiveAd", {})
+
+        headlines = [h.get("text", "") for h in dg.get("headlines", [])]
+        long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", [])]
+        descriptions = [d.get("text", "") for d in dg.get("descriptions", [])]
+        business_name = dg.get("businessName", "")
+        final_urls = ad_data.get("finalUrls", [])
+        final_url = final_urls[0] if final_urls else ""
+
+        # 動画アセットからYouTube動画IDを抽出（asset resource nameのみ取得可能）
+        videos = dg.get("videos", [])
+        youtube_video_id = ""
+        if videos:
+            # videos[0].asset = "customers/xxx/assets/yyy" の形式
+            video_asset_rn = videos[0].get("asset", "")
+            if video_asset_rn:
+                # アセット詳細をGAQLで取得して youtube_video_id を得る
+                asset_query = f"""
+                    SELECT asset.youtube_video_asset.youtube_video_id
+                    FROM asset
+                    WHERE asset.resource_name = '{video_asset_rn}'
+                """
+                asset_rows = _gaql_search(client, asset_query, token)
+                if asset_rows:
+                    yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
+                    youtube_video_id = yt_asset.get("youtubeVideoId", "")
+
+        return {
+            "success": True,
+            "mock": False,
+            "headlines": headlines,
+            "long_headlines": long_headlines,
+            "descriptions": descriptions,
+            "business_name": business_name,
+            "final_url": final_url,
+            "youtube_video_id": youtube_video_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[youtube-ad-details] エラー: {tb}")
+        raise HTTPException(500, f"YouTube広告詳細取得エラー: {str(e)}")
+
+
+@app.put("/api/campaigns/{campaign_id}/youtube-ad-update")
+async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
+    """YouTube広告（Demand Gen）の広告文を更新する（旧広告削除→新広告作成）"""
+    import traceback
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        # ローカルDBからGoogle IDを解決
+        try:
+            campaign = _resolve_campaign(campaign_id, req.clinic_id)
+            g_id = campaign.get("google_campaign_id") or campaign_id
+        except Exception:
+            g_id = campaign_id
+
+        if client.mock_mode:
+            return {
+                "success": True,
+                "mock": True,
+                "message": "[モック] YouTube広告を更新しました",
+                "headlines": req.headlines,
+                "long_headlines": req.long_headlines,
+                "descriptions": req.descriptions,
+                "business_name": req.business_name,
+                "final_url": req.final_url,
+            }
+
+        token = client._get_rest_access_token()
+        query = _YT_AD_GAQL.format(campaign_id=g_id)
+        rows = _gaql_search(client, query, token)
+
+        if not rows:
+            raise HTTPException(404, "この campaign に Demand Gen 動画広告が見つかりません")
+
+        row = rows[0]
+        ad_group_ad = row.get("adGroupAd", {})
+        old_resource_name = ad_group_ad.get("resourceName", "")
+        ad_group_rn = ad_group_ad.get("adGroup", "")
+        old_ad = ad_group_ad.get("ad", {})
+        old_dg = old_ad.get("demandGenVideoResponsiveAd", {})
+
+        # 既存の動画アセットを保持
+        videos = old_dg.get("videos", [])
+        if not videos:
+            raise HTTPException(400, "既存の広告に動画アセットが見つかりません")
+
+        # callToAction を保持（デフォルト: LEARN_MORE）
+        call_to_action = old_dg.get("callToAction", "LEARN_MORE")
+
+        # ① 旧広告を削除
+        _rest_mutate(client, "adGroupAds", [{"remove": old_resource_name}], token)
+        print(f"[youtube-ad-update] 旧広告削除完了: {old_resource_name}")
+
+        # ② 新広告を作成（同じ動画アセット、新しい広告文）
+        ad_headlines = [{"text": h[:40]} for h in req.headlines[:5]]
+        ad_long_headlines = [{"text": lh[:90]} for lh in req.long_headlines[:5]]
+        ad_descriptions = [{"text": d[:90]} for d in req.descriptions[:5]]
+        business_name = req.business_name[:25]
+
+        new_ad_payload = {
+            "adGroup": ad_group_rn,
+            "status": "ENABLED",
+            "ad": {
+                "finalUrls": [req.final_url],
+                "demandGenVideoResponsiveAd": {
+                    "headlines": ad_headlines,
+                    "longHeadlines": ad_long_headlines,
+                    "descriptions": ad_descriptions,
+                    "videos": videos,
+                    "businessName": business_name,
+                    "callToAction": call_to_action,
+                }
+            }
+        }
+
+        create_result = _rest_mutate(
+            client, "adGroupAds", [{"create": new_ad_payload}], token
+        )
+        print(f"[youtube-ad-update] 新広告作成完了: {create_result}")
+
+        new_resource_name = ""
+        results = create_result.get("results", [])
+        if results:
+            new_resource_name = results[0].get("resourceName", "")
+
+        # アラート登録
+        db.create_alert(
+            req.clinic_id,
+            f"YouTube広告を更新しました (campaign_id: {g_id})",
+            level="INFO"
+        )
+
+        return {
+            "success": True,
+            "mock": False,
+            "message": "YouTube広告を更新しました",
+            "new_resource_name": new_resource_name,
+            "headlines": req.headlines,
+            "long_headlines": req.long_headlines,
+            "descriptions": req.descriptions,
+            "business_name": req.business_name,
+            "final_url": req.final_url,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[youtube-ad-update] エラー: {tb}")
+        raise HTTPException(500, f"YouTube広告更新エラー: {str(e)}")
 
 
 @app.get("/{path:path}", include_in_schema=False)

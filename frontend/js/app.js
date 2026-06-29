@@ -1706,11 +1706,122 @@ function renderCampDrawer(d) {
       </div>
     </div>`;
 
-  body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
-  if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml) {
+  // ⑥ YouTube広告（Demand Gen）編集セクション
+  let ytEditHtml = '';
+  if (d.campaign_type === 'DEMAND_GEN' && d.demand_gen_ad) {
+    const dg = d.demand_gen_ad;
+    const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
+      let html = '';
+      for (let i = 0; i < maxItems; i++) {
+        const val = (items && items[i]) || '';
+        html += `<textarea id="${id}_${i}" maxlength="${maxLen}" placeholder="${placeholder}${i+1}" 
+          style="width:100%;height:36px;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:4px;resize:vertical">${val}</textarea>`;
+      }
+      return html;
+    };
+
+    ytEditHtml = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">🎬 YouTube広告コンテンツ編集</div>
+      
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
+        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(dg.business_name || '').replace(/"/g, '&quot;')}"
+          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🔗 ランディングページURL</label>
+        <input type="url" id="ytEditFinalUrl" value="${(dg.final_urls && dg.final_urls[0] || '').replace(/"/g, '&quot;')}"
+          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+          placeholder="https://example.com/booking">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
+        ${makeTextareas(dg.headlines, 'ytEditHeadline', '見出し', 40, 5)}
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 長い見出し（最大5件・各90文字）</label>
+        ${makeTextareas(dg.long_headlines, 'ytEditLongHeadline', '長い見出し', 90, 5)}
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 説明文（最大5件・各90文字）</label>
+        ${makeTextareas(dg.descriptions, 'ytEditDesc', '説明文', 90, 5)}
+      </div>
+
+      <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:4px" onclick="saveYouTubeAdChanges('${d.google_campaign_id}')">
+        💾 YouTube広告を更新する
+      </button>
+      <div id="ytEditResult" style="margin-top:8px"></div>
+    </div>`;
+  }
+
+  // Demand Genの場合はキーワード・RSA広告文セクションを非表示にし、YouTube編集を表示
+  if (d.campaign_type === 'DEMAND_GEN') {
+    body.innerHTML = policyHtml + budgetHtml + ytEditHtml + aiActionsHtml;
+  } else {
+    body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + assetsHtml + adsHtml + aiActionsHtml;
+  }
+  if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml && !ytEditHtml) {
     body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 }
+
+async function saveYouTubeAdChanges(googleCampaignId) {
+  const btn = document.getElementById('btnSaveYtAd');
+  const resultDiv = document.getElementById('ytEditResult');
+  btn.disabled = true;
+  btn.textContent = '⏳ 更新中...';
+  resultDiv.innerHTML = '';
+
+  // フォームから値を収集
+  const collectValues = (prefix, count) => {
+    const vals = [];
+    for (let i = 0; i < count; i++) {
+      const el = document.getElementById(`${prefix}_${i}`);
+      if (el && el.value.trim()) vals.push(el.value.trim());
+    }
+    return vals;
+  };
+
+  const headlines = collectValues('ytEditHeadline', 5);
+  const longHeadlines = collectValues('ytEditLongHeadline', 5);
+  const descriptions = collectValues('ytEditDesc', 5);
+  const businessName = document.getElementById('ytEditBusinessName')?.value?.trim() || '';
+  const finalUrl = document.getElementById('ytEditFinalUrl')?.value?.trim() || '';
+
+  if (!headlines.length) { toast('見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+  if (!longHeadlines.length) { toast('長い見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+  if (!descriptions.length) { toast('説明文を最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+  if (!businessName) { toast('ビジネス名を入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+  if (!finalUrl) { toast('ランディングページURLを入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+
+  try {
+    const result = await api(`/campaigns/${googleCampaignId}/youtube-ad-update`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        clinic_id: parseInt(currentClinicId),
+        headlines,
+        long_headlines: longHeadlines,
+        descriptions,
+        business_name: businessName,
+        final_url: finalUrl,
+      }),
+    });
+    toast('✅ YouTube広告を更新しました！', 'success');
+    resultDiv.innerHTML = '<div style="color:#10b981;font-size:12px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px">✅ 更新完了 — Googleの再審査が行われます（通常数時間〜1日）</div>';
+    btn.textContent = '✅ 更新完了';
+  } catch(e) {
+    toast('❌ YouTube広告の更新に失敗: ' + e.message, 'error');
+    resultDiv.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px">❌ エラー: ${e.message}</div>`;
+    btn.disabled = false;
+    btn.textContent = '💾 YouTube広告を更新する';
+  }
+}
+window.saveYouTubeAdChanges = saveYouTubeAdChanges;
 
 async function refreshCampDrawerStatus(googleCampaignId) {
   try {
