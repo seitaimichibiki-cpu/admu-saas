@@ -7058,10 +7058,55 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
 
         token = client._get_rest_access_token()
         query = _YT_AD_GAQL.format(campaign_id=g_id)
+        print(f"[youtube-ad-details] GAQL query campaign_id={campaign_id} -> g_id={g_id}")
         rows = _gaql_search(client, query, token)
+        print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
 
         if not rows:
-            raise HTTPException(404, "この campaign に Demand Gen 動画広告が見つかりません")
+            # GAQLが空の場合、ad.type フィルター無しで再試行
+            fallback_query = f"""
+                SELECT ad_group_ad.resource_name,
+                       ad_group_ad.ad.id,
+                       ad_group_ad.ad_group,
+                       ad_group_ad.ad.final_urls,
+                       ad_group_ad.status
+                FROM ad_group_ad
+                WHERE campaign.id = {g_id}
+                AND ad_group_ad.status != REMOVED
+                LIMIT 5
+            """
+            fallback_rows = _gaql_search(client, fallback_query, token)
+            print(f"[youtube-ad-details] Fallback query returned {len(fallback_rows)} rows")
+            for fr in fallback_rows:
+                print(f"[youtube-ad-details] Fallback row: {fr}")
+            
+            if not fallback_rows:
+                # 本当に広告が無い場合は空フォームを返す（新規入力可能）
+                return {
+                    "success": True,
+                    "mock": False,
+                    "headlines": [],
+                    "long_headlines": [],
+                    "descriptions": [],
+                    "business_name": "",
+                    "final_url": "",
+                    "youtube_video_id": "",
+                    "note": "この campaign に広告がまだ作成されていません。新しい内容を入力して保存できます。",
+                }
+            # fallbackで見つかった場合、demandGen固有フィールドは空だが基本情報を返す
+            fb_ad = fallback_rows[0].get("adGroupAd", {}).get("ad", {})
+            fb_urls = fb_ad.get("finalUrls", [])
+            return {
+                "success": True,
+                "mock": False,
+                "headlines": [],
+                "long_headlines": [],
+                "descriptions": [],
+                "business_name": "",
+                "final_url": fb_urls[0] if fb_urls else "",
+                "youtube_video_id": "",
+                "note": "広告は存在しますが、詳細フィールドの取得に失敗しました。新しい内容を入力して更新できます。",
+            }
 
         ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
         dg = ad_data.get("demandGenVideoResponsiveAd", {})
