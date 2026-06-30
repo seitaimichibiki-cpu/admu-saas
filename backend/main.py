@@ -818,7 +818,7 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
 
 
 
-@app.get("/api/debug-db")
+@app.get("/api/auth/debug-db")
 def debug_db():
     with db.get_conn() as conn:
         try:
