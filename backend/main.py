@@ -7087,7 +7087,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             }
 
         ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
-        dg = ad_data.get("demandGenVideoResponsiveAd", {})
+        dg = ad_data.get("demandGenVideoResponsiveAd") or {}
 
         headlines = [h.get("text", "") for h in dg.get("headlines", [])]
         long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", [])]
@@ -7134,8 +7134,40 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         raise
     except Exception as e:
         tb = traceback.format_exc()
-        print(f"[youtube-ad-details] エラー: {tb}")
-        raise HTTPException(500, f"YouTube広告詳細取得エラー: {str(e)}")
+        print(f"[youtube-ad-details] エラー (超安全フォールバックに入ります): {tb}")
+        try:
+            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+            if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
+                print(f"[youtube-ad-details] 例外フォールバック — DBから優先ロード完了: {db_content}")
+                return {
+                    "success": True,
+                    "mock": False,
+                    "headlines":      db_content.get("headlines", []),
+                    "long_headlines": db_content.get("long_headlines", []),
+                    "descriptions":   db_content.get("descriptions", []),
+                    "business_name":  db_content.get("business_name", ""),
+                    "final_url":      db_content.get("final_url", ""),
+                    "youtube_video_id": db_content.get("youtube_video_id", ""),
+                    "youtube_video_url": db_content.get("youtube_video_url", ""),
+                    "logo_image_url":   db_content.get("logo_image_url", ""),
+                    "note": f"Google広告API連携中のエラーにより、一時的に保存されているデータをロードしました。({e})",
+                }
+        except Exception as e_inner:
+            print(f"[youtube-ad-details] 例外フォールバック中のDB取得失敗: {e_inner}")
+            
+        return {
+            "success": True,
+            "mock": False,
+            "headlines": [],
+            "long_headlines": [],
+            "descriptions": [],
+            "business_name": "",
+            "final_url": "",
+            "youtube_video_id": "",
+            "youtube_video_url": "",
+            "logo_image_url": "",
+            "note": f"一時的な接続エラーです。新しい広告構成を入力できます。({e})",
+        }
 
 
 @app.put("/api/campaigns/{campaign_id}/youtube-ad-update")
