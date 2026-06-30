@@ -7211,12 +7211,30 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
                 WHERE campaign.id = {g_id} AND ad_group.status != REMOVED
                 LIMIT 1
             """, token)
+            print(f"[youtube-ad-update] ag_rows={ag_rows}")
             if ag_rows:
-                ad_group_rn = ag_rows[0].get("adGroup", {}).get("resourceName", "")
+                # GAQLレスポンスはcamelCase ("adGroup") で返る
+                ag_obj = ag_rows[0].get("adGroup") or ag_rows[0].get("ad_group") or {}
+                ad_group_rn = ag_obj.get("resourceName") or ag_obj.get("resource_name", "")
                 print(f"[youtube-ad-update] AdGroup from fallback GAQL: {ad_group_rn}")
 
+        # それでも見つからない場合はcampaign_idからリソース名を直接構築して試みる
         if not ad_group_rn:
-            raise HTTPException(400, "広告グループが見つかりません。キャンペーンが正しく作成されているか確認してください。")
+            # 最後の手段: adGroupAdsからad_groupを取得
+            aga_rows = _gaql_search(client, f"""
+                SELECT ad_group_ad.ad_group, ad_group_ad.resource_name
+                FROM ad_group_ad
+                WHERE campaign.id = {g_id}
+                LIMIT 1
+            """, token)
+            print(f"[youtube-ad-update] aga_rows={aga_rows}")
+            if aga_rows:
+                aga_obj = aga_rows[0].get("adGroupAd") or aga_rows[0].get("ad_group_ad") or {}
+                ad_group_rn = aga_obj.get("adGroup") or aga_obj.get("ad_group", "")
+                print(f"[youtube-ad-update] AdGroup from adGroupAds GAQL: {ad_group_rn}")
+
+        if not ad_group_rn:
+            raise HTTPException(400, f"広告グループが見つかりません (campaign_id={g_id})")
 
         # ③ 動画アセットを解決（DBのyoutube_video_idからアセットを検索）
         if not video_asset_resource:
