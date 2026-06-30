@@ -381,6 +381,9 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_url TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_api_key TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_account_id TEXT DEFAULT NULL",
+        # YouTube広告編集内容のDB永続化（GAQL取得失敗時の復元用）
+        "ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''",
+        "ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''",
     ]
     for sql in migrations:
         try:
@@ -731,15 +734,24 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
     """DBに保存されたYouTube広告内容を返す"""
     import json
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
-            (clinic_id, str(google_campaign_id))
-        ).fetchone()
-        if row and row[0]:
-            try:
-                return json.loads(row[0])
-            except Exception:
-                pass
+        # カラムが存在しない場合は追加してから取得（PG/SQLite互換）
+        try:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass
+        try:
+            row = conn.execute(
+                "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
+                (clinic_id, str(google_campaign_id))
+            ).fetchone()
+            if row and row[0]:
+                try:
+                    return json.loads(row[0])
+                except Exception:
+                    pass
+        except Exception:
+            pass
     return {}
 
 # ---- キャンペーン永久ブラックリスト ----
