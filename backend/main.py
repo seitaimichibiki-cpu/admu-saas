@@ -818,6 +818,16 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
 
 
 
+@app.get("/api/debug-db")
+def debug_db():
+    with db.get_conn() as conn:
+        try:
+            rows = conn.execute("SELECT id, google_campaign_id, name, campaign_type, ad_content_json FROM campaigns ORDER BY id DESC LIMIT 10").fetchall()
+            return {"campaigns": [dict(r) for r in rows]}
+        except Exception as e:
+            return {"error": str(e)}
+
+
 # ---- API: キャンペーン詳細（キーワード・位置・広告文）----
 @app.get("/api/campaigns/{campaign_id}/detail")
 def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
