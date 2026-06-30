@@ -397,6 +397,44 @@ def init_db():
                 conn.execute("ROLLBACK TO SAVEPOINT migration_sp")
     conn.commit()
 
+    # 同一 google_campaign_id の重複した古いレコードを削除するクリーンアップ
+    try:
+        if USE_PG:
+            conn.execute("SAVEPOINT dup_cleanup_sp")
+            conn.execute("""
+                DELETE FROM campaigns 
+                WHERE google_campaign_id IS NOT NULL 
+                  AND google_campaign_id != '' 
+                  AND id NOT IN (
+                    SELECT DISTINCT ON (clinic_id, google_campaign_id) id 
+                    FROM campaigns 
+                    WHERE google_campaign_id IS NOT NULL AND google_campaign_id != ''
+                    ORDER BY clinic_id, google_campaign_id, COALESCE(ad_content_json, '') DESC, id DESC
+                  )
+            """)
+            conn.execute("RELEASE SAVEPOINT dup_cleanup_sp")
+        else:
+            # SQLite用
+            conn.execute("""
+                DELETE FROM campaigns 
+                WHERE google_campaign_id IS NOT NULL 
+                  AND google_campaign_id != '' 
+                  AND id NOT IN (
+                    SELECT MAX(id) 
+                    FROM campaigns 
+                    WHERE google_campaign_id IS NOT NULL AND google_campaign_id != ''
+                    GROUP BY clinic_id, google_campaign_id
+                  )
+            """)
+    except Exception as e:
+        print(f"[DB] 重複キャンペーンクリーンアップエラー: {e}")
+        if USE_PG:
+            try:
+                conn.execute("ROLLBACK TO SAVEPOINT dup_cleanup_sp")
+            except Exception:
+                pass
+    conn.commit()
+
     # 初期データが存在しなければ作成（ID:1となる）
     has_clinics = conn.execute("SELECT id FROM clinics LIMIT 1").fetchone()
     if not has_clinics:
@@ -680,15 +718,37 @@ def get_campaign(campaign_id: int):
 
 def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
     with get_conn() as conn:
-        # NOTE: youtube_video_id, ad_content_jsonカラムはinit_db()のマイグレーションで保証済み
-        if data.get("id"):
+        campaign_id = data.get("id")
+        g_id = data.get("google_campaign_id")
+        
+        # idが指定されていないが、google_campaign_idが指定されていれば重複行を探す
+        if not campaign_id and g_id:
+            row = conn.execute(
+                "SELECT id FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
+                (clinic_id, str(g_id))
+            ).fetchone()
+            if row:
+                campaign_id = row["id"] if isinstance(row, dict) else row[0]
+
+        if campaign_id:
+            # 既存の値を消さないように、現在の行をロードして補完する
+            existing = conn.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+            ext = dict(existing) if existing else {}
+            
+            name = data.get("name") or ext.get("name") or ""
+            status = data.get("status") or ext.get("status") or "ENABLED"
+            budget_micros = data.get("budget_micros") if "budget_micros" in data else ext.get("budget_micros", 0)
+            target_region = data.get("target_region") if "target_region" in data else ext.get("target_region", "")
+            google_id = data.get("google_campaign_id") or ext.get("google_campaign_id") or ""
+            youtube_video_id = data.get("youtube_video_id") or ext.get("youtube_video_id") or ""
+            
             conn.execute("""
-                UPDATE campaigns SET name=?,status=?,budget_micros=?,target_region=?,updated_at=?
+                UPDATE campaigns SET name=?, status=?, budget_micros=?, target_region=?, google_campaign_id=?, youtube_video_id=?, updated_at=?
                 WHERE id=? AND clinic_id=?
-            """, (data["name"], data.get("status","ENABLED"), data.get("budget_micros",0), data.get("target_region",""),
-                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data["id"], clinic_id))
+            """, (name, status, budget_micros, target_region, google_id, youtube_video_id,
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), campaign_id, clinic_id))
             conn.commit()
-            return data["id"]
+            return campaign_id
         else:
             cur = conn.execute("""
                 INSERT INTO campaigns (clinic_id,name,status,budget_micros,campaign_type,target_region,google_campaign_id,youtube_video_id)
@@ -720,7 +780,7 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
     with get_conn() as conn:
         try:
             row = conn.execute(
-                "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
+                "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=? ORDER BY COALESCE(ad_content_json, '') DESC LIMIT 1",
                 (clinic_id, str(google_campaign_id))
             ).fetchone()
             if row and row[0]:
