@@ -597,8 +597,7 @@ class AdsClient:
                         "longHeadlines": ad_long_headlines,
                         "descriptions": ad_descriptions,
                         "videos": [{"asset": video_asset_rn}],
-                        "businessName": business_name,
-                        "callToAction": "LEARN_MORE",
+                        "businessName": {"text": business_name},
                     }
                 }
             }

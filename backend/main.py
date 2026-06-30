@@ -7296,6 +7296,7 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
                 print(f"[youtube-ad-update] 旧広告削除エラー（続行）: {e}")
 
         # ⑤ 新広告を作成
+        # v23 API: businessName は {"text": "..."} 形式、callToAction フィールドは存在しない
         ad_headlines = [{"text": h[:40]} for h in req.headlines[:5]]
         ad_long_headlines = [{"text": lh[:90]} for lh in req.long_headlines[:5]]
         ad_descriptions = [{"text": d[:90]} for d in req.descriptions[:5]]
@@ -7311,8 +7312,7 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
                     "longHeadlines": ad_long_headlines,
                     "descriptions": ad_descriptions,
                     "videos": [{"asset": video_asset_resource}],
-                    "businessName": business_name,
-                    "callToAction": call_to_action,
+                    "businessName": {"text": business_name},
                 }
             }
         }
