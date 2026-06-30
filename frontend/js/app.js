@@ -1784,13 +1784,22 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
           placeholder="https://example.com/booking">
       </div>
 
-      ${dg.youtube_video_id ? `
       <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画</label>
-        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:8px;border:1px solid var(--border)">
-          <iframe src="https://www.youtube.com/embed/${dg.youtube_video_id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe>
-        </div>
-      </div>` : ''}
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画URL <span style="color:#f59e0b;font-weight:normal">（削除済みの場合は新しいURLを入力）</span></label>
+        <input type="url" id="ytEditVideoUrl"
+          value="${dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''}"
+          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+          placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
+        ${dg.youtube_video_id ? `<div style="margin-top:6px;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;border:1px solid var(--border)"><iframe src="https://www.youtube.com/embed/${dg.youtube_video_id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div>` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL <span style="color:#ef4444;font-weight:normal">（必須 — 院のロゴ画像の直リンクURL）</span></label>
+        <input type="url" id="ytEditLogoUrl"
+          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+          placeholder="https://example.com/logo.png">
+        <p style="font-size:10px;color:var(--text-3);margin:3px 0 0">Googleドライブ・Instagram等の画像URLをコピーして貼り付け</p>
+      </div>
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
@@ -1843,6 +1852,8 @@ async function saveYouTubeAdChanges(googleCampaignId) {
   const descriptions = collectValues('ytEditDesc', 5);
   const businessName = document.getElementById('ytEditBusinessName')?.value?.trim() || '';
   const finalUrl = document.getElementById('ytEditFinalUrl')?.value?.trim() || '';
+  const youtubeVideoUrl = document.getElementById('ytEditVideoUrl')?.value?.trim() || '';
+  const logoImageUrl = document.getElementById('ytEditLogoUrl')?.value?.trim() || '';
 
   if (!headlines.length) { toast('見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
   if (!longHeadlines.length) { toast('長い見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
@@ -1860,6 +1871,8 @@ async function saveYouTubeAdChanges(googleCampaignId) {
         descriptions,
         business_name: businessName,
         final_url: finalUrl,
+        youtube_video_url: youtubeVideoUrl,
+        logo_image_url: logoImageUrl,
       }),
     });
     toast('✅ YouTube広告を更新しました！', 'success');

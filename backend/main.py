@@ -6233,113 +6233,8 @@ async def negative_kw_ai_scan(clinic_id: int = 1):
     }
 
 
-# ============================================================
-# ★ INDUSTRY #1 FEATURE ④: 広告健全度スコアカード（10軸）
-# 整体院専用のGoogle広告品質を10カテゴリで診断
-# ============================================================
-@app.get("/api/scorecard")
-async def ad_scorecard(clinic_id: int = 1):
-    raise HTTPException(status_code=410, detail="This feature has been removed.")
-
-
-# ============================================================
-# LP お問い合わせフォーム受付API（認証不要・CORS許可）
-# ============================================================
-class LPContactReq(BaseModel):
-    name: str
-    clinic: str
-    area: str
-    email: str
-    ads_status: str = ""
-
-@app.post("/api/lp/contact")
-def lp_contact(req: LPContactReq):
-    """
-    LPのお問い合わせフォームから送信されるデータを受け取り、
-    1. DBに保存
-    2. 管理者へ通知メール
-    3. ユーザーへ自動返信メール
-    """
-    import re
-    from datetime import datetime as dt
-
-    # バリデーション
-    if not req.name or not req.clinic or not req.area or not req.email:
-        raise HTTPException(400, "お名前・院名・地域・メールアドレスは必須です。")
-    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', req.email):
-        raise HTTPException(400, "メールアドレスの形式が正しくありません。")
-
-    # DB保存（lp_contactsテーブル）
-    conn = db.get_conn()
-    if db.USE_PG:
-        pk_type = "SERIAL PRIMARY KEY"
-    else:
-        pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
-    conn.execute(f"""
-        CREATE TABLE IF NOT EXISTS lp_contacts (
-            id {pk_type},
-            name TEXT, clinic TEXT, area TEXT, email TEXT,
-            ads_status TEXT, created_at TEXT, status TEXT DEFAULT 'new'
-        )
-    """)
-    conn.execute(
-        "INSERT INTO lp_contacts (name, clinic, area, email, ads_status, created_at) VALUES (?,?,?,?,?,?)",
-        (req.name, req.clinic, req.area, req.email, req.ads_status, dt.now().strftime("%Y-%m-%d %H:%M:%S"))
-    )
-    conn.commit()
-    conn.close()
-
     # ── 管理者通知メール ──────────────────────────────────────
     import email_notifier
-    admin_html = f"""
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-      <h2 style="color:#c8a97a;margin-bottom:16px">📩 AdMu LP 新規お問い合わせ</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;width:100px">お名前</td><td style="padding:8px;border-bottom:1px solid #eee">{req.name}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">院名</td><td style="padding:8px;border-bottom:1px solid #eee">{req.clinic}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">地域</td><td style="padding:8px;border-bottom:1px solid #eee">{req.area}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">メール</td><td style="padding:8px;border-bottom:1px solid #eee">{req.email}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold">広告状況</td><td style="padding:8px">{req.ads_status or '未回答'}</td></tr>
-      </table>
-      <p style="font-size:12px;color:#888;margin-top:16px">受信時刻: {dt.now().strftime("%Y/%m/%d %H:%M")}</p>
-    </div>
-    """
-    _admin_notify_email = os.environ.get("ADMIN_NOTIFICATION_EMAIL", "info@admu.jp")
-    email_notifier._send(_admin_notify_email, f"【AdMu LP】新規お問い合わせ: {req.clinic}（{req.area}）", admin_html)
-
-    # ── ユーザー自動返信メール ────────────────────────────────
-    user_html = f"""
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#333">
-      <div style="text-align:center;margin-bottom:24px">
-        <h1 style="font-size:24px;font-weight:800;color:#000;margin:0">AdMu</h1>
-        <p style="font-size:12px;color:#888;margin:4px 0 0">AI広告自動運用システム</p>
-      </div>
-      <h2 style="font-size:18px;color:#333;margin-bottom:16px">{req.name} 様</h2>
-      <p style="line-height:1.8">
-        この度はAdMuにお問い合わせいただき、ありがとうございます。<br>
-        以下の内容で受け付けました。
-      </p>
-      <div style="background:#f8f8f8;border-radius:8px;padding:16px;margin:20px 0;font-size:14px">
-        <strong>院名:</strong> {req.clinic}<br>
-        <strong>地域:</strong> {req.area}<br>
-        <strong>広告状況:</strong> {req.ads_status or '未回答'}
-      </div>
-      <p style="line-height:1.8">
-        <strong>1営業日以内</strong>に担当者よりご連絡いたします。<br>
-        しつこい営業は一切行いません。空きがない場合も正直にお伝えします。
-      </p>
-      <hr style="border:none;border-top:1px solid #eee;margin:32px 0">
-      <p style="font-size:11px;color:#999;text-align:center">
-        本メールはAdMu（整体院導）から自動送信されています。<br>
-        ご不明点がございましたら info@admu.jp までご連絡ください。
-      </p>
-    </div>
-    """
-    email_notifier._send(req.email, "【AdMu】お問い合わせを受け付けました", user_html)
-
-    return {"success": True, "message": "お問い合わせを受け付けました。"}
-
-
 # ---- LP 無料資料請求 ----
 class LPDownloadReq(BaseModel):
     name: str
@@ -6972,6 +6867,8 @@ class YouTubeAdUpdateReq(BaseModel):
     descriptions: list[str]
     business_name: str
     final_url: str
+    youtube_video_url: str = ""   # 動画URLが削除された場合に新URLを指定
+    logo_image_url: str = ""      # ロゴ画像URL（必須フィールド）
 
 
 def _gaql_search(client, query: str, token: str) -> list:
@@ -7290,7 +7187,43 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         if not video_asset_resource:
             raise HTTPException(400, "動画アセットが作成できません。キャンペーン設定画面でYouTube動画URLを確認してください。")
 
-        # ④ 旧広告を削除（存在する場合のみ）
+        # ④ 新しいYouTube動画URLが指定された場合、動画アセットを上書き
+        if req.youtube_video_url:
+            new_vid_id = _extract_youtube_video_id(req.youtube_video_url)
+            if new_vid_id:
+                import random as _r3
+                print(f"[youtube-ad-update] 新動画アセット作成: {new_vid_id}")
+                na = _rest_mutate(client, "assets", [{"create": {
+                    "name": f"YT_{g_id}_{_r3.randint(1000,9999)}",
+                    "youtubeVideoAsset": {"youtubeVideoId": new_vid_id},
+                }}], token)
+                video_asset_resource = na["results"][0]["resourceName"]
+                print(f"[youtube-ad-update] 新動画アセット完了: {video_asset_resource}")
+
+        # ⑤ ロゴ画像アセットの取得/作成（logo_imagesは必須フィールド）
+        import random as _r5
+        logo_asset_resource = ""
+        if req.logo_image_url:
+            try:
+                import requests as _rql, base64 as _b64
+                ir = _rql.get(req.logo_image_url, timeout=10)
+                id_ = _b64.b64encode(ir.content).decode("utf-8")
+                lc = _rest_mutate(client, "assets", [{"create": {
+                    "name": f"Logo_{g_id}_{_r5.randint(1000,9999)}",
+                    "imageAsset": {"data": id_},
+                }}], token)
+                logo_asset_resource = lc["results"][0]["resourceName"]
+                print(f"[youtube-ad-update] ロゴアセット作成完了: {logo_asset_resource}")
+            except Exception as el:
+                print(f"[youtube-ad-update] ロゴアセット作成エラー: {el}")
+
+        if not logo_asset_resource:
+            logo_rows = _gaql_search(client, "SELECT asset.resource_name FROM asset WHERE asset.type = IMAGE LIMIT 5", token)
+            if logo_rows:
+                logo_asset_resource = logo_rows[0].get("asset", {}).get("resourceName", "")
+                print(f"[youtube-ad-update] 既存ロゴアセット使用: {logo_asset_resource}")
+
+        # ⑥ 旧広告を削除（存在する場合のみ）
         if old_resource_name:
             try:
                 _rest_mutate(client, "adGroupAds", [{"remove": old_resource_name}], token)
@@ -7298,42 +7231,41 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
             except Exception as e:
                 print(f"[youtube-ad-update] 旧広告削除エラー（続行）: {e}")
 
-        # ⑤ 新広告を作成
-        # v23 API: businessName は {"text": "..."} 形式、callToAction フィールドは存在しない
-        ad_headlines = [{"text": h[:40]} for h in req.headlines[:5]]
-        ad_long_headlines = [{"text": lh[:90]} for lh in req.long_headlines[:5]]
-        ad_descriptions = [{"text": d[:90]} for d in req.descriptions[:5]]
-        business_name = req.business_name[:25]
+        # ⑦ 新広告を作成（name必須・logo_images必須・businessName=AdTextAsset形式）
+        ad_hl = [{"text": h[:40]} for h in req.headlines[:5]]
+        ad_lhl = [{"text": lh[:90]} for lh in req.long_headlines[:5]]
+        ad_desc = [{"text": d[:90]} for d in req.descriptions[:5]]
+        bname = req.business_name[:25]
 
-        new_ad_payload = {
+        dg = {
+            "headlines": ad_hl,
+            "longHeadlines": ad_lhl,
+            "descriptions": ad_desc,
+            "videos": [{"asset": video_asset_resource}],
+            "businessName": {"text": bname},
+        }
+        if logo_asset_resource:
+            dg["logoImages"] = [{"asset": logo_asset_resource}]
+
+        payload = {
             "adGroup": ad_group_rn,
             "status": "ENABLED",
             "ad": {
+                "name": f"DemandGenAd_{g_id}_{_r5.randint(1000,9999)}",
                 "finalUrls": [req.final_url],
-                "demandGenVideoResponsiveAd": {
-                    "headlines": ad_headlines,
-                    "longHeadlines": ad_long_headlines,
-                    "descriptions": ad_descriptions,
-                    "videos": [{"asset": video_asset_resource}],
-                    "businessName": {"text": business_name},
-                }
+                "demandGenVideoResponsiveAd": dg,
             }
         }
 
-        create_result = _rest_mutate(client, "adGroupAds", [{"create": new_ad_payload}], token)
-        print(f"[youtube-ad-update] 新広告作成完了: {create_result}")
-
-        new_resource_name = ""
-        results = create_result.get("results", [])
-        if results:
-            new_resource_name = results[0].get("resourceName", "")
+        cr = _rest_mutate(client, "adGroupAds", [{"create": payload}], token)
+        print(f"[youtube-ad-update] 新広告作成完了: {cr}")
+        new_rn = cr.get("results", [{}])[0].get("resourceName", "")
 
         db.create_alert(req.clinic_id, f"YouTube広告を更新しました (campaign_id: {g_id})", level="INFO")
-
         return {
             "success": True, "mock": False,
             "message": "YouTube広告を更新しました",
-            "new_resource_name": new_resource_name,
+            "new_resource_name": new_rn,
             "headlines": req.headlines, "long_headlines": req.long_headlines,
             "descriptions": req.descriptions, "business_name": req.business_name,
             "final_url": req.final_url,
@@ -7341,8 +7273,7 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
     except HTTPException:
         raise
     except Exception as e:
-        tb = traceback.format_exc()
-        print(f"[youtube-ad-update] エラー: {tb}")
+        print(f"[youtube-ad-update] エラー: {traceback.format_exc()}")
         raise HTTPException(500, f"YouTube広告更新エラー: {str(e)}")
 
 
