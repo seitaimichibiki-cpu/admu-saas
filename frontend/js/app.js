@@ -1745,7 +1745,7 @@ function renderCampDrawer(d) {
   if (d.campaign_type === 'DEMAND_GEN') {
     body.innerHTML = policyHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
     // 別APIからYouTube広告データを非同期取得
-    loadYouTubeAdEditForm(d.google_campaign_id, name);
+    loadYouTubeAdEditForm(d.google_campaign_id, d.name);
   } else {
     body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
   }
@@ -1865,11 +1865,11 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         <div>CampaignID: ${googleCampaignId}</div>
         <div>CampaignName: ${campaignName || 'N/A'}</div>
         <div style="margin-top:4px"><strong>API Response (dg):</strong></div>
-        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(dg, null, 2)}</textarea>
+        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(dg, null, 2)}</pre>
         <div style="margin-top:4px"><strong>LocalStorage (saved):</strong></div>
-        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(saved, null, 2)}</textarea>
+        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(saved, null, 2)}</pre>
         <div style="margin-top:4px"><strong>Merged Data:</strong></div>
-        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(merged, null, 2)}</textarea>
+        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(merged, null, 2)}</pre>
       </div>
     `;
   } catch (e) {
@@ -1882,9 +1882,9 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         <div>CampaignName: ${campaignName || 'N/A'}</div>
         <div style="margin-top:4px;color:#ef4444;"><strong>Error Message:</strong> ${e.message}</div>
         <div style="margin-top:4px"><strong>Error Stack:</strong></div>
-        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#f43f5e;border:1px solid #f43f5e;border-radius:4px" readonly>${e.stack || ''}</textarea>
+        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#f43f5e;border:1px solid #f43f5e;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${e.stack || ''}</pre>
         <div style="margin-top:4px;color:#38bdf8;"><strong>LocalStorage (saved):</strong></div>
-        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(saved, null, 2)}</textarea>
+        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(saved, null, 2)}</pre>
       </div>
     `;
     if (hasSaved) {

@@ -409,7 +409,7 @@ def init_db():
                     SELECT DISTINCT ON (clinic_id, google_campaign_id) id 
                     FROM campaigns 
                     WHERE google_campaign_id IS NOT NULL AND google_campaign_id != ''
-                    ORDER BY clinic_id, google_campaign_id, COALESCE(ad_content_json, '') DESC, id DESC
+                    ORDER BY clinic_id, google_campaign_id, (CASE WHEN ad_content_json IS NOT NULL AND ad_content_json != '' THEN 1 ELSE 0 END) DESC, id DESC
                   )
             """)
             conn.execute("RELEASE SAVEPOINT dup_cleanup_sp")
@@ -779,11 +779,14 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
     import json
     with get_conn() as conn:
         try:
-            # 1. まず clinic_id と google_campaign_id で検索
-            row = conn.execute(
-                "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=? ORDER BY COALESCE(ad_content_json, '') DESC LIMIT 1",
-                (clinic_id, str(google_campaign_id))
-            ).fetchone()
+            # 1. まず clinic_id と google_campaign_id で検索（空でないものをid降順で優先）
+            row = conn.execute("""
+                SELECT ad_content_json FROM campaigns 
+                WHERE clinic_id=? AND google_campaign_id=? 
+                  AND ad_content_json IS NOT NULL 
+                  AND ad_content_json != ''
+                ORDER BY id DESC LIMIT 1
+            """, (clinic_id, str(google_campaign_id))).fetchone()
             if row and row[0]:
                 try:
                     return json.loads(row[0])
@@ -791,10 +794,13 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
                     pass
             
             # 2. clinic_id が食い違っている場合のために、clinic_id を無視して google_campaign_id のみで再検索（超強力フォールバック）
-            row = conn.execute(
-                "SELECT ad_content_json FROM campaigns WHERE google_campaign_id=? ORDER BY COALESCE(ad_content_json, '') DESC LIMIT 1",
-                (str(google_campaign_id),)
-            ).fetchone()
+            row = conn.execute("""
+                SELECT ad_content_json FROM campaigns 
+                WHERE google_campaign_id=? 
+                  AND ad_content_json IS NOT NULL 
+                  AND ad_content_json != ''
+                ORDER BY id DESC LIMIT 1
+            """, (str(google_campaign_id),)).fetchone()
             if row and row[0]:
                 try:
                     return json.loads(row[0])
