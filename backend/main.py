@@ -1952,6 +1952,18 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
         lat = acc.get("lat") or acc.get("target_lat")
         lon = acc.get("lon") or acc.get("target_lon")
 
+        # ターゲット地域名（地名）を解決
+        region_name = acc.get("target_region") or ""
+        if not region_name:
+            address = clinic.get("address") or ""
+            if address:
+                import re as _re_addr
+                _m = _re_addr.search(r'(?:都道府県|東京都|道|府|県)?([^\s都道府県]+?[市区町村])', address)
+                if _m:
+                    region_name = _m.group(1)
+        if not region_name:
+            region_name = "東京都"
+
         config = {
             "campaign_name": req.campaign_name,
             "daily_budget_yen": req.daily_budget_yen,
@@ -1965,6 +1977,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             "lat": float(lat) if lat else None,
             "lon": float(lon) if lon else None,
             "radius_km": 25,
+            "region_name": region_name,
         }
 
         result = client_ads.create_demand_gen_campaign_setup(config)
@@ -1979,8 +1992,20 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             "status": result.get("status", "PAUSED"),
             "campaign_type": "DEMAND_GEN",
             "budget_micros": req.daily_budget_yen * 1_000_000,
-            "target_region": acc.get("target_region", ""),
+            "target_region": region_name,
             "youtube_video_id": result.get("youtube_video_id", video_id),
+        })
+
+        # 広告構成テキストの初期状態もDBに保存
+        db.save_youtube_ad_content(req.clinic_id, result["campaign_id"], {
+            "headlines":        headlines,
+            "long_headlines":   long_headlines,
+            "descriptions":     descriptions,
+            "business_name":    clinic_name,
+            "final_url":        final_url,
+            "youtube_video_url": req.youtube_video_url,
+            "youtube_video_id": video_id,
+            "logo_image_url":   "", # 最初は空
         })
 
         # アラート登録

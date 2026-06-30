@@ -538,24 +538,6 @@ class AdsClient:
             campaign_id = campaign_rn.split("/")[-1]
             print(f"[AdsClient-DG] Demand Genキャンペーン作成: {campaign_rn} (id={campaign_id})")
 
-            # ③ 位置ターゲティング（半径指定）
-            if config.get("lat") and config.get("lon"):
-                try:
-                    self._rest_post("campaignCriteria", [{"create": {
-                        "campaign": campaign_rn,
-                        "proximity": {
-                            "geoPoint": {
-                                "longitudeInMicroDegrees": int(config["lon"] * 1_000_000),
-                                "latitudeInMicroDegrees": int(config["lat"] * 1_000_000),
-                            },
-                            "radius": config.get("radius_km", 20),
-                            "radiusUnits": "KILOMETERS",
-                        }
-                    }}], token)
-                    print(f"[AdsClient-DG] 位置ターゲティング設定完了")
-                except Exception as e:
-                    print(f"[AdsClient-DG] 位置ターゲティング設定エラー（続行）: {e}")
-
             # ④ 広告グループ作成（Demand Gen — typeは指定不要、キャンペーンから推定される）
             r4 = self._rest_post("adGroups", [{"create": {
                 "name": f"{unique_name}_AG",
@@ -565,6 +547,35 @@ class AdsClient:
             ag_rn = r4["results"][0]["resourceName"]
             ag_id = ag_rn.split("/")[-1]
             print(f"[AdsClient-DG] 広告グループ作成: {ag_id}")
+
+            # ③ 位置ターゲティング（Demand Gen は adGroupCriteria に geoTargetConstant で登録が必須。Proximityは非対応）
+            region_name = config.get("region_name")
+            if region_name:
+                try:
+                    geo_constants = self.suggest_geo_target_constants([region_name])
+                    if geo_constants:
+                        geo_constant_rn = geo_constants[0]
+                        agc_url = f"https://googleads.googleapis.com/v23/customers/{cid}/adGroupCriteria:mutate"
+                        agc_payload = {
+                            "operations": [
+                                {
+                                    "create": {
+                                        "adGroup": ag_rn,
+                                        "status": "ENABLED",
+                                        "location": {
+                                            "geoTargetConstant": geo_constant_rn
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                        agc_resp = _rq.post(agc_url, headers=_rest_headers, json=agc_payload)
+                        if agc_resp.status_code == 200:
+                            print(f"[AdsClient-DG] 広告グループに位置ターゲットを設定完了: {geo_constant_rn}")
+                        else:
+                            print(f"[AdsClient-DG] 広告グループ位置ターゲット設定失敗: {agc_resp.text[:300]}")
+                except Exception as e:
+                    print(f"[AdsClient-DG] 位置ターゲティング設定エラー（続行）: {e}")
 
             # ⑤ YouTube動画アセット作成
             yt_video_id = config.get("youtube_video_id", "")
