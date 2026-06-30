@@ -755,12 +755,32 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
             if row:
                 campaign = dict(row)
 
+    # 2-B. それでも見つからない場合は、clinic_idの制限を無視して google_campaign_id のみで検索する
+    if not campaign:
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM campaigns WHERE google_campaign_id=?",
+                (str(campaign_id),)
+            ).fetchone()
+            if row:
+                campaign = dict(row)
+
     # 3. それでも見つからない場合は name (キャンペーン名) で検索する (フォールバック)
     if not campaign:
         with db.get_conn() as conn:
             row = conn.execute(
                 "SELECT * FROM campaigns WHERE name=? AND clinic_id=?",
                 (str(campaign_id), clinic_id)
+            ).fetchone()
+            if row:
+                campaign = dict(row)
+
+    # 3-B. それでも見つからない場合は、clinic_idの制限を無視して name のみで検索する
+    if not campaign:
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM campaigns WHERE name=?",
+                (str(campaign_id),)
             ).fetchone()
             if row:
                 campaign = dict(row)
@@ -6984,6 +7004,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         try:
             campaign = _resolve_campaign(campaign_id, clinic_id)
             g_id = campaign.get("google_campaign_id") or campaign_id
+        except HTTPException:
+            raise
         except Exception:
             g_id = campaign_id
 

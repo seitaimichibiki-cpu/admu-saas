@@ -1745,7 +1745,7 @@ function renderCampDrawer(d) {
   if (d.campaign_type === 'DEMAND_GEN') {
     body.innerHTML = policyHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
     // 別APIからYouTube広告データを非同期取得
-    loadYouTubeAdEditForm(d.google_campaign_id);
+    loadYouTubeAdEditForm(d.google_campaign_id, campaignName);
   } else {
     body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
   }
@@ -1754,22 +1754,23 @@ function renderCampDrawer(d) {
   }
 }
 
-async function loadYouTubeAdEditForm(googleCampaignId) {
+async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
   const container = document.getElementById('ytEditFormContainer');
   if (!container) return;
-
-  // localStorageから保存済み内容を読み込む
-  const storageKey = `ytAd_${googleCampaignId}`;
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch(e) {}
 
   try {
     const dg = await api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`);
 
     // APIがDB保存内容を含めて返すので、dg を直接使用（localStorage はバックアップのみ）
     const storageKey = `ytAd_${googleCampaignId}`;
+    const storageKeyFallback = campaignName ? `ytAd_${campaignName}` : '';
     let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch(e) {}
+    try { 
+      saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      if ((!saved.headlines || !saved.headlines.length) && storageKeyFallback) {
+        saved = JSON.parse(localStorage.getItem(storageKeyFallback) || '{}');
+      }
+    } catch(e) {}
 
     const isEffectivelyEmpty = (arr) => {
       if (!arr || !arr.length) return true;
@@ -2685,6 +2686,22 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
   try {
     const res = await api('/campaigns/create-youtube', { method:'POST', body: JSON.stringify(body) });
     toast(res.message || 'YouTube広告キャンペーンを作成しました', 'success', 5000);
+
+    // 【最強のバックアップ】作成成功時、入力内容をlocalStorageに保存（コピペ復元の自動化）
+    const adDataObj = {
+      business_name: body.campaign_name || 'システム管理者',
+      final_url: body.final_url,
+      youtube_video_url: body.youtube_video_url,
+      youtube_video_id: body.youtube_video_url ? body.youtube_video_url.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1] || '' : '',
+      logo_image_url: body.logo_image_url,
+      headlines: body.headlines,
+      long_headlines: body.long_headlines,
+      descriptions: body.descriptions,
+    };
+    localStorage.setItem(`ytAd_${campaignName}`, JSON.stringify(adDataObj));
+    if (res.campaign_id) {
+      localStorage.setItem(`ytAd_${res.campaign_id}`, JSON.stringify(adDataObj));
+    }
     
     // 入力欄クリア
     ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl','ytRegion',
