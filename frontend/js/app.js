@@ -2626,16 +2626,24 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     document.getElementById('ytHeadline1')?.value,
     document.getElementById('ytHeadline2')?.value,
     document.getElementById('ytHeadline3')?.value,
+    document.getElementById('ytHeadline4')?.value,
+    document.getElementById('ytHeadline5')?.value,
   ].filter(v => v && v.trim());
 
   const longHeadlines = [
     document.getElementById('ytLongHeadline1')?.value,
     document.getElementById('ytLongHeadline2')?.value,
+    document.getElementById('ytLongHeadline3')?.value,
+    document.getElementById('ytLongHeadline4')?.value,
+    document.getElementById('ytLongHeadline5')?.value,
   ].filter(v => v && v.trim());
 
   const descriptions = [
     document.getElementById('ytDescription1')?.value,
     document.getElementById('ytDescription2')?.value,
+    document.getElementById('ytDescription3')?.value,
+    document.getElementById('ytDescription4')?.value,
+    document.getElementById('ytDescription5')?.value,
   ].filter(v => v && v.trim());
 
   const logoUrl = document.getElementById('ytLogoUrl')?.value?.trim() || '';
@@ -2666,8 +2674,10 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     toast(res.message || 'YouTube広告キャンペーンを作成しました', 'success', 5000);
     
     // 入力欄クリア
-    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl','ytHeadline1','ytHeadline2','ytHeadline3',
-     'ytLongHeadline1','ytLongHeadline2','ytDescription1','ytDescription2'].forEach(id => {
+    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl',
+     'ytHeadline1','ytHeadline2','ytHeadline3','ytHeadline4','ytHeadline5',
+     'ytLongHeadline1','ytLongHeadline2','ytLongHeadline3','ytLongHeadline4','ytLongHeadline5',
+     'ytDescription1','ytDescription2','ytDescription3','ytDescription4','ytDescription5'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
