@@ -1858,10 +1858,35 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         💾 YouTube広告を更新する
       </button>
       <div id="ytEditResult" style="margin-top:8px"></div>
+      
+      <!-- 🛠️ トラブルシューティング用デバッグパネル -->
+      <div style="margin-top:20px;padding:10px;background:#0f172a;border:1px solid #334155;border-radius:6px;font-family:monospace;font-size:10px;color:#38bdf8;text-align:left;">
+        <div style="font-weight:bold;margin-bottom:6px;color:#f43f5e;border-bottom:1px solid #1e293b;padding-bottom:4px">🛠️ デバッグログ (開発者用)</div>
+        <div>CampaignID: ${googleCampaignId}</div>
+        <div>CampaignName: ${campaignName || 'N/A'}</div>
+        <div style="margin-top:4px"><strong>API Response (dg):</strong></div>
+        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(dg, null, 2)}</textarea>
+        <div style="margin-top:4px"><strong>LocalStorage (saved):</strong></div>
+        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(saved, null, 2)}</textarea>
+        <div style="margin-top:4px"><strong>Merged Data:</strong></div>
+        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(merged, null, 2)}</textarea>
+      </div>
     `;
   } catch (e) {
-    // APIエラー時もlocalStorageの内容でフォームを表示
+    // APIエラー時も同様にデバッグダンプを表示
     const hasSaved = Object.keys(saved).length > 0;
+    const errPanel = `
+      <div style="margin-top:20px;padding:10px;background:#0f172a;border:1px solid #f43f5e;border-radius:6px;font-family:monospace;font-size:10px;color:#f43f5e;text-align:left;">
+        <div style="font-weight:bold;margin-bottom:6px;color:#f43f5e;border-bottom:1px solid #1e293b;padding-bottom:4px">⚠️ 取得例外ログ (開発者用)</div>
+        <div>CampaignID: ${googleCampaignId}</div>
+        <div>CampaignName: ${campaignName || 'N/A'}</div>
+        <div style="margin-top:4px;color:#ef4444;"><strong>Error Message:</strong> ${e.message}</div>
+        <div style="margin-top:4px"><strong>Error Stack:</strong></div>
+        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#f43f5e;border:1px solid #f43f5e;border-radius:4px" readonly>${e.stack || ''}</textarea>
+        <div style="margin-top:4px;color:#38bdf8;"><strong>LocalStorage (saved):</strong></div>
+        <textarea style="width:100%;height:60px;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px" readonly>${JSON.stringify(saved, null, 2)}</textarea>
+      </div>
+    `;
     if (hasSaved) {
       const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
         let html = '';
@@ -1883,12 +1908,15 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold;margin-top:8px">説明文</div>${makeTextareas(saved.descriptions,'ytEditDesc','説明文',90,5)}
         <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:8px" onclick="saveYouTubeAdChanges('${googleCampaignId}')">💾 YouTube広告を更新する</button>
         <div id="ytEditResult" style="margin-top:8px"></div>
+        ${errPanel}
       `;
     } else {
       container.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px">
         ❌ 広告コンテンツの取得に失敗しました: ${e.message}<br>
         <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;margin-top:8px" onclick="loadYouTubeAdEditForm('${googleCampaignId}')">🔄 再取得</button>
-      </div>`;
+      </div>
+      ${errPanel}
+      `;
     }
   }
 }
