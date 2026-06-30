@@ -1745,7 +1745,8 @@ function renderCampDrawer(d) {
   if (d.campaign_type === 'DEMAND_GEN') {
     body.innerHTML = policyHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
     // 別APIからYouTube広告データを非同期取得
-    loadYouTubeAdEditForm(d.google_campaign_id, d.name);
+    const drawerTitle = document.getElementById('campDrawerTitle')?.textContent || '';
+    loadYouTubeAdEditForm(d.google_campaign_id, d.name || drawerTitle);
   } else {
     body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
   }

@@ -871,6 +871,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     if client.mock_mode:
         return {
             "google_campaign_id": g_id,
+            "name": campaign.get("name", "") if campaign else "",
             "keywords": [
                 {"text": "モックキーワード 藤枝", "match_type": "BROAD", "status": "ENABLED"},
                 {"text": "整体院 モック", "match_type": "PHRASE", "status": "ENABLED"},
@@ -1178,6 +1179,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
 
     result = {
         "google_campaign_id": g_id,
+        "name": campaign.get("name", "") if campaign else "",
         "campaign_type": campaign_type,
         "budget_yen": budget_yen,
         "keywords": keywords,

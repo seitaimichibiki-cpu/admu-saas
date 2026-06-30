@@ -765,12 +765,21 @@ def save_youtube_ad_content(clinic_id: int, google_campaign_id: str, content: di
     """YouTube広告の編集内容（見出し・説明文等）をDBに保存（次回復元用）"""
     import json
     with get_conn() as conn:
-        conn.execute("""
+        cur = conn.execute("""
             UPDATE campaigns SET ad_content_json=?, updated_at=?
             WHERE clinic_id=? AND google_campaign_id=?
         """, (json.dumps(content, ensure_ascii=False),
               datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
               clinic_id, str(google_campaign_id)))
+        
+        # もし clinic_id の違いにより更新されなかった場合、google_campaign_id 単独で強制更新
+        if cur.rowcount == 0:
+            conn.execute("""
+                UPDATE campaigns SET ad_content_json=?, updated_at=?
+                WHERE google_campaign_id=?
+            """, (json.dumps(content, ensure_ascii=False),
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                  str(google_campaign_id)))
         conn.commit()
 
 
