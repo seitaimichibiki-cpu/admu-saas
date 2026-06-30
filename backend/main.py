@@ -7005,9 +7005,12 @@ def _rest_mutate(client, endpoint: str, operations: list, token: str) -> dict:
         "login-customer-id": client._login_customer_id,
         "Content-Type": "application/json",
     }
+    import json as _json
+    print(f"[REST] POST {endpoint} payload={_json.dumps(operations, ensure_ascii=False)[:800]}")
     resp = rq.post(url, headers=headers, json={"operations": operations})
     if resp.status_code != 200:
-        raise Exception(f"REST APIエラー [{endpoint}]: {resp.text[:500]}")
+        print(f"[REST] ERROR full response: {resp.text}")
+        raise Exception(f"REST APIエラー [{endpoint}]: {resp.text}")
     return resp.json()
 
 
