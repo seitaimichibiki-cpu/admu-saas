@@ -1771,15 +1771,20 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch(e) {}
 
+    const isEffectivelyEmpty = (arr) => {
+      if (!arr || !arr.length) return true;
+      return arr.every(item => !item || !item.trim());
+    };
+
     const merged = {
-      business_name:    dg.business_name    || saved.business_name    || '',
-      final_url:        dg.final_url        || saved.final_url        || '',
-      youtube_video_id: dg.youtube_video_id || saved.youtube_video_id || '',
+      business_name:    (dg.business_name && dg.business_name.trim()) ? dg.business_name : (saved.business_name || ''),
+      final_url:        (dg.final_url && dg.final_url.trim())         ? dg.final_url     : (saved.final_url     || ''),
+      youtube_video_id: (dg.youtube_video_id && dg.youtube_video_id.trim()) ? dg.youtube_video_id : (saved.youtube_video_id || ''),
       youtube_video_url: dg.youtube_video_url || saved.youtube_video_url || (dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''),
-      logo_image_url:   dg.logo_image_url   || saved.logo_image_url   || '',
-      headlines:      (dg.headlines     && dg.headlines.length)      ? dg.headlines      : (saved.headlines      || []),
-      long_headlines: (dg.long_headlines && dg.long_headlines.length) ? dg.long_headlines  : (saved.long_headlines  || []),
-      descriptions:   (dg.descriptions  && dg.descriptions.length)  ? dg.descriptions   : (saved.descriptions   || []),
+      logo_image_url:   (dg.logo_image_url && dg.logo_image_url.trim()) ? dg.logo_image_url : (saved.logo_image_url || ''),
+      headlines:        !isEffectivelyEmpty(dg.headlines)      ? dg.headlines      : (saved.headlines      || []),
+      long_headlines:   !isEffectivelyEmpty(dg.long_headlines) ? dg.long_headlines  : (saved.long_headlines  || []),
+      descriptions:     !isEffectivelyEmpty(dg.descriptions)   ? dg.descriptions   : (saved.descriptions   || []),
     };
     const hasContent = !!(merged.business_name || merged.headlines.length);
     console.log('[ytAdForm] dg=', dg, 'merged=', merged);

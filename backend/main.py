@@ -7068,15 +7068,25 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
 
         # DB保存データで補完（作成直後の遅延対策やフィールド取得失敗時）
         db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
-        if not headlines and db_content.get("headlines"):
+        
+        def is_effectively_empty(lst):
+            if not lst:
+                return True
+            return all(not str(item).strip() for item in lst)
+
+        if is_effectively_empty(headlines) and db_content.get("headlines"):
             headlines = db_content["headlines"]
-        if not long_headlines and db_content.get("long_headlines"):
+        if is_effectively_empty(long_headlines) and db_content.get("long_headlines"):
             long_headlines = db_content["long_headlines"]
-        if not descriptions and db_content.get("descriptions"):
+        if is_effectively_empty(descriptions) and db_content.get("descriptions"):
             descriptions = db_content["descriptions"]
-        if not business_name and db_content.get("business_name"):
+        
+        if (not business_name or not business_name.strip()) and db_content.get("business_name"):
             business_name = db_content["business_name"]
         
+        if (not final_url or not final_url.strip()) and db_content.get("final_url"):
+            final_url = db_content["final_url"]
+
         youtube_video_url = db_content.get("youtube_video_url", "")
         logo_image_url = db_content.get("logo_image_url", "")
 
