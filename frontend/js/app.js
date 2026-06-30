@@ -1757,8 +1757,27 @@ function renderCampDrawer(d) {
 async function loadYouTubeAdEditForm(googleCampaignId) {
   const container = document.getElementById('ytEditFormContainer');
   if (!container) return;
+
+  // localStorageから保存済み内容を読み込む
+  const storageKey = `ytAd_${googleCampaignId}`;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch(e) {}
+
   try {
     const dg = await api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`);
+
+    // APIが空を返した場合はlocalStorageの値を優先する
+    const merged = {
+      business_name: dg.business_name || saved.business_name || '',
+      final_url:     dg.final_url     || saved.final_url     || '',
+      youtube_video_id: dg.youtube_video_id || saved.youtube_video_id || '',
+      youtube_video_url: saved.youtube_video_url || ((merged.youtube_video_url || '').replace(/"/g, '&quot;')),
+      logo_image_url: saved.logo_image_url || '',
+      headlines:      (dg.headlines     && dg.headlines.length)      ? dg.headlines      : (saved.headlines      || []),
+      long_headlines: (dg.long_headlines && dg.long_headlines.length) ? dg.long_headlines  : (saved.long_headlines  || []),
+      descriptions:   (dg.descriptions  && dg.descriptions.length)  ? dg.descriptions   : (saved.descriptions   || []),
+    };
+    const hasSaved = Object.keys(saved).length > 0;
     
     const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
       let html = '';
@@ -1773,13 +1792,13 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
     container.innerHTML = `
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
-        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(dg.business_name || '').replace(/"/g, '&quot;')}"
+        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(merged.business_name || '').replace(/"/g, '&quot;')}"
           style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
       </div>
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🔗 ランディングページURL</label>
-        <input type="url" id="ytEditFinalUrl" value="${(dg.final_url || '').replace(/"/g, '&quot;')}"
+        <input type="url" id="ytEditFinalUrl" value="${(merged.final_url || '').replace(/"/g, '&quot;')}"
           style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
           placeholder="https://example.com/booking">
       </div>
@@ -1787,15 +1806,16 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画URL <span style="color:#f59e0b;font-weight:normal">（削除済みの場合は新しいURLを入力）</span></label>
         <input type="url" id="ytEditVideoUrl"
-          value="${dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''}"
+          value="${(merged.youtube_video_url || '').replace(/"/g, '&quot;')}"
           style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
           placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
-        ${dg.youtube_video_id ? `<div style="margin-top:6px;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;border:1px solid var(--border)"><iframe src="https://www.youtube.com/embed/${dg.youtube_video_id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div>` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
+        ${merged.youtube_video_id ? `<div style="margin-top:6px;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;border:1px solid var(--border)"><iframe src="https://www.youtube.com/embed/${merged.youtube_video_id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allowfullscreen></iframe></div>` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
       </div>
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL <span style="color:#ef4444;font-weight:normal">（必須 — 院のロゴ画像の直リンクURL）</span></label>
         <input type="url" id="ytEditLogoUrl"
+          value="${(merged.logo_image_url || '').replace(/"/g, '&quot;')}"
           style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
           placeholder="https://example.com/logo.png">
         <p style="font-size:10px;color:var(--text-3);margin:3px 0 0">Googleドライブ・Instagram等の画像URLをコピーして貼り付け</p>
@@ -1803,17 +1823,17 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
-        ${makeTextareas(dg.headlines, 'ytEditHeadline', '見出し', 40, 5)}
+        ${makeTextareas(merged.headlines, 'ytEditHeadline', '見出し', 40, 5)}
       </div>
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 長い見出し（最大5件・各90文字）</label>
-        ${makeTextareas(dg.long_headlines, 'ytEditLongHeadline', '長い見出し', 90, 5)}
+        ${makeTextareas(merged.long_headlines, 'ytEditLongHeadline', '長い見出し', 90, 5)}
       </div>
 
       <div style="margin-bottom:12px">
         <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 説明文（最大5件・各90文字）</label>
-        ${makeTextareas(dg.descriptions, 'ytEditDesc', '説明文', 90, 5)}
+        ${makeTextareas(merged.descriptions, 'ytEditDesc', '説明文', 90, 5)}
       </div>
 
       <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:4px" onclick="saveYouTubeAdChanges('${googleCampaignId}')">
@@ -1822,10 +1842,36 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
       <div id="ytEditResult" style="margin-top:8px"></div>
     `;
   } catch (e) {
-    container.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px">
-      ❌ 広告コンテンツの取得に失敗しました: ${e.message}<br>
-      <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;margin-top:8px" onclick="loadYouTubeAdEditForm('${googleCampaignId}')">🔄 再取得</button>
-    </div>`;
+    // APIエラー時もlocalStorageの内容でフォームを表示
+    const hasSaved = Object.keys(saved).length > 0;
+    if (hasSaved) {
+      const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
+        let html = '';
+        for (let i = 0; i < maxItems; i++) {
+          const val = (items && items[i]) || '';
+          html += `<textarea id="${id}_${i}" maxlength="${maxLen}" placeholder="${placeholder}${i+1}" 
+            style="width:100%;height:36px;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:4px;resize:vertical">${val}</textarea>`;
+        }
+        return html;
+      };
+      container.innerHTML = `
+        <div style="font-size:11px;color:#f59e0b;padding:6px 8px;background:rgba(245,158,11,0.1);border-radius:4px;margin-bottom:10px">⚠️ API取得失敗 — 前回の保存内容を表示中</div>
+        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(saved.business_name||'').replace(/"/g,'&quot;')}" placeholder="ビジネス名" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
+        <input type="url" id="ytEditFinalUrl" value="${(saved.final_url||'').replace(/"/g,'&quot;')}" placeholder="ランディングページURL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
+        <input type="url" id="ytEditVideoUrl" value="${(saved.youtube_video_url||'').replace(/"/g,'&quot;')}" placeholder="YouTube動画URL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
+        <input type="url" id="ytEditLogoUrl" value="${(saved.logo_image_url||'').replace(/"/g,'&quot;')}" placeholder="ロゴ画像URL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">見出し</div>${makeTextareas(saved.headlines,'ytEditHeadline','見出し',40,5)}
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold;margin-top:8px">長い見出し</div>${makeTextareas(saved.long_headlines,'ytEditLongHeadline','長い見出し',90,5)}
+        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold;margin-top:8px">説明文</div>${makeTextareas(saved.descriptions,'ytEditDesc','説明文',90,5)}
+        <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:8px" onclick="saveYouTubeAdChanges('${googleCampaignId}')">💾 YouTube広告を更新する</button>
+        <div id="ytEditResult" style="margin-top:8px"></div>
+      `;
+    } else {
+      container.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px">
+        ❌ 広告コンテンツの取得に失敗しました: ${e.message}<br>
+        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;margin-top:8px" onclick="loadYouTubeAdEditForm('${googleCampaignId}')">🔄 再取得</button>
+      </div>`;
+    }
   }
 }
 window.loadYouTubeAdEditForm = loadYouTubeAdEditForm;
@@ -1878,6 +1924,18 @@ async function saveYouTubeAdChanges(googleCampaignId) {
     toast('✅ YouTube広告を更新しました！', 'success');
     resultDiv.innerHTML = '<div style="color:#10b981;font-size:12px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px">✅ 更新完了 — Googleの再審査が行われます（通常数時間〜1日）</div>';
     btn.textContent = '✅ 更新完了';
+
+    // 入力内容をlocalStorageに保存（次回フォームを開いた時に復元）
+    localStorage.setItem(`ytAd_${googleCampaignId}`, JSON.stringify({
+      business_name: businessName,
+      final_url: finalUrl,
+      youtube_video_url: youtubeVideoUrl,
+      youtube_video_id: youtubeVideoUrl ? youtubeVideoUrl.match(/(?:v=|youtu\.be\/)([^&\n?#]+)/)?.[1] || '' : '',
+      logo_image_url: logoImageUrl,
+      headlines,
+      long_headlines: longHeadlines,
+      descriptions,
+    }));
   } catch(e) {
     toast('❌ YouTube広告の更新に失敗: ' + e.message, 'error');
     resultDiv.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px">❌ エラー: ${e.message}</div>`;
