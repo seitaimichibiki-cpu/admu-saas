@@ -7203,38 +7203,41 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
             if videos:
                 video_asset_resource = videos[0].get("asset", "")
 
-        # ② ad_group が不明の場合はGAQLで取得
+        # ② ad_groupをGAQLで検索（ad_group_adが空でも独立して検索）
         if not ad_group_rn:
-            ag_rows = _gaql_search(client, f"""
-                SELECT ad_group.resource_name, ad_group.id
-                FROM ad_group
-                WHERE campaign.id = {g_id} AND ad_group.status != REMOVED
-                LIMIT 1
-            """, token)
-            print(f"[youtube-ad-update] ag_rows={ag_rows}")
-            if ag_rows:
-                # GAQLレスポンスはcamelCase ("adGroup") で返る
-                ag_obj = ag_rows[0].get("adGroup") or ag_rows[0].get("ad_group") or {}
-                ad_group_rn = ag_obj.get("resourceName") or ag_obj.get("resource_name", "")
-                print(f"[youtube-ad-update] AdGroup from fallback GAQL: {ad_group_rn}")
+            for gaql in [
+                f"SELECT ad_group.resource_name FROM ad_group WHERE campaign.id = {g_id} AND ad_group.status != REMOVED LIMIT 1",
+                f"SELECT ad_group_ad.ad_group FROM ad_group_ad WHERE campaign.id = {g_id} LIMIT 1",
+            ]:
+                fallback = _gaql_search(client, gaql, token)
+                print(f"[youtube-ad-update] fallback gaql returned {len(fallback)} rows")
+                if fallback:
+                    obj = fallback[0]
+                    # adGroup キー (ad_group_ad から)
+                    aga = obj.get("adGroupAd") or obj.get("ad_group_ad") or {}
+                    if aga.get("adGroup"):
+                        ad_group_rn = aga["adGroup"]
+                        break
+                    # adGroup キー (ad_group から)
+                    ag = obj.get("adGroup") or obj.get("ad_group") or {}
+                    rn = ag.get("resourceName") or ag.get("resource_name", "")
+                    if rn:
+                        ad_group_rn = rn
+                        break
+            print(f"[youtube-ad-update] ad_group_rn after fallback: {ad_group_rn}")
 
-        # それでも見つからない場合はcampaign_idからリソース名を直接構築して試みる
+        # ③ 広告グループが存在しない場合は新規作成
         if not ad_group_rn:
-            # 最後の手段: adGroupAdsからad_groupを取得
-            aga_rows = _gaql_search(client, f"""
-                SELECT ad_group_ad.ad_group, ad_group_ad.resource_name
-                FROM ad_group_ad
-                WHERE campaign.id = {g_id}
-                LIMIT 1
-            """, token)
-            print(f"[youtube-ad-update] aga_rows={aga_rows}")
-            if aga_rows:
-                aga_obj = aga_rows[0].get("adGroupAd") or aga_rows[0].get("ad_group_ad") or {}
-                ad_group_rn = aga_obj.get("adGroup") or aga_obj.get("ad_group", "")
-                print(f"[youtube-ad-update] AdGroup from adGroupAds GAQL: {ad_group_rn}")
-
-        if not ad_group_rn:
-            raise HTTPException(400, f"広告グループが見つかりません (campaign_id={g_id})")
+            import random as _rand
+            campaign_rn = f"customers/{CID}/campaigns/{g_id}"
+            print(f"[youtube-ad-update] 広告グループが存在しないため新規作成します campaign_rn={campaign_rn}")
+            ag_result = _rest_mutate(client, "adGroups", [{"create": {
+                "name": f"DemandGen_AG_{g_id}_{_rand.randint(100,999)}",
+                "campaign": campaign_rn,
+                "status": "ENABLED",
+            }}], token)
+            ad_group_rn = ag_result["results"][0]["resourceName"]
+            print(f"[youtube-ad-update] 広告グループ作成完了: {ad_group_rn}")
 
         # ③ 動画アセットを解決（DBのyoutube_video_idからアセットを検索）
         if not video_asset_resource:
@@ -7270,8 +7273,19 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
                 if all_assets:
                     video_asset_resource = all_assets[0].get("asset", {}).get("resourceName", "")
 
+            # それでも見つからない場合はDBのvideo_idで新規アセット作成
+            if not video_asset_resource and db_video_id:
+                import random as _rand2
+                print(f"[youtube-ad-update] 動画アセット新規作成: video_id={db_video_id}")
+                asset_create = _rest_mutate(client, "assets", [{"create": {
+                    "name": f"YT_{g_id}_{_rand2.randint(100,999)}",
+                    "youtubeVideoAsset": {"youtubeVideoId": db_video_id},
+                }}], token)
+                video_asset_resource = asset_create["results"][0]["resourceName"]
+                print(f"[youtube-ad-update] 動画アセット作成完了: {video_asset_resource}")
+
         if not video_asset_resource:
-            raise HTTPException(400, f"動画アセットが見つかりません。DBのyoutube_video_id={campaign_db.get('youtube_video_id','') if campaign_db else '不明'}")
+            raise HTTPException(400, "動画アセットが作成できません。キャンペーン設定画面でYouTube動画URLを確認してください。")
 
         # ④ 旧広告を削除（存在する場合のみ）
         if old_resource_name:
