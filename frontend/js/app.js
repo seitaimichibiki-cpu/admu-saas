@@ -1773,15 +1773,22 @@ async function loadYouTubeAdEditForm(googleCampaignId) {
 
     const isEffectivelyEmpty = (arr) => {
       if (!arr || !arr.length) return true;
-      return arr.every(item => !item || !item.trim());
+      return arr.every(item => !item || typeof item !== 'string' || !item.trim());
+    };
+
+    const getStr = (val) => {
+      if (!val) return '';
+      if (typeof val === 'string') return val.trim();
+      if (typeof val === 'object' && val.text) return val.text.trim();
+      return String(val).trim();
     };
 
     const merged = {
-      business_name:    (dg.business_name && dg.business_name.trim()) ? dg.business_name : (saved.business_name || ''),
-      final_url:        (dg.final_url && dg.final_url.trim())         ? dg.final_url     : (saved.final_url     || ''),
-      youtube_video_id: (dg.youtube_video_id && dg.youtube_video_id.trim()) ? dg.youtube_video_id : (saved.youtube_video_id || ''),
-      youtube_video_url: dg.youtube_video_url || saved.youtube_video_url || (dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''),
-      logo_image_url:   (dg.logo_image_url && dg.logo_image_url.trim()) ? dg.logo_image_url : (saved.logo_image_url || ''),
+      business_name:    getStr(dg.business_name)    || getStr(saved.business_name)    || '',
+      final_url:        getStr(dg.final_url)        || getStr(saved.final_url)        || '',
+      youtube_video_id: getStr(dg.youtube_video_id) || getStr(saved.youtube_video_id) || '',
+      youtube_video_url: getStr(dg.youtube_video_url) || getStr(saved.youtube_video_url) || (dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''),
+      logo_image_url:   getStr(dg.logo_image_url)   || getStr(saved.logo_image_url)   || '',
       headlines:        !isEffectivelyEmpty(dg.headlines)      ? dg.headlines      : (saved.headlines      || []),
       long_headlines:   !isEffectivelyEmpty(dg.long_headlines) ? dg.long_headlines  : (saved.long_headlines  || []),
       descriptions:     !isEffectivelyEmpty(dg.descriptions)   ? dg.descriptions   : (saved.descriptions   || []),

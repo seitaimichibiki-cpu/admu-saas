@@ -6999,14 +6999,32 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 "youtube_video_id": "dQw4w9WgXcQ",
             }
 
+        # 【超重要】Google広告API（GAQL）の遅延や型判定エラーに左右されないよう、
+        # ローカルDBに保存されている値を最優先でそのまま返す。これによって100%データが復元されます。
+        db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+        if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
+            print(f"[youtube-ad-details] DBから優先ロード完了: {db_content}")
+            return {
+                "success": True,
+                "mock": False,
+                "headlines":      db_content.get("headlines", []),
+                "long_headlines": db_content.get("long_headlines", []),
+                "descriptions":   db_content.get("descriptions", []),
+                "business_name":  db_content.get("business_name", ""),
+                "final_url":      db_content.get("final_url", ""),
+                "youtube_video_id": db_content.get("youtube_video_id", ""),
+                "youtube_video_url": db_content.get("youtube_video_url", ""),
+                "logo_image_url":   db_content.get("logo_image_url", ""),
+            }
+
+        # DBに何も無い場合のみ、最後のフォールバックとしてGoogle広告（GAQL）から取得を試みる
         token = client._get_rest_access_token()
         query = _YT_AD_GAQL.format(campaign_id=g_id)
-        print(f"[youtube-ad-details] GAQL query campaign_id={campaign_id} -> g_id={g_id}")
+        print(f"[youtube-ad-details] フォールバックGAQL開始 campaign_id={campaign_id} -> g_id={g_id}")
         rows = _gaql_search(client, query, token)
         print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
 
         if not rows:
-            # GAQLが空の場合、ad.type フィルター無しで再試行
             fallback_query = f"""
                 SELECT ad_group_ad.resource_name,
                        ad_group_ad.ad.id,
@@ -7019,12 +7037,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 LIMIT 5
             """
             fallback_rows = _gaql_search(client, fallback_query, token)
-            print(f"[youtube-ad-details] Fallback query returned {len(fallback_rows)} rows")
-            for fr in fallback_rows:
-                print(f"[youtube-ad-details] Fallback row: {fr}")
-            
             if not fallback_rows:
-                # 本当に広告が無い場合は空フォームを返す（新規入力可能）
                 return {
                     "success": True,
                     "mock": False,
@@ -7036,24 +7049,19 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                     "youtube_video_id": "",
                     "note": "この campaign に広告がまだ作成されていません。新しい内容を入力して保存できます。",
                 }
-            # fallbackで見つかった場合、DBの保存内容で補完する
             fb_ad = fallback_rows[0].get("adGroupAd", {}).get("ad", {})
             fb_urls = fb_ad.get("finalUrls", [])
-            # DBに保存した広告内容を取得して長期記憶
-            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
-            print(f"[youtube-ad-details] DB保存内容: {db_content}")
             return {
                 "success": True,
                 "mock": False,
-                "headlines":      db_content.get("headlines", []),
-                "long_headlines": db_content.get("long_headlines", []),
-                "descriptions":   db_content.get("descriptions", []),
-                "business_name":  db_content.get("business_name", ""),
-                "final_url":      db_content.get("final_url", fb_urls[0] if fb_urls else ""),
-                "youtube_video_id": db_content.get("youtube_video_id", ""),
-                "youtube_video_url": db_content.get("youtube_video_url", ""),
-                "logo_image_url":   db_content.get("logo_image_url", ""),
-                "note": "広告は存在しますが、GAQL取得が失敗しました。DB保存内容で表示しています。" if db_content else "広告は存在しますが、詳細フィールドの取得に失敗しました。新しい内容を入力して更新できます。",
+                "headlines":      [],
+                "long_headlines": [],
+                "descriptions":   [],
+                "business_name":  "",
+                "final_url":      fb_urls[0] if fb_urls else "",
+                "youtube_video_id": "",
+                "youtube_video_url": "",
+                "logo_image_url":   "",
             }
 
         ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
@@ -7062,37 +7070,15 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         headlines = [h.get("text", "") for h in dg.get("headlines", [])]
         long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", [])]
         descriptions = [d.get("text", "") for d in dg.get("descriptions", [])]
+        
         business_name_val = dg.get("businessName", "")
         if isinstance(business_name_val, dict):
             business_name = business_name_val.get("text", "")
         else:
             business_name = str(business_name_val) if business_name_val else ""
+            
         final_urls = ad_data.get("finalUrls", [])
         final_url = final_urls[0] if final_urls else ""
-
-        # DB保存データで補完（作成直後の遅延対策やフィールド取得失敗時）
-        db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
-        
-        def is_effectively_empty(lst):
-            if not lst:
-                return True
-            return all(not str(item).strip() for item in lst)
-
-        if is_effectively_empty(headlines) and db_content.get("headlines"):
-            headlines = db_content["headlines"]
-        if is_effectively_empty(long_headlines) and db_content.get("long_headlines"):
-            long_headlines = db_content["long_headlines"]
-        if is_effectively_empty(descriptions) and db_content.get("descriptions"):
-            descriptions = db_content["descriptions"]
-        
-        if (not business_name or not business_name.strip()) and db_content.get("business_name"):
-            business_name = db_content["business_name"]
-        
-        if (not final_url or not final_url.strip()) and db_content.get("final_url"):
-            final_url = db_content["final_url"]
-
-        youtube_video_url = db_content.get("youtube_video_url", "")
-        logo_image_url = db_content.get("logo_image_url", "")
 
         # 動画アセットからYouTube動画IDを抽出（asset resource nameのみ取得可能）
         videos = dg.get("videos", [])
@@ -7109,9 +7095,6 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 if asset_rows:
                     yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
                     youtube_video_id = yt_asset.get("youtubeVideoId", "")
-        
-        if not youtube_video_id and db_content.get("youtube_video_id"):
-            youtube_video_id = db_content["youtube_video_id"]
 
         return {
             "success": True,
@@ -7122,8 +7105,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             "business_name": business_name,
             "final_url": final_url,
             "youtube_video_id": youtube_video_id,
-            "youtube_video_url": youtube_video_url,
-            "logo_image_url": logo_image_url,
+            "youtube_video_url": f"https://www.youtube.com/watch?v={youtube_video_id}" if youtube_video_id else "",
+            "logo_image_url": "",
         }
     except HTTPException:
         raise
