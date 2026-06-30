@@ -588,28 +588,59 @@ class AdsClient:
             video_asset_rn = r5["results"][0]["resourceName"]
             print(f"[AdsClient-DG] YouTube動画アセット作成: {video_asset_rn}")
 
+            # ⑤-2 ロゴ画像アセット作成（Demand Gen 広告には必須）
+            logo_asset_rn = ""
+            logo_image_url = config.get("logo_image_url")
+            if logo_image_url:
+                try:
+                    import requests as _rql, base64 as _b64
+                    ir = _rql.get(logo_image_url, timeout=10)
+                    id_ = _b64.b64encode(ir.content).decode("utf-8")
+                    lc = self._rest_post("assets", [{"create": {
+                        "name": f"Logo_{unique_name}_{random.randint(100,999)}",
+                        "imageAsset": {"data": id_},
+                    }}], token)
+                    logo_asset_rn = lc["results"][0]["resourceName"]
+                    print(f"[AdsClient-DG] ロゴアセット作成完了: {logo_asset_rn}")
+                except Exception as el:
+                    print(f"[AdsClient-DG] ロゴアセット作成エラー: {el}")
+
+            if not logo_asset_rn:
+                # 既存の画像アセットから代替を取得
+                try:
+                    logo_rows = self._gaql_search(client if hasattr(self, "client") else self, "SELECT asset.resource_name FROM asset WHERE asset.type = IMAGE LIMIT 5", token)
+                    if logo_rows:
+                        logo_asset_rn = logo_rows[0].get("asset", {}).get("resourceName", "")
+                        print(f"[AdsClient-DG] 既存ロゴアセット使用: {logo_asset_rn}")
+                except Exception as el_fb:
+                    print(f"[AdsClient-DG] 既存ロゴ取得エラー: {el_fb}")
+
             # ⑥ Demand Gen Video Responsive 広告作成
             headlines = config.get("headlines", ["整体院の施術をご紹介"])[:5]
             long_headlines = config.get("long_headlines", ["お体のお悩みを根本から改善する施術をご覧ください"])[:5]
             descriptions = config.get("descriptions", ["あなたのお悩みに寄り添う整体院です。"])[:5]
             business_name = config.get("business_name", "整体院")[:25]
-
+ 
             ad_headlines = [{"text": h[:40]} for h in headlines]
             ad_long_headlines = [{"text": lh[:90]} for lh in long_headlines]
             ad_descriptions = [{"text": d[:90]} for d in descriptions]
+ 
+            dg_ad = {
+                "headlines": ad_headlines,
+                "longHeadlines": ad_long_headlines,
+                "descriptions": ad_descriptions,
+                "videos": [{"asset": video_asset_rn}],
+                "businessName": {"text": business_name},
+            }
+            if logo_asset_rn:
+                dg_ad["logoImages"] = [{"asset": logo_asset_rn}]
 
             ad_payload = {
                 "adGroup": ag_rn,
                 "status": "PAUSED",
                 "ad": {
                     "finalUrls": [config.get("final_url", "")],
-                    "demandGenVideoResponsiveAd": {
-                        "headlines": ad_headlines,
-                        "longHeadlines": ad_long_headlines,
-                        "descriptions": ad_descriptions,
-                        "videos": [{"asset": video_asset_rn}],
-                        "businessName": {"text": business_name},
-                    }
+                    "demandGenVideoResponsiveAd": dg_ad
                 }
             }
 

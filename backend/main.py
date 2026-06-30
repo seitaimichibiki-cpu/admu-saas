@@ -1897,6 +1897,7 @@ class YouTubeCampaignReq(BaseModel):
     descriptions: list[str] = []
     status: str = "PAUSED"
     region: str = ""
+    logo_image_url: str = ""
 
 
 def _extract_youtube_video_id(url: str) -> str:
@@ -1979,6 +1980,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             "lon": float(lon) if lon else None,
             "radius_km": 25,
             "region_name": region_name,
+            "logo_image_url": req.logo_image_url,
         }
 
         result = client_ads.create_demand_gen_campaign_setup(config)
@@ -2006,7 +2008,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             "final_url":        final_url,
             "youtube_video_url": req.youtube_video_url,
             "youtube_video_id": video_id,
-            "logo_image_url":   "", # 最初は空
+            "logo_image_url":   req.logo_image_url,
         })
 
         # アラート登録
@@ -7051,14 +7053,26 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         final_urls = ad_data.get("finalUrls", [])
         final_url = final_urls[0] if final_urls else ""
 
+        # DB保存データで補完（作成直後の遅延対策やフィールド取得失敗時）
+        db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+        if not headlines and db_content.get("headlines"):
+            headlines = db_content["headlines"]
+        if not long_headlines and db_content.get("long_headlines"):
+            long_headlines = db_content["long_headlines"]
+        if not descriptions and db_content.get("descriptions"):
+            descriptions = db_content["descriptions"]
+        if not business_name and db_content.get("business_name"):
+            business_name = db_content["business_name"]
+        
+        youtube_video_url = db_content.get("youtube_video_url", "")
+        logo_image_url = db_content.get("logo_image_url", "")
+
         # 動画アセットからYouTube動画IDを抽出（asset resource nameのみ取得可能）
         videos = dg.get("videos", [])
         youtube_video_id = ""
         if videos:
-            # videos[0].asset = "customers/xxx/assets/yyy" の形式
             video_asset_rn = videos[0].get("asset", "")
             if video_asset_rn:
-                # アセット詳細をGAQLで取得して youtube_video_id を得る
                 asset_query = f"""
                     SELECT asset.youtube_video_asset.youtube_video_id
                     FROM asset
@@ -7068,6 +7082,9 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 if asset_rows:
                     yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
                     youtube_video_id = yt_asset.get("youtubeVideoId", "")
+        
+        if not youtube_video_id and db_content.get("youtube_video_id"):
+            youtube_video_id = db_content["youtube_video_id"]
 
         return {
             "success": True,
@@ -7078,6 +7095,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             "business_name": business_name,
             "final_url": final_url,
             "youtube_video_id": youtube_video_id,
+            "youtube_video_url": youtube_video_url,
+            "logo_image_url": logo_image_url,
         }
     except HTTPException:
         raise

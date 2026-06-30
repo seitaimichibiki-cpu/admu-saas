@@ -2633,6 +2633,12 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     document.getElementById('ytDescription2')?.value,
   ].filter(v => v && v.trim());
 
+  const logoUrl = document.getElementById('ytLogoUrl')?.value?.trim() || '';
+  if (!logoUrl) {
+    toast('ロゴ画像URLを入力してください（必須）', 'error');
+    return;
+  }
+
   const body = {
     clinic_id: currentClinicId,
     campaign_name: campaignName,
@@ -2644,6 +2650,7 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     descriptions: descriptions,
     status: 'PAUSED',
     region: document.getElementById('newRegion')?.value || '',
+    logo_image_url: logoUrl,
   };
 
   const btn = document.getElementById('confirmYtCampaign');
@@ -2654,7 +2661,7 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     toast(res.message || 'YouTube広告キャンペーンを作成しました', 'success', 5000);
     
     // 入力欄クリア
-    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytHeadline1','ytHeadline2','ytHeadline3',
+    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl','ytHeadline1','ytHeadline2','ytHeadline3',
      'ytLongHeadline1','ytLongHeadline2','ytDescription1','ytDescription2'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
