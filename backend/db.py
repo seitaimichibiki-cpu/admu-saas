@@ -682,7 +682,13 @@ def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
             conn.execute("ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''")
             conn.commit()
         except Exception:
-            pass  # カラム既存の場合は無視
+            pass
+        # ad_content_jsonカラムが無ければ追加（YouTube広告内容のDB保存用）
+        try:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass
         if data.get("id"):
             conn.execute("""
                 UPDATE campaigns SET name=?,status=?,budget_micros=?,target_region=?,updated_at=?
@@ -701,6 +707,40 @@ def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
                   data.get("youtube_video_id","")))
             conn.commit()
             return cur.lastrowid
+
+
+def save_youtube_ad_content(clinic_id: int, google_campaign_id: str, content: dict):
+    """YouTube広告の編集内容（見出し・説明文等）をDBに保存（次回復元用）"""
+    import json
+    with get_conn() as conn:
+        try:
+            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
+            conn.commit()
+        except Exception:
+            pass
+        conn.execute("""
+            UPDATE campaigns SET ad_content_json=?, updated_at=?
+            WHERE clinic_id=? AND google_campaign_id=?
+        """, (json.dumps(content, ensure_ascii=False),
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              clinic_id, str(google_campaign_id)))
+        conn.commit()
+
+
+def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
+    """DBに保存されたYouTube広告内容を返す"""
+    import json
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
+            (clinic_id, str(google_campaign_id))
+        ).fetchone()
+        if row and row[0]:
+            try:
+                return json.loads(row[0])
+            except Exception:
+                pass
+    return {}
 
 # ---- キャンペーン永久ブラックリスト ----
 def add_campaign_blacklist(clinic_id: int, google_campaign_id: str, campaign_name: str = None, reason: str = "user_deleted"):

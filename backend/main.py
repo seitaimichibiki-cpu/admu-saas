@@ -6994,19 +6994,24 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                     "youtube_video_id": "",
                     "note": "この campaign に広告がまだ作成されていません。新しい内容を入力して保存できます。",
                 }
-            # fallbackで見つかった場合、demandGen固有フィールドは空だが基本情報を返す
+            # fallbackで見つかった場合、DBの保存内容で補完する
             fb_ad = fallback_rows[0].get("adGroupAd", {}).get("ad", {})
             fb_urls = fb_ad.get("finalUrls", [])
+            # DBに保存した広告内容を取得して長期記憶
+            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+            print(f"[youtube-ad-details] DB保存内容: {db_content}")
             return {
                 "success": True,
                 "mock": False,
-                "headlines": [],
-                "long_headlines": [],
-                "descriptions": [],
-                "business_name": "",
-                "final_url": fb_urls[0] if fb_urls else "",
-                "youtube_video_id": "",
-                "note": "広告は存在しますが、詳細フィールドの取得に失敗しました。新しい内容を入力して更新できます。",
+                "headlines":      db_content.get("headlines", []),
+                "long_headlines": db_content.get("long_headlines", []),
+                "descriptions":   db_content.get("descriptions", []),
+                "business_name":  db_content.get("business_name", ""),
+                "final_url":      db_content.get("final_url", fb_urls[0] if fb_urls else ""),
+                "youtube_video_id": db_content.get("youtube_video_id", ""),
+                "youtube_video_url": db_content.get("youtube_video_url", ""),
+                "logo_image_url":   db_content.get("logo_image_url", ""),
+                "note": "広告は存在しますが、GAQL取得が失敗しました。DB保存内容で表示しています。" if db_content else "広告は存在しますが、詳細フィールドの取得に失敗しました。新しい内容を入力して更新できます。",
             }
 
         ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
@@ -7262,6 +7267,25 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         new_rn = cr.get("results", [{}])[0].get("resourceName", "")
 
         db.create_alert(req.clinic_id, f"YouTube広告を更新しました (campaign_id: {g_id})", level="INFO")
+
+        # 更新内容をDBに保存（次回フォームを開いた時に復元するため）
+        _vid_id = req.youtube_video_url
+        if _vid_id:
+            import re as _re_vid
+            _m = _re_vid.search(r"(?:v=|youtu\.be/)([^&\n?#]+)", _vid_id)
+            _vid_id = _m.group(1) if _m else ""
+        db.save_youtube_ad_content(req.clinic_id, str(g_id), {
+            "headlines":        req.headlines,
+            "long_headlines":   req.long_headlines,
+            "descriptions":     req.descriptions,
+            "business_name":    req.business_name,
+            "final_url":        req.final_url,
+            "youtube_video_url": req.youtube_video_url,
+            "youtube_video_id": _vid_id,
+            "logo_image_url":   req.logo_image_url,
+        })
+        print(f"[youtube-ad-update] DB\u306b\u5e83\u544a\u5185\u5bb9\u3092\u4fdd\u5b58\u3057\u307e\u3057\u305f")
+
         return {
             "success": True, "mock": False,
             "message": "YouTube広告を更新しました",
