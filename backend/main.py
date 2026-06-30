@@ -7383,11 +7383,7 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         db.create_alert(req.clinic_id, f"YouTube広告を更新しました (campaign_id: {g_id})", level="INFO")
 
         # 更新内容をDBに保存（次回フォームを開いた時に復元するため）
-        _vid_id = req.youtube_video_url
-        if _vid_id:
-            import re as _re_vid
-            _m = _re_vid.search(r"(?:v=|youtu\.be/)([^&\n?#]+)", _vid_id)
-            _vid_id = _m.group(1) if _m else ""
+        _vid_id = _extract_youtube_video_id(req.youtube_video_url) if req.youtube_video_url else ""
         db.save_youtube_ad_content(req.clinic_id, str(g_id), {
             "headlines":        req.headlines,
             "long_headlines":   req.long_headlines,
