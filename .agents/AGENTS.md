@@ -16,4 +16,7 @@
   * **Headlines**: API limit 40 characters -> **Max 20 Japanese characters**.
   * **Long Headlines**: API limit 90 characters -> **Max 45 Japanese characters**.
   * **Descriptions**: API limit 90 characters -> **Max 45 Japanese characters**.
+* **Policy Constraints (SYMBOLS & Punctuation)**: Google Ads has strict guidelines regarding symbols in ads. 
+  * Avoid parentheses `()`, brackets `【】`, and slashes `/` in headlines/descriptions. Parentheses are flagged as `SYMBOLS` and cause `POLICY_FINDING` api errors.
+  * Avoid exclamation marks `!` or `！` in headlines (they are strictly prohibited). In descriptions, at most one exclamation mark is allowed per ad, but it is safer to avoid them entirely to prevent policy disapproval.
 
