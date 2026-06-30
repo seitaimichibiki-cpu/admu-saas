@@ -230,6 +230,24 @@ def get_public_config():
         "sentry_dsn": SENTRY_DSN
     }
 
+@app.get("/api/debug-campaign/{camp_id}")
+def debug_campaign_record(camp_id: str):
+    """診断用API：データベースのレコード内容を詳細に出力する"""
+    try:
+        with db.get_conn() as conn:
+            rows = conn.execute("""
+                SELECT id, clinic_id, google_campaign_id, name, campaign_type, youtube_video_id, COALESCE(ad_content_json, '') != '' as has_ad_content, ad_content_json
+                FROM campaigns 
+                WHERE google_campaign_id=? OR name=? OR id=?
+            """, (camp_id, camp_id, int(camp_id) if camp_id.isdigit() else -1)).fetchall()
+            return {
+                "success": True,
+                "found_count": len(rows),
+                "records": [dict(r) for r in rows]
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 @app.get("/api/csrf-token")
 def get_csrf_token(response: Response):
     """CSRFトークンを発行する"""
