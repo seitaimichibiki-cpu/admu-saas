@@ -7062,7 +7062,11 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         headlines = [h.get("text", "") for h in dg.get("headlines", [])]
         long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", [])]
         descriptions = [d.get("text", "") for d in dg.get("descriptions", [])]
-        business_name = dg.get("businessName", "")
+        business_name_val = dg.get("businessName", "")
+        if isinstance(business_name_val, dict):
+            business_name = business_name_val.get("text", "")
+        else:
+            business_name = str(business_name_val) if business_name_val else ""
         final_urls = ad_data.get("finalUrls", [])
         final_url = final_urls[0] if final_urls else ""
 

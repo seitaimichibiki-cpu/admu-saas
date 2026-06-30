@@ -552,7 +552,33 @@ class AdsClient:
             region_name = config.get("region_name")
             if region_name:
                 try:
+                    geo_constants = []
+                    # 1. そのまま試す
                     geo_constants = self.suggest_geo_target_constants([region_name])
+                    
+                    # 2. 市区町村をパースして試す（例: 静岡県藤枝市高柳 -> 藤枝市）
+                    if not geo_constants:
+                        import re as _re_loc
+                        _m = _re_loc.search(r'(?:東京都|大阪府|京都府|北海道|都道府県)?([^\s都道府県]+?(?:市|区|町|村))', region_name)
+                        if _m:
+                            parsed_city = _m.group(1)
+                            print(f"[AdsClient-DG] 市区町村名で再解決を試みます: {parsed_city}")
+                            geo_constants = self.suggest_geo_target_constants([parsed_city])
+
+                    # 3. 都道府県をパースして試す（例: 静岡県藤枝市高柳 -> 静岡県）
+                    if not geo_constants:
+                        _m_pref = _re_loc.search(r'([^\s都道府県]+?(?:都道府県|東京都|道|府|県))', region_name)
+                        if _m_pref:
+                            parsed_pref = _m_pref.group(1)
+                            print(f"[AdsClient-DG] 都道府県名で再解決を試みます: {parsed_pref}")
+                            geo_constants = self.suggest_geo_target_constants([parsed_pref])
+
+                    # 4. 「〇〇市」などの末尾がない単純地名で試す
+                    if not geo_constants and len(region_name) > 2:
+                        short_loc = region_name[:3]
+                        print(f"[AdsClient-DG] 短縮地名で再解決を試みます: {short_loc}")
+                        geo_constants = self.suggest_geo_target_constants([short_loc])
+
                     if geo_constants:
                         geo_constant_rn = geo_constants[0]
                         agc_url = f"https://googleads.googleapis.com/v23/customers/{cid}/adGroupCriteria:mutate"
@@ -574,6 +600,8 @@ class AdsClient:
                             print(f"[AdsClient-DG] 広告グループに位置ターゲットを設定完了: {geo_constant_rn}")
                         else:
                             print(f"[AdsClient-DG] 広告グループ位置ターゲット設定失敗: {agc_resp.text[:300]}")
+                    else:
+                        print(f"[AdsClient-DG] 位置情報「{region_name}」を解決できませんでした。ターゲット設定をスキップします。")
                 except Exception as e:
                     print(f"[AdsClient-DG] 位置ターゲティング設定エラー（続行）: {e}")
 

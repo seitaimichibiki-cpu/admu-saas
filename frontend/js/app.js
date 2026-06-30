@@ -2652,6 +2652,12 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     return;
   }
 
+  const regionVal = document.getElementById('ytRegion')?.value?.trim() || '';
+  if (!regionVal) {
+    toast('ターゲット地域を入力してください（必須）', 'error');
+    return;
+  }
+
   const body = {
     clinic_id: currentClinicId,
     campaign_name: campaignName,
@@ -2662,7 +2668,7 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     long_headlines: longHeadlines,
     descriptions: descriptions,
     status: 'PAUSED',
-    region: document.getElementById('newRegion')?.value || '',
+    region: regionVal,
     logo_image_url: logoUrl,
   };
 
@@ -2674,7 +2680,7 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     toast(res.message || 'YouTube広告キャンペーンを作成しました', 'success', 5000);
     
     // 入力欄クリア
-    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl',
+    ['ytCampaignName','ytVideoUrl','ytFinalUrl','ytLogoUrl','ytRegion',
      'ytHeadline1','ytHeadline2','ytHeadline3','ytHeadline4','ytHeadline5',
      'ytLongHeadline1','ytLongHeadline2','ytLongHeadline3','ytLongHeadline4','ytLongHeadline5',
      'ytDescription1','ytDescription2','ytDescription3','ytDescription4','ytDescription5'].forEach(id => {
