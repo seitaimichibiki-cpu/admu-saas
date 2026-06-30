@@ -1896,6 +1896,7 @@ class YouTubeCampaignReq(BaseModel):
     long_headlines: list[str] = []
     descriptions: list[str] = []
     status: str = "PAUSED"
+    region: str = ""
 
 
 def _extract_youtube_video_id(url: str) -> str:
@@ -2014,6 +2015,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
             f"YouTube広告キャンペーン作成: 「{req.campaign_name}」(動画ID: {video_id})",
             level="INFO"
         )
+        ads_cache.clear()
 
         return {
             "success": True,

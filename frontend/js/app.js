@@ -2643,6 +2643,7 @@ document.getElementById('confirmYtCampaign')?.addEventListener('click', async ()
     long_headlines: longHeadlines,
     descriptions: descriptions,
     status: 'PAUSED',
+    region: document.getElementById('newRegion')?.value || '',
   };
 
   const btn = document.getElementById('confirmYtCampaign');
