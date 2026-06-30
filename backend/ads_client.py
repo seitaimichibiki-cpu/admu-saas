@@ -608,10 +608,25 @@ class AdsClient:
             if not logo_asset_rn:
                 # 既存の画像アセットから代替を取得
                 try:
-                    logo_rows = self._gaql_search(client if hasattr(self, "client") else self, "SELECT asset.resource_name FROM asset WHERE asset.type = IMAGE LIMIT 5", token)
-                    if logo_rows:
-                        logo_asset_rn = logo_rows[0].get("asset", {}).get("resourceName", "")
-                        print(f"[AdsClient-DG] 既存ロゴアセット使用: {logo_asset_rn}")
+                    import requests as _rq
+                    BASE_URL = f"https://googleads.googleapis.com/v23/customers/{self.customer_id}"
+                    headers_rest = {
+                        "Authorization": f"Bearer {token}",
+                        "developer-token": self._developer_token,
+                        "login-customer-id": self._login_customer_id,
+                        "Content-Type": "application/json",
+                    }
+                    query = "SELECT asset.resource_name FROM asset WHERE asset.type = IMAGE LIMIT 5"
+                    resp = _rq.post(f"{BASE_URL}/googleAds:searchStream", headers=headers_rest, json={"query": query})
+                    if resp.status_code == 200:
+                        logo_rows = []
+                        for batch in resp.json():
+                            logo_rows.extend(batch.get("results", []))
+                        if logo_rows:
+                            logo_asset_rn = logo_rows[0].get("asset", {}).get("resourceName", "")
+                            print(f"[AdsClient-DG] 既存ロゴアセット使用: {logo_asset_rn}")
+                    else:
+                        print(f"[AdsClient-DG] 既存ロゴ取得エラー (REST): {resp.text[:300]}")
                 except Exception as el_fb:
                     print(f"[AdsClient-DG] 既存ロゴ取得エラー: {el_fb}")
 
