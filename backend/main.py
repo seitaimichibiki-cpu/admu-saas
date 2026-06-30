@@ -226,8 +226,16 @@ async def security_middleware(request: Request, call_next):
 @app.get("/api/config")
 def get_public_config():
     """フロントエンドに必要な共通設定（Sentry等）を返す"""
+    db_data = []
+    try:
+        with db.get_conn() as conn:
+            rows = conn.execute("SELECT id, google_campaign_id, name, campaign_type, ad_content_json FROM campaigns ORDER BY id DESC LIMIT 5").fetchall()
+            db_data = [dict(r) for r in rows]
+    except Exception as e:
+        db_data = [f"Error: {e}"]
     return {
-        "sentry_dsn": SENTRY_DSN
+        "sentry_dsn": SENTRY_DSN,
+        "db_debug": db_data
     }
 
 @app.get("/api/csrf-token")
