@@ -7030,6 +7030,10 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
         if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
             print(f"[youtube-ad-details] DBから優先ロード完了: {db_content}")
+            db_vid_id = db_content.get("youtube_video_id", "")
+            db_vid_url = db_content.get("youtube_video_url", "")
+            if not db_vid_id and db_vid_url:
+                db_vid_id = _extract_youtube_video_id(db_vid_url)
             return {
                 "success": True,
                 "mock": False,
@@ -7038,8 +7042,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 "descriptions":   db_content.get("descriptions", []),
                 "business_name":  db_content.get("business_name", ""),
                 "final_url":      db_content.get("final_url", ""),
-                "youtube_video_id": db_content.get("youtube_video_id", ""),
-                "youtube_video_url": db_content.get("youtube_video_url", ""),
+                "youtube_video_id": db_vid_id,
+                "youtube_video_url": db_vid_url,
                 "logo_image_url":   db_content.get("logo_image_url", ""),
             }
 
@@ -7143,6 +7147,10 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
             if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
                 print(f"[youtube-ad-details] 例外フォールバック — DBから優先ロード完了: {db_content}")
+                db_vid_id = db_content.get("youtube_video_id", "")
+                db_vid_url = db_content.get("youtube_video_url", "")
+                if not db_vid_id and db_vid_url:
+                    db_vid_id = _extract_youtube_video_id(db_vid_url)
                 return {
                     "success": True,
                     "mock": False,
@@ -7151,8 +7159,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                     "descriptions":   db_content.get("descriptions", []),
                     "business_name":  db_content.get("business_name", ""),
                     "final_url":      db_content.get("final_url", ""),
-                    "youtube_video_id": db_content.get("youtube_video_id", ""),
-                    "youtube_video_url": db_content.get("youtube_video_url", ""),
+                    "youtube_video_id": db_vid_id,
+                    "youtube_video_url": db_vid_url,
                     "logo_image_url":   db_content.get("logo_image_url", ""),
                     "note": f"Google広告API連携中のエラーにより、一時的に保存されているデータをロードしました。({e})",
                 }

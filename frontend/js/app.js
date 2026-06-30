@@ -1795,6 +1795,15 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
       long_headlines:   !isEffectivelyEmpty(dg.long_headlines) ? dg.long_headlines  : (saved.long_headlines  || []),
       descriptions:     !isEffectivelyEmpty(dg.descriptions)   ? dg.descriptions   : (saved.descriptions   || []),
     };
+
+    // 過去の不良データ救済ロジック：動画IDが空でURLがある場合、自動抽出して補完
+    if (!merged.youtube_video_id && merged.youtube_video_url) {
+      const match = merged.youtube_video_url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([^&\n?#]+)/);
+      if (match) {
+        merged.youtube_video_id = match[1];
+      }
+    }
+
     const hasContent = !!(merged.business_name || merged.headlines.length);
     console.log('[ytAdForm] dg=', dg, 'merged=', merged);
     
