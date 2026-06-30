@@ -226,16 +226,8 @@ async def security_middleware(request: Request, call_next):
 @app.get("/api/config")
 def get_public_config():
     """フロントエンドに必要な共通設定（Sentry等）を返す"""
-    db_data = []
-    try:
-        with db.get_conn() as conn:
-            rows = conn.execute("SELECT id, google_campaign_id, name, campaign_type, ad_content_json FROM campaigns ORDER BY id DESC LIMIT 5").fetchall()
-            db_data = [dict(r) for r in rows]
-    except Exception as e:
-        db_data = [f"Error: {e}"]
     return {
-        "sentry_dsn": SENTRY_DSN,
-        "db_debug": db_data
+        "sentry_dsn": SENTRY_DSN
     }
 
 @app.get("/api/csrf-token")
@@ -763,6 +755,16 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
             if row:
                 campaign = dict(row)
 
+    # 3. それでも見つからない場合は name (キャンペーン名) で検索する (フォールバック)
+    if not campaign:
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM campaigns WHERE name=? AND clinic_id=?",
+                (str(campaign_id), clinic_id)
+            ).fetchone()
+            if row:
+                campaign = dict(row)
+
     if not campaign:
         raise HTTPException(404, "キャンペーンが見つかりません")
     return campaign
@@ -826,14 +828,7 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
 
 
 
-@app.get("/api/auth/debug-db")
-def debug_db():
-    with db.get_conn() as conn:
-        try:
-            rows = conn.execute("SELECT id, google_campaign_id, name, campaign_type, ad_content_json FROM campaigns ORDER BY id DESC LIMIT 10").fetchall()
-            return {"campaigns": [dict(r) for r in rows]}
-        except Exception as e:
-            return {"error": str(e)}
+
 
 
 # ---- API: キャンペーン詳細（キーワード・位置・広告文）----
