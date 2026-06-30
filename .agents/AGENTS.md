@@ -12,3 +12,8 @@
   * `business_name` (must be non-empty and limited to 25 chars).
 * **Asset Deletion Handling**: If a YouTube video reference is deleted (`YOUTUBE_VIDEO_REMOVED`), the API will fail to update. We must allow the user to provide a new YouTube Video URL and dynamically create a new video asset.
 * **State Persistence**: Because GAQL (Google Ads Query Language) queries for Demand Gen ads sometimes return 0 rows or omit details (forcing fallbacks), always persist the successfully updated ad contents locally in the database (`campaigns.ad_content_json`). Restore the form data from this local database backup if the live GAQL fetch fails to return full properties.
+* **Character Length Limit for Double-Byte (Japanese) Characters**: In Google Ads API, length limits for headlines, long headlines, and descriptions are counted in half-width characters (single-byte). Double-byte characters (Japanese) count as **2 characters each**.
+  * **Headlines**: API limit 40 characters -> **Max 20 Japanese characters**.
+  * **Long Headlines**: API limit 90 characters -> **Max 45 Japanese characters**.
+  * **Descriptions**: API limit 90 characters -> **Max 45 Japanese characters**.
+
