@@ -680,18 +680,7 @@ def get_campaign(campaign_id: int):
 
 def upsert_campaign(clinic_id: int, data: dict) -> Optional[int]:
     with get_conn() as conn:
-        # youtube_video_idカラムが無ければ追加（既存DB互換）
-        try:
-            conn.execute("ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''")
-            conn.commit()
-        except Exception:
-            pass
-        # ad_content_jsonカラムが無ければ追加（YouTube広告内容のDB保存用）
-        try:
-            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
-            conn.commit()
-        except Exception:
-            pass
+        # NOTE: youtube_video_id, ad_content_jsonカラムはinit_db()のマイグレーションで保証済み
         if data.get("id"):
             conn.execute("""
                 UPDATE campaigns SET name=?,status=?,budget_micros=?,target_region=?,updated_at=?
@@ -716,11 +705,6 @@ def save_youtube_ad_content(clinic_id: int, google_campaign_id: str, content: di
     """YouTube広告の編集内容（見出し・説明文等）をDBに保存（次回復元用）"""
     import json
     with get_conn() as conn:
-        try:
-            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
-            conn.commit()
-        except Exception:
-            pass
         conn.execute("""
             UPDATE campaigns SET ad_content_json=?, updated_at=?
             WHERE clinic_id=? AND google_campaign_id=?
@@ -734,12 +718,6 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
     """DBに保存されたYouTube広告内容を返す"""
     import json
     with get_conn() as conn:
-        # カラムが存在しない場合は追加してから取得（PG/SQLite互換）
-        try:
-            conn.execute("ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''")
-            conn.commit()
-        except Exception:
-            pass
         try:
             row = conn.execute(
                 "SELECT ad_content_json FROM campaigns WHERE clinic_id=? AND google_campaign_id=?",
