@@ -1845,6 +1845,29 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
           el.style.display = isVisible ? 'none' : 'block';
         }
       };
+      
+      window.copyCreativeFields = function(fromIndex, toIndex) {
+        if (fromIndex === '') return;
+        
+        // 簡単な値のコピー
+        const fields = ['BusinessName', 'FinalUrl', 'LogoUrl', 'VideoUrl'];
+        fields.forEach(f => {
+          const fromEl = document.getElementById(`ytEdit${f}_${fromIndex}`);
+          const toEl = document.getElementById(`ytEdit${f}_${toIndex}`);
+          if (fromEl && toEl) toEl.value = fromEl.value;
+        });
+
+        // テキストエリア配列のコピー (見出し、長い見出し、説明文)
+        const textareas = ['Headline', 'LongHeadline', 'Desc'];
+        textareas.forEach(prefix => {
+          for (let i = 0; i < 5; i++) {
+            const fromEl = document.getElementById(`ytEdit${prefix}_${fromIndex}_${i}`);
+            const toEl = document.getElementById(`ytEdit${prefix}_${toIndex}_${i}`);
+            if (fromEl && toEl) toEl.value = fromEl.value;
+          }
+        });
+      };
+      
       window._ytAccordionsRegistered = true;
     }
 
@@ -2009,6 +2032,23 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
 
     // ② 新規追加用の空アコーディオンカードを末尾に追加
     const newIndex = ads.length;
+    
+    let copySelectHtml = '';
+    if (ads.length > 0) {
+      let optionsHtml = '<option value="">(コピー元を選択してください)</option>';
+      ads.forEach((ad, idx) => {
+        optionsHtml += `<option value="${idx}">クリエイティブ #${idx+1} (${ad.business_name || '名称未設定'}) の設定をコピー</option>`;
+      });
+      copySelectHtml = `
+        <div style="margin-bottom:16px;padding:10px;background:rgba(255,255,255,0.03);border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="font-size:11px;color:var(--text-3);white-space:nowrap;font-weight:bold">📋 設定をコピーする:</span>
+          <select onchange="copyCreativeFields(this.value, ${newIndex}); this.value='';" style="flex:1;padding:4px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:11px">
+            ${optionsHtml}
+          </select>
+        </div>
+      `;
+    }
+
     formHtml += `
       <div class="yt-ad-card" style="border:1px dashed #64748b;border-radius:6px;margin-bottom:10px;background:rgba(255,255,255,0.01);overflow:hidden">
         <div onclick="toggleYtAdAccordion(${newIndex})" style="padding:10px;background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none;color:#60a5fa">
@@ -2016,6 +2056,7 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         </div>
         
         <div id="ytAdAccordionContent_${newIndex}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px dashed #64748b;display:none">
+          ${copySelectHtml}
           <div style="margin-bottom:12px">
             <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
             <input type="text" id="ytEditBusinessName_${newIndex}" maxlength="25" value="" placeholder="例: 整体院導"
