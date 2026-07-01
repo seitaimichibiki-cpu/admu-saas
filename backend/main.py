@@ -6798,10 +6798,19 @@ def recommend_radius(clinic_id: int = 1):
     failed = 0
     area_counts = {}
 
-    for pref, city in rows:
+    for row_r in rows:
+        d_row = dict(row_r)
+        pref = d_row.get("address_pref") or ""
+        city = d_row.get("address_city") or ""
         if not city:
             continue
-        full_addr = f"{pref or '静岡県'}{city}"
+            
+        # 住所プレフィックスの重複排除
+        pref_str = pref
+        if not pref_str and not city.startswith("静岡県"):
+            pref_str = "静岡県"
+            
+        full_addr = f"{pref_str}{city}"
         
         # 最も来院しやすいエリアの逆算（市区町村の集集計）
         m = re.match(r'^(.*?[市区町村])', full_addr)
