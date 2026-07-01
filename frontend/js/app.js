@@ -1911,6 +1911,29 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         statusText = '⏳ 審査中';
       }
 
+      // メトリクス表示ブロック
+      const m = ad.metrics || { impressions: 0, clicks: 0, ctr: 0, conversions: 0, cost: 0, cpa: 0 };
+      const metricsHtml = `
+        <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:12px;display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;text-align:center;font-size:10px;color:var(--text-3)">
+          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
+            <div style="color:var(--text-2);font-size:9px">表示回数</div>
+            <div style="font-weight:bold;color:#fff;font-size:12px;margin-top:2px">${m.impressions.toLocaleString()}</div>
+          </div>
+          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
+            <div style="color:var(--text-2);font-size:9px">クリック (率)</div>
+            <div style="font-weight:bold;color:#fff;font-size:12px;margin-top:2px">${m.clicks} <span style="font-size:9px;color:#38bdf8">(${m.ctr}%)</span></div>
+          </div>
+          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
+            <div style="color:var(--text-2);font-size:9px">獲得数 (CPA)</div>
+            <div style="font-weight:bold;color:#10b981;font-size:12px;margin-top:2px">${m.conversions}件 <span style="font-size:9px;color:#34d399">(${m.cpa > 0 ? m.cpa.toLocaleString() + '円' : '-'})</span></div>
+          </div>
+          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px;grid-column:span 3">
+            <div style="color:var(--text-2);font-size:9px;display:inline-block;margin-right:6px">消化費用:</div>
+            <span style="font-weight:bold;color:#f59e0b">${m.cost.toLocaleString()} 円</span> (過去累計)
+          </div>
+        </div>
+      `;
+
       formHtml += `
         <div class="yt-ad-card" style="border:1px solid var(--border);border-radius:6px;margin-bottom:10px;background:#1e293b;overflow:hidden">
           <div onclick="toggleYtAdAccordion(${index})" style="padding:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
@@ -1919,6 +1942,7 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
           </div>
           
           <div id="ytAdAccordionContent_${index}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px solid var(--border);display:${index === 0 ? 'block' : 'none'}">
+            ${metricsHtml}
             <div style="margin-bottom:12px">
               <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
               <input type="text" id="ytEditBusinessName_${index}" maxlength="25" value="${(merged.business_name || '').replace(/"/g, '&quot;')}"

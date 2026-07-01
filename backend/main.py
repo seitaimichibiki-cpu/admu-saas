@@ -6118,6 +6118,14 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                         "logo_image_url": "https://example.com/logo.png",
                         "approval_status": "APPROVED",
                         "policy_topics": [],
+                        "metrics": {
+                            "impressions": 1500,
+                            "clicks": 45,
+                            "ctr": 3.0,
+                            "conversions": 2.0,
+                            "cost": 3200,
+                            "cpa": 1600,
+                        }
                     },
                     {
                         "resource_name": "customers/12345/adGroupAds/9992",
@@ -6133,6 +6141,14 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                         "logo_image_url": "https://example.com/logo.png",
                         "approval_status": "REVIEW_IN_PROGRESS",
                         "policy_topics": [],
+                        "metrics": {
+                            "impressions": 0,
+                            "clicks": 0,
+                            "ctr": 0.0,
+                            "conversions": 0.0,
+                            "cost": 0,
+                            "cpa": 0,
+                        }
                     }
                 ],
             }
@@ -6154,7 +6170,11 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                    ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
                    ad_group_ad.status,
                    ad_group_ad.policy_summary.approval_status,
-                   ad_group_ad.policy_summary.policy_topic_entries
+                   ad_group_ad.policy_summary.policy_topic_entries,
+                   metrics.impressions,
+                   metrics.clicks,
+                   metrics.conversions,
+                   metrics.cost_micros
             FROM ad_group_ad
             WHERE campaign.id = {g_id}
               AND ad_group_ad.status != REMOVED
@@ -6201,6 +6221,17 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             approval = p_summary.get("approvalStatus", "UNKNOWN")
             topics = [e.get("topic", "") for e in p_summary.get("policyTopicEntries", [])]
 
+            # 指標データ解決
+            metrics_data = r.get("metrics", {})
+            impressions = int(metrics_data.get("impressions", 0))
+            clicks = int(metrics_data.get("clicks", 0))
+            conversions = float(metrics_data.get("conversions", 0.0))
+            cost_micros = int(metrics_data.get("costMicros", 0))
+            cost_yen = int(cost_micros / 1000000)
+
+            ctr = (clicks / impressions * 100) if impressions > 0 else 0.0
+            cpa = int(cost_yen / conversions) if conversions > 0 else 0
+
             demand_gen_ads.append({
                 "resource_name": aga.get("resourceName", ""),
                 "ad_id": ad_data.get("id", ""),
@@ -6215,6 +6246,14 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 "logo_image_url": "",
                 "approval_status": approval,
                 "policy_topics": topics,
+                "metrics": {
+                    "impressions": impressions,
+                    "clicks": clicks,
+                    "ctr": round(ctr, 2),
+                    "conversions": conversions,
+                    "cost": cost_yen,
+                    "cpa": cpa
+                }
             })
 
         # 2. もしGoogle広告APIから1件も取得できなかった場合、最後のフォールバックとしてDBキャッシュを返す
@@ -6240,6 +6279,14 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                     "logo_image_url":   db_content.get("logo_image_url", ""),
                     "approval_status": "UNKNOWN",
                     "policy_topics": [],
+                    "metrics": {
+                        "impressions": 0,
+                        "clicks": 0,
+                        "ctr": 0.0,
+                        "conversions": 0.0,
+                        "cost": 0,
+                        "cpa": 0
+                    }
                 })
 
         return {
