@@ -1837,7 +1837,12 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
           value="${(merged.youtube_video_url || '').replace(/"/g, '&quot;')}"
           style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
           placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
-        ${merged.youtube_video_id ? `<div style="margin-top:6px;position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;border:1px solid var(--border)"><iframe src="https://www.youtube.com/embed/${merged.youtube_video_id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
+        ${merged.youtube_video_url ? `
+          <a href="${merged.youtube_video_url}" target="_blank" class="btn btn-secondary" 
+             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:6px;font-size:11px;padding:6px;background:#1e293b;border-color:#334155;color:#e2e8f0;text-decoration:none;border-radius:4px">
+            📺 YouTubeで動画を確認する (別タブ) ↗
+          </a>
+        ` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
       </div>
 
       <div style="margin-bottom:12px">
