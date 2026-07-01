@@ -6025,7 +6025,7 @@ _SEASONAL_DATA = {
     5:  {"month":"5月", "emoji":"🟢", "theme":"GW疲れ・五月病",
          "keywords":["GW疲れ 整体","五月病 肩こり","連休明け 腰痛","スポーツ 筋肉痛","母の日 ギフト"],
          "negative_kw":["GW 無料","ストレッチ だけ"],
-         "seasonal_pain":["GW後疲労蓄積","五月病由来の肩・首こり","スポーツ障害"],
+         "seasonal_pain":["GW後疲労蓄積","五月病由来的肩・首こり","スポーツ障害"],
          "bid_boost":["GW明け週 +40%（需要急増）"],
          "copy_angle":"GWの疲れ、放置しないで"},
     6:  {"month":"6月", "emoji":"☔", "theme":"梅雨・気圧変動",
@@ -6081,6 +6081,210 @@ async def seasonal_calendar(clinic_id: int = 1, generate_copy: bool = False):
 # ★ INDUSTRY #1 FEATURE ②: 時間帯×曜日 パフォーマンスヒートマップ
 # 24h × 7day で整体院の検索行動を可視化 + AI入札推奨
 # ============================================================
+@app.get("/api/campaigns/{campaign_id}/youtube-ad-details")
+async def get_youtube_ad_details(campaign_id: str, request: Request):
+    """YouTube広告（Demand Gen）の広告詳細（複数）を取得する"""
+    import traceback
+    clinic_id = int(request.query_params.get("clinic_id", "1"))
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        # ローカルDBからGoogle IDを解決
+        try:
+            campaign = _resolve_campaign(campaign_id, clinic_id)
+            g_id = campaign.get("google_campaign_id") or campaign_id
+        except HTTPException:
+            raise
+        except Exception:
+            g_id = campaign_id
+
+        if client.mock_mode:
+            return {
+                "success": True,
+                "mock": True,
+                "demand_gen_ads": [
+                    {
+                        "resource_name": "customers/12345/adGroupAds/9991",
+                        "ad_id": "9991",
+                        "status": "ENABLED",
+                        "headlines": ["モック見出し1", "モック見出し2"],
+                        "long_headlines": ["モック長い見出し"],
+                        "descriptions": ["モック説明文1"],
+                        "business_name": "モック整体院",
+                        "final_url": "https://example.com",
+                        "youtube_video_id": "dQw4w9WgXcQ",
+                        "youtube_video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                        "logo_image_url": "https://example.com/logo.png",
+                        "approval_status": "APPROVED",
+                        "policy_topics": [],
+                    },
+                    {
+                        "resource_name": "customers/12345/adGroupAds/9992",
+                        "ad_id": "9992",
+                        "status": "PAUSED",
+                        "headlines": ["テスト見出しB1"],
+                        "long_headlines": ["テスト長い見出しB2"],
+                        "descriptions": ["テスト説明文B1"],
+                        "business_name": "モック整体院",
+                        "final_url": "https://example.com/sub",
+                        "youtube_video_id": "3rldmsiD5HE",
+                        "youtube_video_url": "https://youtube.com/shorts/3rldmsiD5HE",
+                        "logo_image_url": "https://example.com/logo.png",
+                        "approval_status": "REVIEW_IN_PROGRESS",
+                        "policy_topics": [],
+                    }
+                ],
+            }
+
+        demand_gen_ads = []
+
+        # 1. Google広告API（GAQL）から広告一覧を取得
+        token = client._get_rest_access_token()
+        # LIMIT 1を外して複数取得するクエリ
+        query = f"""
+            SELECT ad_group_ad.resource_name,
+                   ad_group_ad.ad.id,
+                   ad_group_ad.ad_group,
+                   ad_group_ad.ad.final_urls,
+                   ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
+                   ad_group_ad.ad.demand_gen_video_responsive_ad.long_headlines,
+                   ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
+                   ad_group_ad.ad.demand_gen_video_responsive_ad.videos,
+                   ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
+                   ad_group_ad.status,
+                   ad_group_ad.policy_summary.approval_status,
+                   ad_group_ad.policy_summary.policy_topic_entries
+            FROM ad_group_ad
+            WHERE campaign.id = {g_id}
+              AND ad_group_ad.status != REMOVED
+        """
+        print(f"[youtube-ad-details] GAQL取得開始 campaign_id={campaign_id} -> g_id={g_id}")
+        rows = _gaql_search(client, query, token)
+        print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
+
+        for r in rows:
+            aga = r.get("adGroupAd", {})
+            ad_data = aga.get("ad", {})
+            dg = ad_data.get("demandGenVideoResponsiveAd") or {}
+
+            headlines = [h.get("text", "") for h in dg.get("headlines", []) if h.get("text")]
+            long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", []) if lh.get("text")]
+            descriptions = [d.get("text", "") for d in dg.get("descriptions", []) if d.get("text")]
+
+            business_name_val = dg.get("businessName", "")
+            if isinstance(business_name_val, dict):
+                business_name = business_name_val.get("text", "")
+            else:
+                business_name = str(business_name_val) if business_name_val else ""
+
+            final_urls = ad_data.get("finalUrls", [])
+            final_url = final_urls[0] if final_urls else ""
+
+            videos = dg.get("videos", [])
+            youtube_video_id = ""
+            if videos:
+                video_asset_rn = videos[0].get("asset", "")
+                if video_asset_rn:
+                    asset_query = f"""
+                        SELECT asset.youtube_video_asset.youtube_video_id
+                        FROM asset
+                        WHERE asset.resource_name = '{video_asset_rn}'
+                    """
+                    asset_rows = _gaql_search(client, asset_query, token)
+                    if asset_rows:
+                        yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
+                        youtube_video_id = yt_asset.get("youtubeVideoId", "")
+
+            # 審査ステータス取得
+            p_summary = aga.get("policySummary", {})
+            approval = p_summary.get("approvalStatus", "UNKNOWN")
+            topics = [e.get("topic", "") for e in p_summary.get("policyTopicEntries", [])]
+
+            demand_gen_ads.append({
+                "resource_name": aga.get("resourceName", ""),
+                "ad_id": ad_data.get("id", ""),
+                "status": aga.get("status", ""),
+                "headlines": headlines,
+                "long_headlines": long_headlines,
+                "descriptions": descriptions,
+                "business_name": business_name,
+                "final_url": final_url,
+                "youtube_video_id": youtube_video_id,
+                "youtube_video_url": f"https://www.youtube.com/watch?v={youtube_video_id}" if youtube_video_id else "",
+                "logo_image_url": "",
+                "approval_status": approval,
+                "policy_topics": topics,
+            })
+
+        # 2. もしGoogle広告APIから1件も取得できなかった場合、最後のフォールバックとしてDBキャッシュを返す
+        if not demand_gen_ads:
+            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+            if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
+                print(f"[youtube-ad-details] フォールバック - DBキャッシュから優先ロード完了: {db_content}")
+                db_vid_id = db_content.get("youtube_video_id", "")
+                db_vid_url = db_content.get("youtube_video_url", "")
+                if not db_vid_id and db_vid_url:
+                    db_vid_id = _extract_youtube_video_id(db_vid_url)
+                demand_gen_ads.append({
+                    "resource_name": "", # 新規追加扱い
+                    "ad_id": "",
+                    "status": "ENABLED",
+                    "headlines":      db_content.get("headlines", []),
+                    "long_headlines": db_content.get("long_headlines", []),
+                    "descriptions":   db_content.get("descriptions", []),
+                    "business_name":  db_content.get("business_name", ""),
+                    "final_url":      db_content.get("final_url", ""),
+                    "youtube_video_id": db_vid_id,
+                    "youtube_video_url": db_vid_url,
+                    "logo_image_url":   db_content.get("logo_image_url", ""),
+                    "approval_status": "UNKNOWN",
+                    "policy_topics": [],
+                })
+
+        return {
+            "success": True,
+            "mock": False,
+            "demand_gen_ads": demand_gen_ads,
+        }
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"[youtube-ad-details] エラー (超安全フォールバックに入ります): {tb}")
+        demand_gen_ads = []
+        try:
+            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
+            if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
+                print(f"[youtube-ad-details] 例外フォールバック — DBから優先ロード完了: {db_content}")
+                db_vid_id = db_content.get("youtube_video_id", "")
+                db_vid_url = db_content.get("youtube_video_url", "")
+                if not db_vid_id and db_vid_url:
+                    db_vid_id = _extract_youtube_video_id(db_vid_url)
+                demand_gen_ads.append({
+                    "resource_name": "",
+                    "ad_id": "",
+                    "status": "ENABLED",
+                    "headlines":      db_content.get("headlines", []),
+                    "long_headlines": db_content.get("long_headlines", []),
+                    "descriptions":   db_content.get("descriptions", []),
+                    "business_name":  db_content.get("business_name", ""),
+                    "final_url":      db_content.get("final_url", ""),
+                    "youtube_video_id": db_vid_id,
+                    "youtube_video_url": db_vid_url,
+                    "logo_image_url":   db_content.get("logo_image_url", ""),
+                    "note": f"Google広告API連携中のエラーにより、一時的に保存されているデータをロードしました。({e})",
+                    "approval_status": "UNKNOWN",
+                    "policy_topics": [],
+                })
+        except Exception as e_inner:
+            print(f"[youtube-ad-details] 例外フォールバック中のDB取得失敗: {e_inner}")
+            
+        return {
+            "success": True,
+            "mock": False,
+            "demand_gen_ads": demand_gen_ads,
+        }
+
 @app.get("/api/performance-heatmap")
 async def performance_heatmap(clinic_id: int = 1):
     """
@@ -6935,6 +7139,7 @@ class YouTubeAdUpdateReq(BaseModel):
     final_url: str
     youtube_video_url: str = ""   # 動画URLが削除された場合に新URLを指定
     logo_image_url: str = ""      # ロゴ画像URL（必須フィールド）
+    ad_resource_name: str = ""    # 更新対象の広告のresource_name (空の場合は新規追加)
 
 
 def _gaql_search(client, query: str, token: str) -> list:
@@ -6995,196 +7200,12 @@ _YT_AD_GAQL = """
 """
 
 
-@app.get("/api/campaigns/{campaign_id}/youtube-ad-details")
-async def get_youtube_ad_details(campaign_id: str, request: Request):
-    """YouTube広告（Demand Gen）の広告詳細を取得する"""
-    import traceback
-    clinic_id = int(request.query_params.get("clinic_id", "1"))
-    try:
-        acc = _require_account(clinic_id)
-        client = _get_ads_client(acc, "google")
 
-        # ローカルDBからGoogle IDを解決
-        try:
-            campaign = _resolve_campaign(campaign_id, clinic_id)
-            g_id = campaign.get("google_campaign_id") or campaign_id
-        except HTTPException:
-            raise
-        except Exception:
-            g_id = campaign_id
-
-        if client.mock_mode:
-            return {
-                "success": True,
-                "mock": True,
-                "headlines": ["モック見出し1", "モック見出し2"],
-                "long_headlines": ["モック長い見出し"],
-                "descriptions": ["モック説明文1"],
-                "business_name": "モック整体院",
-                "final_url": "https://example.com",
-                "youtube_video_id": "dQw4w9WgXcQ",
-            }
-
-        # 【超重要】Google広告API（GAQL）の遅延や型判定エラーに左右されないよう、
-        # ローカルDBに保存されている値を最優先でそのまま返す。これによって100%データが復元されます。
-        db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
-        if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
-            print(f"[youtube-ad-details] DBから優先ロード完了: {db_content}")
-            db_vid_id = db_content.get("youtube_video_id", "")
-            db_vid_url = db_content.get("youtube_video_url", "")
-            if not db_vid_id and db_vid_url:
-                db_vid_id = _extract_youtube_video_id(db_vid_url)
-            return {
-                "success": True,
-                "mock": False,
-                "headlines":      db_content.get("headlines", []),
-                "long_headlines": db_content.get("long_headlines", []),
-                "descriptions":   db_content.get("descriptions", []),
-                "business_name":  db_content.get("business_name", ""),
-                "final_url":      db_content.get("final_url", ""),
-                "youtube_video_id": db_vid_id,
-                "youtube_video_url": db_vid_url,
-                "logo_image_url":   db_content.get("logo_image_url", ""),
-            }
-
-        # DBに何も無い場合のみ、最後のフォールバックとしてGoogle広告（GAQL）から取得を試みる
-        token = client._get_rest_access_token()
-        query = _YT_AD_GAQL.format(campaign_id=g_id)
-        print(f"[youtube-ad-details] フォールバックGAQL開始 campaign_id={campaign_id} -> g_id={g_id}")
-        rows = _gaql_search(client, query, token)
-        print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
-
-        if not rows:
-            fallback_query = f"""
-                SELECT ad_group_ad.resource_name,
-                       ad_group_ad.ad.id,
-                       ad_group_ad.ad_group,
-                       ad_group_ad.ad.final_urls,
-                       ad_group_ad.status
-                FROM ad_group_ad
-                WHERE campaign.id = {g_id}
-                AND ad_group_ad.status != REMOVED
-                LIMIT 5
-            """
-            fallback_rows = _gaql_search(client, fallback_query, token)
-            if not fallback_rows:
-                return {
-                    "success": True,
-                    "mock": False,
-                    "headlines": [],
-                    "long_headlines": [],
-                    "descriptions": [],
-                    "business_name": "",
-                    "final_url": "",
-                    "youtube_video_id": "",
-                    "note": "この campaign に広告がまだ作成されていません。新しい内容を入力して保存できます。",
-                }
-            fb_ad = fallback_rows[0].get("adGroupAd", {}).get("ad", {})
-            fb_urls = fb_ad.get("finalUrls", [])
-            return {
-                "success": True,
-                "mock": False,
-                "headlines":      [],
-                "long_headlines": [],
-                "descriptions":   [],
-                "business_name":  "",
-                "final_url":      fb_urls[0] if fb_urls else "",
-                "youtube_video_id": "",
-                "youtube_video_url": "",
-                "logo_image_url":   "",
-            }
-
-        ad_data = rows[0].get("adGroupAd", {}).get("ad", {})
-        dg = ad_data.get("demandGenVideoResponsiveAd") or {}
-
-        headlines = [h.get("text", "") for h in dg.get("headlines", [])]
-        long_headlines = [lh.get("text", "") for lh in dg.get("longHeadlines", [])]
-        descriptions = [d.get("text", "") for d in dg.get("descriptions", [])]
-        
-        business_name_val = dg.get("businessName", "")
-        if isinstance(business_name_val, dict):
-            business_name = business_name_val.get("text", "")
-        else:
-            business_name = str(business_name_val) if business_name_val else ""
-            
-        final_urls = ad_data.get("finalUrls", [])
-        final_url = final_urls[0] if final_urls else ""
-
-        # 動画アセットからYouTube動画IDを抽出（asset resource nameのみ取得可能）
-        videos = dg.get("videos", [])
-        youtube_video_id = ""
-        if videos:
-            video_asset_rn = videos[0].get("asset", "")
-            if video_asset_rn:
-                asset_query = f"""
-                    SELECT asset.youtube_video_asset.youtube_video_id
-                    FROM asset
-                    WHERE asset.resource_name = '{video_asset_rn}'
-                """
-                asset_rows = _gaql_search(client, asset_query, token)
-                if asset_rows:
-                    yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
-                    youtube_video_id = yt_asset.get("youtubeVideoId", "")
-
-        return {
-            "success": True,
-            "mock": False,
-            "headlines": headlines,
-            "long_headlines": long_headlines,
-            "descriptions": descriptions,
-            "business_name": business_name,
-            "final_url": final_url,
-            "youtube_video_id": youtube_video_id,
-            "youtube_video_url": f"https://www.youtube.com/watch?v={youtube_video_id}" if youtube_video_id else "",
-            "logo_image_url": "",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        tb = traceback.format_exc()
-        print(f"[youtube-ad-details] エラー (超安全フォールバックに入ります): {tb}")
-        try:
-            db_content = db.get_youtube_ad_content(clinic_id, str(g_id))
-            if db_content and (db_content.get("headlines") or db_content.get("business_name") or db_content.get("youtube_video_url")):
-                print(f"[youtube-ad-details] 例外フォールバック — DBから優先ロード完了: {db_content}")
-                db_vid_id = db_content.get("youtube_video_id", "")
-                db_vid_url = db_content.get("youtube_video_url", "")
-                if not db_vid_id and db_vid_url:
-                    db_vid_id = _extract_youtube_video_id(db_vid_url)
-                return {
-                    "success": True,
-                    "mock": False,
-                    "headlines":      db_content.get("headlines", []),
-                    "long_headlines": db_content.get("long_headlines", []),
-                    "descriptions":   db_content.get("descriptions", []),
-                    "business_name":  db_content.get("business_name", ""),
-                    "final_url":      db_content.get("final_url", ""),
-                    "youtube_video_id": db_vid_id,
-                    "youtube_video_url": db_vid_url,
-                    "logo_image_url":   db_content.get("logo_image_url", ""),
-                    "note": f"Google広告API連携中のエラーにより、一時的に保存されているデータをロードしました。({e})",
-                }
-        except Exception as e_inner:
-            print(f"[youtube-ad-details] 例外フォールバック中のDB取得失敗: {e_inner}")
-            
-        return {
-            "success": True,
-            "mock": False,
-            "headlines": [],
-            "long_headlines": [],
-            "descriptions": [],
-            "business_name": "",
-            "final_url": "",
-            "youtube_video_id": "",
-            "youtube_video_url": "",
-            "logo_image_url": "",
-            "note": f"一時的な接続エラーです。新しい広告構成を入力できます。({e})",
-        }
 
 
 @app.put("/api/campaigns/{campaign_id}/youtube-ad-update")
 async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
-    """YouTube広告（Demand Gen）の広告文を更新する（旧広告削除→新広告作成）"""
+    """YouTube広告（Demand Gen）の広告文を更新または新規追加する"""
     import traceback
     try:
         acc = _require_account(req.clinic_id)
@@ -7201,7 +7222,7 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         if client.mock_mode:
             return {
                 "success": True, "mock": True,
-                "message": "[モック] YouTube広告を更新しました",
+                "message": "[モック] YouTube広告を更新/追加しました",
                 "headlines": req.headlines, "long_headlines": req.long_headlines,
                 "descriptions": req.descriptions, "business_name": req.business_name,
                 "final_url": req.final_url,
@@ -7210,19 +7231,34 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
         token = client._get_rest_access_token()
         CID = client.customer_id
 
-        # ① 既存広告をGAQLで取得（失敗しても続行）
-        rows = _gaql_search(client, _YT_AD_GAQL.format(campaign_id=g_id), token)
-        print(f"[youtube-ad-update] GAQL rows={len(rows)} for g_id={g_id}")
+        # 指定された resource_name または新規追加フラグ
+        old_resource_name = req.ad_resource_name
+        if old_resource_name == "__CREATE_NEW__":
+            old_resource_name = ""
 
-        old_resource_name = ""
+        # ① 既存広告をGAQLで取得
+        rows = _gaql_search(client, _YT_AD_GAQL.format(campaign_id=g_id), token)
+        print(f"[youtube-ad-update] GAQL rows={len(rows)} for g_id={g_id} (target_resource={old_resource_name})")
+
         ad_group_rn = ""
         call_to_action = "LEARN_MORE"
         video_asset_resource = ""
 
+        target_row = None
         if rows:
-            row = rows[0]
-            ad_group_ad = row.get("adGroupAd", {})
-            old_resource_name = ad_group_ad.get("resourceName", "")
+            if old_resource_name:
+                for r in rows:
+                    if r.get("adGroupAd", {}).get("resourceName") == old_resource_name:
+                        target_row = r
+                        break
+            else:
+                # 指定がない場合は、後方互換として最初の1件を上書きターゲットにする
+                target_row = rows[0]
+                if req.ad_resource_name != "__CREATE_NEW__":
+                    old_resource_name = target_row.get("adGroupAd", {}).get("resourceName", "")
+
+        if target_row:
+            ad_group_ad = target_row.get("adGroupAd", {})
             ad_group_rn = ad_group_ad.get("adGroup", "")
             old_dg = ad_group_ad.get("ad", {}).get("demandGenVideoResponsiveAd", {})
             call_to_action = old_dg.get("callToAction", "LEARN_MORE")
@@ -7417,6 +7453,35 @@ async def update_youtube_ad(campaign_id: str, req: YouTubeAdUpdateReq):
     except Exception as e:
         print(f"[youtube-ad-update] エラー: {traceback.format_exc()}")
         raise HTTPException(500, f"YouTube広告更新エラー: {str(e)}")
+
+
+class YouTubeAdDeleteReq(BaseModel):
+    clinic_id: int = 1
+    ad_resource_name: str
+
+
+@app.post("/api/campaigns/{campaign_id}/youtube-ad-delete")
+async def delete_youtube_ad(campaign_id: str, req: YouTubeAdDeleteReq):
+    """YouTube広告（Demand Gen）の特定の広告を削除する"""
+    import traceback
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        if client.mock_mode:
+            return {"success": True, "mock": True, "message": "[モック] 広告を削除しました"}
+
+        token = client._get_rest_access_token()
+        
+        # Google広告上で削除（remove）
+        res = _rest_mutate(client, "adGroupAds", [{"remove": req.ad_resource_name}], token)
+        print(f"[youtube-ad-delete] 広告削除完了: {req.ad_resource_name} res={res}")
+
+        db.create_alert(req.clinic_id, f"YouTube広告を削除しました (campaign_id: {campaign_id})", level="INFO")
+        return {"success": True, "message": "広告を削除しました"}
+    except Exception as e:
+        print(f"[youtube-ad-delete] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"YouTube広告削除エラー: {str(e)}")
 
 
 # ── コンバージョントラッキング状態確認 ──────────────────────────────

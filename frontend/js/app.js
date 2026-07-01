@@ -1404,7 +1404,10 @@ function renderCampDrawer(d) {
     // 2. 全体ステータスの判定
     const hasDisapprovedAsset = ps.assets && ps.assets.some(a => a.approval_status === 'DISAPPROVED');
     const adDisapproved = ps.ad_approval === 'DISAPPROVED';
-    const isUnderReview = (ps.ad_approval === 'UNDER_REVIEW') || (ps.assets && ps.assets.some(a => a.approval_status === 'UNDER_REVIEW'));
+    const isUnderReview = (ps.ad_approval === 'UNDER_REVIEW' || ps.ad_approval === 'REVIEW_IN_PROGRESS') || 
+                          (ps.assets && ps.assets.some(a => a.approval_status === 'UNDER_REVIEW' || a.approval_status === 'REVIEW_IN_PROGRESS'));
+    const adApprovedLimited = ps.ad_approval === 'APPROVED_LIMITED';
+    const hasApprovedLimitedAsset = ps.assets && ps.assets.some(a => a.approval_status === 'APPROVED_LIMITED');
 
     let statusHeaderHtml = '';
     if (adDisapproved || hasDisapprovedAsset) {
@@ -1426,6 +1429,17 @@ function renderCampDrawer(d) {
           </div>
           <p style="font-size:11px; color:#b45309; line-height:1.5; margin:0;">
             現在Google広告側で掲載準備（審査）を行っています。通常数時間〜1日程度で自動的に配信が始まりますので、このままお待ちください。
+          </p>
+        </div>
+      `;
+    } else if (adApprovedLimited || hasApprovedLimitedAsset) {
+      statusHeaderHtml = `
+        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:8px; color:#d97706; font-weight:bold; font-size:14px; margin-bottom:6px;">
+            <span>🟡 有効 (制限付き)</span>
+          </div>
+          <p style="font-size:11px; color:#b45309; line-height:1.5; margin:0;">
+            広告は承認されましたが、医療関連のポリシー等により配信対象や地域が一部制限されています。現在配信自体は行われておりますのでご安心ください。
           </p>
         </div>
       `;
@@ -1598,8 +1612,64 @@ function renderCampDrawer(d) {
           <input type="number" id="manualLocRadius" value="8" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
         </div>
         <div id="manualLocGeoGroup" style="display:none; margin-bottom:8px">
-          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">対象地域 (カンマ区切り)</label>
-          <input type="text" id="manualLocGeos" placeholder="藤枝市, 焼津市" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+          <div style="display:flex; gap:6px; margin-bottom:6px">
+            <div style="flex:1">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">都道府県</label>
+              <select id="manualLocPref" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+                <option value="静岡県" selected>静岡県</option>
+                <option value="愛知県">愛知県</option>
+                <option value="東京都">東京都</option>
+                <option value="神奈川県">神奈川県</option>
+                <option value="埼玉県">埼玉県</option>
+                <option value="千葉県">千葉県</option>
+                <option value="山梨県">山梨県</option>
+                <option value="長野県">長野県</option>
+                <option value="岐阜県">岐阜県</option>
+                <option value="三重県">三重県</option>
+                <option value="大阪府">大阪府</option>
+                <option value="京都府">京都府</option>
+                <option value="兵庫県">兵庫県</option>
+                <option value="北海道">北海道</option>
+                <option value="青森県">青森県</option>
+                <option value="岩手県">岩手県</option>
+                <option value="宮城県">宮城県</option>
+                <option value="秋田県">秋田県</option>
+                <option value="山形県">山形県</option>
+                <option value="福島県">福島県</option>
+                <option value="茨城県">茨城県</option>
+                <option value="栃木県">栃木県</option>
+                <option value="群馬県">群馬県</option>
+                <option value="新潟県">新潟県</option>
+                <option value="富山県">富山県</option>
+                <option value="石川県">石川県</option>
+                <option value="福井県">福井県</option>
+                <option value="滋賀県">滋賀県</option>
+                <option value="奈良県">奈良県</option>
+                <option value="和歌山県">和歌山県</option>
+                <option value="鳥取県">鳥取県</option>
+                <option value="島根県">島根県</option>
+                <option value="岡山県">岡山県</option>
+                <option value="広島県">広島県</option>
+                <option value="山口県">山口県</option>
+                <option value="徳島県">徳島県</option>
+                <option value="香川県">香川県</option>
+                <option value="愛媛県">愛媛県</option>
+                <option value="高知県">高知県</option>
+                <option value="福岡県">福岡県</option>
+                <option value="佐賀県">佐賀県</option>
+                <option value="長崎県">長崎県</option>
+                <option value="熊本県">熊本県</option>
+                <option value="大分県">大分県</option>
+                <option value="宮崎県">宮崎県</option>
+                <option value="鹿児島県">鹿児島県</option>
+                <option value="沖縄県">沖縄県</option>
+              </select>
+            </div>
+            <div style="flex:2">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">市区町村名 (カンマ区切り)</label>
+              <input type="text" id="manualLocGeos" placeholder="藤枝市, 焼津市" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+            </div>
+          </div>
         </div>
         <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="applyManualLocation()">設定を適用</button>
       </div>
@@ -1761,17 +1831,22 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
 
   try {
     const dg = await api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`);
+    const ads = dg.demand_gen_ads || [];
 
-    // APIがDB保存内容を含めて返すので、dg を直接使用（localStorage はバックアップのみ）
-    const storageKey = `ytAd_${googleCampaignId}`;
-    const storageKeyFallback = campaignName ? `ytAd_${campaignName}` : '';
-    let saved = {};
-    try { 
-      saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
-      if ((!saved.headlines || !saved.headlines.length) && storageKeyFallback) {
-        saved = JSON.parse(localStorage.getItem(storageKeyFallback) || '{}');
-      }
-    } catch(e) {}
+    // アコーディオン開閉ヘルパーをグローバル登録
+    if (!window._ytAccordionsRegistered) {
+      window.toggleYtAdAccordion = function(index) {
+        const el = document.getElementById(`ytAdAccordionContent_${index}`);
+        if (el) {
+          const isVisible = el.style.display === 'block';
+          document.querySelectorAll('.yt-ad-accordion-content').forEach(content => {
+            content.style.display = 'none';
+          });
+          el.style.display = isVisible ? 'none' : 'block';
+        }
+      };
+      window._ytAccordionsRegistered = true;
+    }
 
     const isEffectivelyEmpty = (arr) => {
       if (!arr || !arr.length) return true;
@@ -1785,188 +1860,230 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
       return String(val).trim();
     };
 
-    const merged = {
-      business_name:    getStr(dg.business_name)    || getStr(saved.business_name)    || '',
-      final_url:        getStr(dg.final_url)        || getStr(saved.final_url)        || '',
-      youtube_video_id: getStr(dg.youtube_video_id) || getStr(saved.youtube_video_id) || '',
-      youtube_video_url: getStr(dg.youtube_video_url) || getStr(saved.youtube_video_url) || (dg.youtube_video_id ? 'https://www.youtube.com/watch?v=' + dg.youtube_video_id : ''),
-      logo_image_url:   getStr(dg.logo_image_url)   || getStr(saved.logo_image_url)   || '',
-      headlines:        !isEffectivelyEmpty(dg.headlines)      ? dg.headlines      : (saved.headlines      || []),
-      long_headlines:   !isEffectivelyEmpty(dg.long_headlines) ? dg.long_headlines  : (saved.long_headlines  || []),
-      descriptions:     !isEffectivelyEmpty(dg.descriptions)   ? dg.descriptions   : (saved.descriptions   || []),
-    };
-
-    // 過去の不良データ救済ロジック：動画IDが空でURLがある場合、自動抽出して補完
-    if (!merged.youtube_video_id && merged.youtube_video_url) {
-      const match = merged.youtube_video_url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([^&\n?#]+)/);
-      if (match) {
-        merged.youtube_video_id = match[1];
-      }
-    }
-
-    const hasContent = !!(merged.business_name || merged.headlines.length);
-    console.log('[ytAdForm] dg=', dg, 'merged=', merged);
-    
-    const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
+    const makeTextareas = (items, id, placeholder, maxLen, maxItems, index) => {
       let html = '';
       for (let i = 0; i < maxItems; i++) {
         const val = (items && items[i]) || '';
-        html += `<textarea id="${id}_${i}" maxlength="${maxLen}" placeholder="${placeholder}${i+1}" 
+        html += `<textarea id="${id}_${index}_${i}" maxlength="${maxLen}" placeholder="${placeholder}${i+1}" 
           style="width:100%;height:36px;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:4px;resize:vertical">${val}</textarea>`;
       }
       return html;
     };
 
-    container.innerHTML = `
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
-        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(merged.business_name || '').replace(/"/g, '&quot;')}"
-          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
-      </div>
+    let formHtml = '';
 
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🔗 ランディングページURL</label>
-        <input type="url" id="ytEditFinalUrl" value="${(merged.final_url || '').replace(/"/g, '&quot;')}"
-          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
-          placeholder="https://example.com/booking">
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画URL <span style="color:#f59e0b;font-weight:normal">（削除済みの場合は新しいURLを入力）</span></label>
-        <input type="url" id="ytEditVideoUrl"
-          value="${(merged.youtube_video_url || '').replace(/"/g, '&quot;')}"
-          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
-          placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
-        ${merged.youtube_video_url ? `
-          <a href="${merged.youtube_video_url}" target="_blank" class="btn btn-secondary" 
-             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:6px;font-size:11px;padding:6px;background:#1e293b;border-color:#334155;color:#e2e8f0;text-decoration:none;border-radius:4px">
-            📺 YouTubeで動画を確認する (別タブ) ↗
-          </a>
-        ` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL <span style="color:#ef4444;font-weight:normal">（必須 — 院のロゴ画像の直リンクURL）</span></label>
-        <input type="url" id="ytEditLogoUrl"
-          value="${(merged.logo_image_url || '').replace(/"/g, '&quot;')}"
-          style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
-          placeholder="https://example.com/logo.png">
-        <p style="font-size:10px;color:var(--text-3);margin:3px 0 0">Googleドライブ・Instagram等の画像URLをコピーして貼り付け</p>
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
-        ${makeTextareas(merged.headlines, 'ytEditHeadline', '見出し', 40, 5)}
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 長い見出し（最大5件・各90文字）</label>
-        ${makeTextareas(merged.long_headlines, 'ytEditLongHeadline', '長い見出し', 90, 5)}
-      </div>
-
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 説明文（最大5件・各90文字）</label>
-        ${makeTextareas(merged.descriptions, 'ytEditDesc', '説明文', 90, 5)}
-      </div>
-
-      <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:4px" onclick="saveYouTubeAdChanges('${googleCampaignId}')">
-        💾 YouTube広告を更新する
-      </button>
-      <div id="ytEditResult" style="margin-top:8px"></div>
-      
-      <!-- 🛠️ トラブルシューティング用デバッグパネル -->
-      <div style="margin-top:20px;padding:10px;background:#0f172a;border:1px solid #334155;border-radius:6px;font-family:monospace;font-size:10px;color:#38bdf8;text-align:left;">
-        <div style="font-weight:bold;margin-bottom:6px;color:#f43f5e;border-bottom:1px solid #1e293b;padding-bottom:4px">🛠️ デバッグログ (開発者用)</div>
-        <div>CampaignID: ${googleCampaignId}</div>
-        <div>CampaignName: ${campaignName || 'N/A'}</div>
-        <div style="margin-top:4px"><strong>API Response (dg):</strong></div>
-        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(dg, null, 2)}</pre>
-        <div style="margin-top:4px"><strong>LocalStorage (saved):</strong></div>
-        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(saved, null, 2)}</pre>
-        <div style="margin-top:4px"><strong>Merged Data:</strong></div>
-        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(merged, null, 2)}</pre>
-      </div>
-    `;
-  } catch (e) {
-    // APIエラー時も同様にデバッグダンプを表示
-    const hasSaved = Object.keys(saved).length > 0;
-    const errPanel = `
-      <div style="margin-top:20px;padding:10px;background:#0f172a;border:1px solid #f43f5e;border-radius:6px;font-family:monospace;font-size:10px;color:#f43f5e;text-align:left;">
-        <div style="font-weight:bold;margin-bottom:6px;color:#f43f5e;border-bottom:1px solid #1e293b;padding-bottom:4px">⚠️ 取得例外ログ (開発者用)</div>
-        <div>CampaignID: ${googleCampaignId}</div>
-        <div>CampaignName: ${campaignName || 'N/A'}</div>
-        <div style="margin-top:4px;color:#ef4444;"><strong>Error Message:</strong> ${e.message}</div>
-        <div style="margin-top:4px"><strong>Error Stack:</strong></div>
-        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#f43f5e;border:1px solid #f43f5e;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${e.stack || ''}</pre>
-        <div style="margin-top:4px;color:#38bdf8;"><strong>LocalStorage (saved):</strong></div>
-        <pre style="width:100%;max-height:120px;overflow-y:auto;font-size:9px;background:#1e293b;color:#10b981;border:1px solid #475569;border-radius:4px;margin:2px 0;padding:4px;white-space:pre-wrap;word-break:break-all">${JSON.stringify(saved, null, 2)}</pre>
-      </div>
-    `;
-    if (hasSaved) {
-      const makeTextareas = (items, id, placeholder, maxLen, maxItems) => {
-        let html = '';
-        for (let i = 0; i < maxItems; i++) {
-          const val = (items && items[i]) || '';
-          html += `<textarea id="${id}_${i}" maxlength="${maxLen}" placeholder="${placeholder}${i+1}" 
-            style="width:100%;height:36px;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;margin-bottom:4px;resize:vertical">${val}</textarea>`;
-        }
-        return html;
+    // ① 各広告（クリエイティブ）をレンダリング
+    ads.forEach((ad, index) => {
+      const merged = {
+        business_name:    getStr(ad.business_name)    || '',
+        final_url:        getStr(ad.final_url)        || '',
+        youtube_video_id: getStr(ad.youtube_video_id) || '',
+        youtube_video_url: getStr(ad.youtube_video_url) || (ad.youtube_video_id ? 'https://www.youtube.com/watch?v=' + ad.youtube_video_id : ''),
+        logo_image_url:   getStr(ad.logo_image_url)   || '',
+        headlines:        !isEffectivelyEmpty(ad.headlines)      ? ad.headlines      : [],
+        long_headlines:   !isEffectivelyEmpty(ad.long_headlines) ? ad.long_headlines  : [],
+        descriptions:     !isEffectivelyEmpty(ad.descriptions)   ? ad.descriptions   : [],
       };
-      container.innerHTML = `
-        <div style="font-size:11px;color:#f59e0b;padding:6px 8px;background:rgba(245,158,11,0.1);border-radius:4px;margin-bottom:10px">⚠️ API取得失敗 — 前回の保存内容を表示中</div>
-        <input type="text" id="ytEditBusinessName" maxlength="25" value="${(saved.business_name||'').replace(/"/g,'&quot;')}" placeholder="ビジネス名" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
-        <input type="url" id="ytEditFinalUrl" value="${(saved.final_url||'').replace(/"/g,'&quot;')}" placeholder="ランディングページURL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
-        <input type="url" id="ytEditVideoUrl" value="${(saved.youtube_video_url||'').replace(/"/g,'&quot;')}" placeholder="YouTube動画URL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
-        <input type="url" id="ytEditLogoUrl" value="${(saved.logo_image_url||'').replace(/"/g,'&quot;')}" placeholder="ロゴ画像URL" style="width:100%;padding:6px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">見出し</div>${makeTextareas(saved.headlines,'ytEditHeadline','見出し',40,5)}
-        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold;margin-top:8px">長い見出し</div>${makeTextareas(saved.long_headlines,'ytEditLongHeadline','長い見出し',90,5)}
-        <div style="font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold;margin-top:8px">説明文</div>${makeTextareas(saved.descriptions,'ytEditDesc','説明文',90,5)}
-        <button class="btn btn-primary" id="btnSaveYtAd" style="width:100%;font-size:13px;padding:10px;margin-top:8px" onclick="saveYouTubeAdChanges('${googleCampaignId}')">💾 YouTube広告を更新する</button>
-        <div id="ytEditResult" style="margin-top:8px"></div>
-        ${errPanel}
+
+      // 過去の不良データ救済ロジック
+      if (!merged.youtube_video_id && merged.youtube_video_url) {
+        const match = merged.youtube_video_url.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([^&\n?#]+)/);
+        if (match) {
+          merged.youtube_video_id = match[1];
+        }
+      }
+
+      // 審査ステータス装飾
+      const appStatus = ad.approval_status || 'UNKNOWN';
+      let statusBadgeColor = 'background:#4b5563;color:#f3f4f6'; // UNKNOWN
+      let statusText = '⏳ 判定中';
+      if (appStatus === 'APPROVED') {
+        statusBadgeColor = 'background:#065f46;color:#34d399';
+        statusText = '🟢 承認済み';
+      } else if (appStatus === 'APPROVED_LIMITED') {
+        statusBadgeColor = 'background:#78350f;color:#fbbf24';
+        statusText = '🟡 制限付き承認';
+      } else if (appStatus === 'DISAPPROVED') {
+        statusBadgeColor = 'background:#991b1b;color:#fca5a5';
+        statusText = '🔴 却下 (要修正)';
+      } else if (appStatus === 'REVIEW_IN_PROGRESS') {
+        statusBadgeColor = 'background:#78350f;color:#fbbf24';
+        statusText = '⏳ 審査中';
+      }
+
+      formHtml += `
+        <div class="yt-ad-card" style="border:1px solid var(--border);border-radius:6px;margin-bottom:10px;background:#1e293b;overflow:hidden">
+          <div onclick="toggleYtAdAccordion(${index})" style="padding:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
+            <span style="font-weight:bold;font-size:12px;color:#fff">📺 クリエイティブ #${index+1} (${merged.business_name || '名称未設定'})</span>
+            <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:bold;${statusBadgeColor}">${statusText}</span>
+          </div>
+          
+          <div id="ytAdAccordionContent_${index}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px solid var(--border);display:${index === 0 ? 'block' : 'none'}">
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
+              <input type="text" id="ytEditBusinessName_${index}" maxlength="25" value="${(merged.business_name || '').replace(/"/g, '&quot;')}"
+                style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🔗 ランディングページURL</label>
+              <input type="url" id="ytEditFinalUrl_${index}" value="${(merged.final_url || '').replace(/"/g, '&quot;')}"
+                style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+                placeholder="https://example.com/booking">
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画URL</label>
+              <input type="url" id="ytEditVideoUrl_${index}" value="${(merged.youtube_video_url || '').replace(/"/g, '&quot;')}"
+                style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+                placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
+              ${merged.youtube_video_url ? `
+                <a href="${merged.youtube_video_url}" target="_blank" class="btn btn-secondary" 
+                   style="display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:6px;font-size:11px;padding:6px;background:#1e293b;border-color:#334155;color:#e2e8f0;text-decoration:none;border-radius:4px">
+                  📺 YouTubeで動画を確認する (別タブ) ↗
+                </a>
+              ` : '<p style="font-size:11px;color:#f59e0b;margin:4px 0 0">⚠️ 動画が見つかりません。新しいYouTube動画URLを入力してください。</p>'}
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL</label>
+              <input type="url" id="ytEditLogoUrl_${index}" value="${(merged.logo_image_url || '').replace(/"/g, '&quot;')}"
+                style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+                placeholder="https://example.com/logo.png">
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
+              ${makeTextareas(merged.headlines, 'ytEditHeadline', '見出し', 40, 5, index)}
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 長い見出し（最大5件・各90文字）</label>
+              ${makeTextareas(merged.long_headlines, 'ytEditLongHeadline', '長い見出し', 90, 5, index)}
+            </div>
+
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 説明文（最大5件・各90文字）</label>
+              ${makeTextareas(merged.descriptions, 'ytEditDesc', '説明文', 90, 5, index)}
+            </div>
+
+            <div style="display:flex;gap:6px;margin-top:10px">
+              <button class="btn btn-primary" id="btnSaveYtAd_${index}" style="flex:2;font-size:12px;padding:8px" onclick="saveYouTubeAdChanges('${googleCampaignId}', '${ad.resource_name || ''}', ${index})">
+                💾 広告を保存・更新
+              </button>
+              ${ad.resource_name ? `
+                <button class="btn btn-secondary" style="flex:1;font-size:12px;padding:8px;background:#7f1d1d;border-color:#991b1b;color:#fecaca" onclick="deleteYouTubeAd('${googleCampaignId}', '${ad.resource_name}', ${index})">
+                  🗑️ 削除
+                </button>
+              ` : ''}
+            </div>
+            <div id="ytEditResult_${index}" style="margin-top:8px"></div>
+          </div>
+        </div>
       `;
-    } else {
-      container.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px">
-        ❌ 広告コンテンツの取得に失敗しました: ${e.message}<br>
-        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;margin-top:8px" onclick="loadYouTubeAdEditForm('${googleCampaignId}')">🔄 再取得</button>
+    });
+
+    // ② 新規追加用の空アコーディオンカードを末尾に追加
+    const newIndex = ads.length;
+    formHtml += `
+      <div class="yt-ad-card" style="border:1px dashed #64748b;border-radius:6px;margin-bottom:10px;background:rgba(255,255,255,0.01);overflow:hidden">
+        <div onclick="toggleYtAdAccordion(${newIndex})" style="padding:10px;background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;user-select:none;color:#60a5fa">
+          <strong>➕ 新しいクリエイティブを追加する</strong>
+        </div>
+        
+        <div id="ytAdAccordionContent_${newIndex}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px dashed #64748b;display:none">
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
+            <input type="text" id="ytEditBusinessName_${newIndex}" maxlength="25" value="" placeholder="例: 整体院導"
+              style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🔗 ランディングページURL</label>
+            <input type="url" id="ytEditFinalUrl_${newIndex}" value=""
+              style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+              placeholder="https://example.com/booking">
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🎥 YouTube動画URL</label>
+            <input type="url" id="ytEditVideoUrl_${newIndex}" value=""
+              style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+              placeholder="https://www.youtube.com/watch?v=XXXXXXXXXXX">
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL</label>
+            <input type="url" id="ytEditLogoUrl_${newIndex}" value=""
+              style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
+              placeholder="https://example.com/logo.png">
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
+            ${makeTextareas([], 'ytEditHeadline', '見出し', 40, 5, newIndex)}
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 長い見出し（最大5件・各90文字）</label>
+            ${makeTextareas([], 'ytEditLongHeadline', '長い見出し', 90, 5, newIndex)}
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 説明文（最大5件・各90文字）</label>
+            ${makeTextareas([], 'ytEditDesc', '説明文', 90, 5, newIndex)}
+          </div>
+
+          <button class="btn btn-primary" id="btnSaveYtAd_${newIndex}" style="width:100%;font-size:12px;padding:8px" onclick="saveYouTubeAdChanges('${googleCampaignId}', '__CREATE_NEW__', ${newIndex})">
+            ➕ この広告を新規追加する
+          </button>
+          <div id="ytEditResult_${newIndex}" style="margin-top:8px"></div>
+        </div>
       </div>
-      ${errPanel}
-      `;
-    }
+    `;
+
+    container.innerHTML = formHtml;
+  } catch (e) {
+    container.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px">
+      ❌ 広告コンテンツの取得に失敗しました: ${e.message}<br>
+      <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;margin-top:8px" onclick="loadYouTubeAdEditForm('${googleCampaignId}', '${campaignName}')">🔄 再取得</button>
+    </div>`;
   }
 }
 window.loadYouTubeAdEditForm = loadYouTubeAdEditForm;
 
-async function saveYouTubeAdChanges(googleCampaignId) {
-  const btn = document.getElementById('btnSaveYtAd');
-  const resultDiv = document.getElementById('ytEditResult');
-  btn.disabled = true;
-  btn.textContent = '⏳ 更新中...';
-  resultDiv.innerHTML = '';
+async function saveYouTubeAdChanges(googleCampaignId, adResourceName, index) {
+  const btn = document.getElementById(`btnSaveYtAd_${index}`);
+  const resultDiv = document.getElementById(`ytEditResult_${index}`);
+  if (!btn) return;
 
-  // フォームから値を収集
-  const collectValues = (prefix, count) => {
+  btn.disabled = true;
+  const isCreate = adResourceName === '__CREATE_NEW__';
+  btn.textContent = isCreate ? '⏳ 追加中...' : '⏳ 更新中...';
+  if (resultDiv) resultDiv.innerHTML = '';
+
+  const collectValues = (prefix, count, idx) => {
     const vals = [];
     for (let i = 0; i < count; i++) {
-      const el = document.getElementById(`${prefix}_${i}`);
+      const el = document.getElementById(`${prefix}_${idx}_${i}`);
       if (el && el.value.trim()) vals.push(el.value.trim());
     }
     return vals;
   };
 
-  const headlines = collectValues('ytEditHeadline', 5);
-  const longHeadlines = collectValues('ytEditLongHeadline', 5);
-  const descriptions = collectValues('ytEditDesc', 5);
-  const businessName = document.getElementById('ytEditBusinessName')?.value?.trim() || '';
-  const finalUrl = document.getElementById('ytEditFinalUrl')?.value?.trim() || '';
-  const youtubeVideoUrl = document.getElementById('ytEditVideoUrl')?.value?.trim() || '';
-  const logoImageUrl = document.getElementById('ytEditLogoUrl')?.value?.trim() || '';
+  const headlines = collectValues('ytEditHeadline', 5, index);
+  const longHeadlines = collectValues('ytEditLongHeadline', 5, index);
+  const descriptions = collectValues('ytEditDesc', 5, index);
+  const businessName = document.getElementById(`ytEditBusinessName_${index}`)?.value?.trim() || '';
+  const finalUrl = document.getElementById(`ytEditFinalUrl_${index}`)?.value?.trim() || '';
+  const youtubeVideoUrl = document.getElementById(`ytEditVideoUrl_${index}`)?.value?.trim() || '';
+  const logoImageUrl = document.getElementById(`ytEditLogoUrl_${index}`)?.value?.trim() || '';
 
-  if (!headlines.length) { toast('見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
-  if (!longHeadlines.length) { toast('長い見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
-  if (!descriptions.length) { toast('説明文を最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
-  if (!businessName) { toast('ビジネス名を入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
-  if (!finalUrl) { toast('ランディングページURLを入力してください', 'error'); btn.disabled = false; btn.textContent = '💾 YouTube広告を更新する'; return; }
+  if (!headlines.length) { toast('見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = isCreate ? '➕ 新規追加' : '💾 保存して更新'; return; }
+  if (!longHeadlines.length) { toast('長い見出しを最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = isCreate ? '➕ 新規追加' : '💾 保存して更新'; return; }
+  if (!descriptions.length) { toast('説明文を最低1つ入力してください', 'error'); btn.disabled = false; btn.textContent = isCreate ? '➕ 新規追加' : '💾 保存して更新'; return; }
+  if (!businessName) { toast('ビジネス名を入力してください', 'error'); btn.disabled = false; btn.textContent = isCreate ? '➕ 新規追加' : '💾 保存して更新'; return; }
+  if (!finalUrl) { toast('ランディングページURLを入力してください', 'error'); btn.disabled = false; btn.textContent = isCreate ? '➕ 新規追加' : '💾 保存して更新'; return; }
 
   try {
     const result = await api(`/campaigns/${googleCampaignId}/youtube-ad-update`, {
@@ -1980,31 +2097,51 @@ async function saveYouTubeAdChanges(googleCampaignId) {
         final_url: finalUrl,
         youtube_video_url: youtubeVideoUrl,
         logo_image_url: logoImageUrl,
+        ad_resource_name: adResourceName
       }),
     });
-    toast('✅ YouTube広告を更新しました！', 'success');
-    resultDiv.innerHTML = '<div style="color:#10b981;font-size:12px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px">✅ 更新完了 — Googleの再審査が行われます（通常数時間〜1日）</div>';
-    btn.textContent = '✅ 更新完了';
+    
+    toast(isCreate ? '✅ クリエイティブを追加しました！' : '✅ 広告を更新しました！', 'success');
+    if (resultDiv) {
+      resultDiv.innerHTML = `<div style="color:#10b981;font-size:12px;padding:8px;background:rgba(16,185,129,0.1);border-radius:6px">✅ ${isCreate ? '追加' : '更新'}完了 — Googleの再審査が行われます（通常数時間〜1日）</div>`;
+    }
+    btn.textContent = '✅ 完了';
 
-    // 入力内容をlocalStorageに保存（次回フォームを開いた時に復元）
-    localStorage.setItem(`ytAd_${googleCampaignId}`, JSON.stringify({
-      business_name: businessName,
-      final_url: finalUrl,
-      youtube_video_url: youtubeVideoUrl,
-      youtube_video_id: youtubeVideoUrl ? youtubeVideoUrl.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([^&\n?#]+)/)?.[1] || '' : '',
-      logo_image_url: logoImageUrl,
-      headlines,
-      long_headlines: longHeadlines,
-      descriptions,
-    }));
+    // 1.5秒後にフォームをリロードして最新のステータスに更新
+    setTimeout(() => {
+      loadYouTubeAdEditForm(googleCampaignId);
+    }, 1500);
+
   } catch(e) {
-    toast('❌ YouTube広告の更新に失敗: ' + e.message, 'error');
-    resultDiv.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px">❌ エラー: ${e.message}</div>`;
+    toast('❌ YouTube広告の送信に失敗: ' + e.message, 'error');
+    if (resultDiv) {
+      resultDiv.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px">❌ エラー: ${e.message}</div>`;
+    }
     btn.disabled = false;
-    btn.textContent = '💾 YouTube広告を更新する';
+    btn.textContent = isCreate ? '➕ この広告を新規追加する' : '💾 広告を保存・更新';
   }
 }
 window.saveYouTubeAdChanges = saveYouTubeAdChanges;
+
+async function deleteYouTubeAd(googleCampaignId, adResourceName, index) {
+  if (!adResourceName) return;
+  if (!confirm('このクリエイティブ広告を本当に削除しますか？\n（Google広告から完全に削除されます）')) return;
+
+  try {
+    await api(`/campaigns/${googleCampaignId}/youtube-ad-delete`, {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: parseInt(currentClinicId),
+        ad_resource_name: adResourceName
+      })
+    });
+    toast('✅ クリエイティブを削除しました', 'success');
+    loadYouTubeAdEditForm(googleCampaignId);
+  } catch(e) {
+    toast('❌ クリエイティブの削除に失敗: ' + e.message, 'error');
+  }
+}
+window.deleteYouTubeAd = deleteYouTubeAd;
 
 // ── 広告配信スケジュール管理 ──
 const DAY_LABELS = {MONDAY:'月',TUESDAY:'火',WEDNESDAY:'水',THURSDAY:'木',FRIDAY:'金',SATURDAY:'土',SUNDAY:'日'};
@@ -6653,11 +6790,19 @@ async function applyManualLocation() {
     bodyData.lat = 34.868;
     bodyData.lon = 138.257;
   } else {
+    const pref = document.getElementById('manualLocPref').value;
     const geosVal = document.getElementById('manualLocGeos').value.trim();
     if (!geosVal) { toast('地域名を入力してください', 'error'); return; }
     // 全角カンマやスペース、中黒などを半角カンマに正規化
     const normalizedGeos = geosVal.replace(/，/g, ',').replace(/、/g, ',').replace(/・/g, ',');
-    const geos = normalizedGeos.split(',').map(s => s.trim()).filter(Boolean);
+    const geos = normalizedGeos.split(',').map(s => {
+      let name = s.trim();
+      if (!name) return '';
+      if (!name.startsWith(pref)) {
+        name = pref + name;
+      }
+      return name;
+    }).filter(Boolean);
     bodyData.geo_targets = geos;
   }
 
