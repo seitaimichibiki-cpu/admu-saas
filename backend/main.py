@@ -6741,26 +6741,57 @@ def recommend_radius(clinic_id: int = 1):
         return R * 2 * math.asin(math.sqrt(a))
 
     def geocode_address(address: str) -> tuple:
-        """国土交通省ジオコーディングAPI（無料・無制限）を使用"""
+        """国土交通省ジオコーディングAPI（無料・無制限）を使用。失敗時は静岡県内のローカル座標辞書にフォールバック。"""
+        # A. 国土地理院APIへのリクエスト
         try:
             url = f"https://msearch.gsi.go.jp/address-search/AddressSearch?q={rq.utils.quote(address)}"
-            resp = rq.get(url, timeout=5)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            resp = rq.get(url, headers=headers, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 if data and len(data) > 0:
                     coords = data[0].get('geometry', {}).get('coordinates', [])
                     if len(coords) >= 2:
                         return float(coords[1]), float(coords[0])  # lat, lon
-        except Exception:
-            pass
+            else:
+                print(f"[geocode] API status error: {resp.status_code} for address: {address}")
+        except Exception as e_geo:
+            print(f"[geocode] API exception: {e_geo} for address: {address}")
+
+        # B. 【フォールバック】国土地理院APIが繋がらない、またはエラーの場合のローカル座標辞書
+        # 整体院導の周辺エリア（静岡県中部・東部など）を部分一致で解決
+        local_db = {
+            "藤枝": (34.868, 138.257),
+            "焼津": (34.870, 138.310),
+            "島田": (34.830, 138.170),
+            "静岡": (34.975, 138.383),
+            "牧之原": (34.730, 138.220),
+            "吉田": (34.770, 138.250),
+            "掛川": (34.769, 138.014),
+            "菊川": (34.760, 138.080),
+            "御前崎": (34.630, 138.130),
+            "袋井": (34.750, 137.920),
+            "磐田": (34.720, 137.880),
+            "浜松": (34.710, 137.720),
+        }
+        for key, coords in local_db.items():
+            if key in address:
+                print(f"[geocode] 【フォールバック成功】住所: {address} -> {key}辞書解決: {coords}")
+                return coords
+
+        print(f"[geocode] 地名解決に失敗しました: {address}")
         return None, None
 
+    print(f"[recommend-radius] 処理開始. clinic_id={clinic_id}")
     with db.get_conn() as conn:
         rows = conn.execute(
             "SELECT address_pref, address_city FROM logiction_patients "
             "WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''",
             (clinic_id,)
         ).fetchall()
+    print(f"[recommend-radius] DBから取得完了: {len(rows)} 件")
 
     distances = []
     geocoded = []
