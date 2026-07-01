@@ -6817,9 +6817,18 @@ def recommend_radius(clinic_id: int = 1):
             failed += 1
 
     if not distances:
+        # デバッグ調査用: DBの全体状況
+        with db.get_conn() as conn:
+            all_total = conn.execute("SELECT COUNT(*) FROM logiction_patients").fetchone()[0]
+            clinic_total = conn.execute("SELECT COUNT(*) FROM logiction_patients WHERE clinic_id=?", (clinic_id,)).fetchone()[0]
+            with_city = conn.execute("SELECT COUNT(*) FROM logiction_patients WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''", (clinic_id,)).fetchone()[0]
+            sample_rows = conn.execute("SELECT address_pref, address_city FROM logiction_patients WHERE clinic_id=? LIMIT 5", (clinic_id,)).fetchall()
+            samples = [f"{r[0] or ''}{r[1] or ''}" for r in sample_rows]
+            
+        print(f"[recommend-radius] 失敗デバッグ: 全体={all_total}, 院内={clinic_total}, 住所あり={with_city}, サンプル={samples}")
         return {
             "success": False,
-            "error": "ジオコーディングできた住所がありません",
+            "error": f"ジオコーディングできた住所がありません (DB総数: {all_total}件 / 院内データ: {clinic_total}件 / 有効住所: {with_city}件 / サンプル: {samples})",
             "total_patients": len(rows),
             "geocoded_count": 0,
         }
