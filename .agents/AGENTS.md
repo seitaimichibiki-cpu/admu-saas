@@ -20,3 +20,16 @@
   * Avoid parentheses `()`, brackets `【】`, and slashes `/` in headlines/descriptions. Parentheses are flagged as `SYMBOLS` and cause `POLICY_FINDING` api errors.
   * Avoid exclamation marks `!` or `！` in headlines (they are strictly prohibited). In descriptions, at most one exclamation mark is allowed per ad, but it is safer to avoid them entirely to prevent policy disapproval.
 
+## 3. PostgreSQL vs SQLite Row Unpacking (Avoid Tuples/Unpacking)
+* **Rule**: Do not unpack query results (e.g. `for pref, city in rows:`) or use index-based access (e.g. `row[0]`) for queries shared between SQLite (local) and PostgreSQL (production).
+* **Reason**: While SQLite returns rows as tuples (allowing unpacking and `row[0]`), PostgreSQL dictionary cursors return records as dictionaries or map objects. Attempting to unpack dict-like rows `for a, b in rows` assigns the **column keys** as strings to variables, causing silent data corruption. Index access like `row[0]` causes a `KeyError: 0`.
+* **Solution**: Always use explicit column aliases in SQL (e.g., `SELECT COUNT(*) as cnt`) and access values via string keys (e.g., `row["cnt"]`). When iterating, cast to dict first:
+  ```python
+  for row in rows:
+      d = dict(row)
+      pref = d.get("address_pref")
+  ```
+
+## 4. External Geocoding API Blocks & Local Fallbacks
+* **Rule**: When requesting domestic geocoding APIs (like `msearch.gsi.go.jp`) from cloud servers (Render/AWS), always include a browser-like `User-Agent` header. Additionally, implement a local keyword-to-coordinate mapping dictionary as a fail-safe fallback.
+* **Reason**: GSI APIs block requests without a `User-Agent` and often restrict overseas cloud server IPs. A fallback dictionary of major target cities (e.g. Shizuoka local areas: Fujieda, Yaizu, Shimada) ensures 100% availability even if the external API blocks the server.
