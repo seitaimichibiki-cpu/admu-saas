@@ -920,8 +920,11 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
 
     # アクセストークン取得
     try:
+        print(f"[get_campaign_detail] Token 取得開始 campaign_id={campaign_id}")
         token = client._get_rest_access_token()
+        print(f"[get_campaign_detail] Token 取得完了")
     except Exception as e:
+        print(f"[get_campaign_detail] Token 取得エラー: {e}")
         raise HTTPException(500, f"認証エラー: {e}")
 
     CID = client.customer_id
@@ -934,23 +937,34 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     }
 
     def gads_query(gaql: str):
-        resp = rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": gaql})
-        if resp.status_code != 200:
+        import time
+        start_t = time.time()
+        print(f"[gads_query] POST searchStream 開始. Query={gaql.strip()[:100]}...")
+        try:
+            resp = rq.post(f"{BASE}/googleAds:searchStream", headers=headers_rest, json={"query": gaql}, timeout=15)
+            print(f"[gads_query] POST 完了. status={resp.status_code}, time={time.time()-start_t:.2f}s")
+            if resp.status_code != 200:
+                print(f"[gads_query] エラーレスポンス: {resp.text}")
+                return []
+            rows = []
+            for batch in resp.json():
+                rows.extend(batch.get("results", []))
+            return rows
+        except Exception as e_q:
+            print(f"[gads_query] 例外発生: {e_q}, time={time.time()-start_t:.2f}s")
             return []
-        rows = []
-        for batch in resp.json():
-            rows.extend(batch.get("results", []))
-        return rows
 
     # ① キャンペーン予算 + キャンペーンタイプ
     budget_yen = 0
     campaign_type = "SEARCH"
     try:
+        print("[get_campaign_detail] ①予算・タイプ取得開始")
         camp_rows = gads_query(f"""
             SELECT campaign_budget.amount_micros, campaign.advertising_channel_type
             FROM campaign
             WHERE campaign.id = {g_id}
         """)
+        print(f"[get_campaign_detail] ①完了. rows={len(camp_rows)}")
         if camp_rows:
             budget_yen = int(camp_rows[0].get("campaignBudget", {}).get("amountMicros", 0)) // 1_000_000
             ch_type = camp_rows[0].get("campaign", {}).get("advertisingChannelType", "SEARCH")
@@ -960,12 +974,13 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                 campaign_type = "VIDEO"
             elif ch_type == "DISPLAY":
                 campaign_type = "DISPLAY"
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[get_campaign_detail] ①で例外: {e}")
 
     # ② キーワード
     keywords = []
     try:
+        print("[get_campaign_detail] ②キーワード取得開始")
         kw_rows = gads_query(f"""
             SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status
             FROM ad_group_criterion
@@ -973,6 +988,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             AND ad_group_criterion.type = KEYWORD
             AND ad_group_criterion.status != REMOVED
         """)
+        print(f"[get_campaign_detail] ②完了. rows={len(kw_rows)}")
         for row in kw_rows:
             c = row.get("adGroupCriterion", {})
             kw = c.get("keyword", {})
@@ -982,12 +998,13 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                     "match_type": kw.get("matchType", ""),
                     "status": c.get("status", ""),
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[get_campaign_detail] ②で例外: {e}")
 
     # ③ 位置ターゲティング
     location = None
     try:
+        print("[get_campaign_detail] ③位置ターゲット取得開始")
         loc_rows = gads_query(f"""
             SELECT campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
                    campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
@@ -998,6 +1015,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             WHERE campaign.id = {g_id}
             AND campaign_criterion.status != REMOVED
         """)
+        print(f"[get_campaign_detail] ③完了. rows={len(loc_rows)}")
         for row in loc_rows:
             cc = row.get("campaignCriterion", {})
             prox = cc.get("proximity", {})
@@ -1015,8 +1033,8 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             if loc.get("geoTargetConstant"):
                 location = {"type": "geo_target", "resource": loc["geoTargetConstant"]}
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[get_campaign_detail] ③で例外: {e}")
 
     # ④ 広告文（RSA + DemandGen）と審査状況
     ads = []
@@ -1025,6 +1043,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     ad_approval_global = "UNKNOWN"
     ad_policy_topics_global = []
     try:
+        print("[get_campaign_detail] ④RSA広告取得開始")
         # RSA広告の取得
         ad_rows = gads_query(f"""
             SELECT ad_group_ad.ad.responsive_search_ad.headlines,
@@ -1038,6 +1057,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             WHERE campaign.id = {g_id}
             AND ad_group_ad.status != REMOVED
         """)
+        print(f"[get_campaign_detail] ④完了. rows={len(ad_rows)}")
         for row in ad_rows:
             aga = row.get("adGroupAd", {})
             ad = aga.get("ad", {})
@@ -1068,12 +1088,13 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                     "approval_status": approval,
                     "policy_topics": topics
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[get_campaign_detail] ④で例外: {e}")
 
     # ④-B DemandGen動画広告の取得（YouTube広告編集用）
     if campaign_type == "DEMAND_GEN":
         try:
+            print("[get_campaign_detail] ④-B DemandGen広告取得開始")
             dg_rows = gads_query(f"""
                 SELECT ad_group_ad.resource_name,
                        ad_group_ad.ad.id,
@@ -1092,6 +1113,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                 AND ad_group_ad.status != REMOVED
                 LIMIT 1
             """)
+            print(f"[get_campaign_detail] ④-B完了. rows={len(dg_rows)}")
             if dg_rows:
                 dg_row = dg_rows[0]
                 dg_aga = dg_row.get("adGroupAd", {})
@@ -1133,6 +1155,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     # ⑤ キャンペーンアセットのステータス
     assets_status = []
     try:
+        print("[get_campaign_detail] ⑤アセット取得開始")
         asset_rows = gads_query(f"""
             SELECT campaign_asset.field_type,
                    campaign_asset.asset,
@@ -1146,6 +1169,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             WHERE campaign_asset.campaign = 'customers/{CID}/campaigns/{g_id}'
               AND campaign_asset.status != REMOVED
         """)
+        print(f"[get_campaign_detail] ⑤完了. rows={len(asset_rows)}")
         for row in asset_rows:
             ca = row.get("campaignAsset", {})
             asset = row.get("asset", {})
@@ -7200,7 +7224,7 @@ def _gaql_search(client, query: str, token: str) -> list:
         "login-customer-id": client._login_customer_id,
         "Content-Type": "application/json",
     }
-    resp = rq.post(url, headers=headers, json={"query": query})
+    resp = rq.post(url, headers=headers, json={"query": query}, timeout=15)
     if resp.status_code != 200:
         return []
     rows = []
@@ -7222,7 +7246,7 @@ def _rest_mutate(client, endpoint: str, operations: list, token: str) -> dict:
     }
     import json as _json
     print(f"[REST] POST {endpoint} payload={_json.dumps(operations, ensure_ascii=False)[:800]}")
-    resp = rq.post(url, headers=headers, json={"operations": operations})
+    resp = rq.post(url, headers=headers, json={"operations": operations}, timeout=15)
     if resp.status_code != 200:
         print(f"[REST] ERROR full response: {resp.text}")
         raise Exception(f"REST APIエラー [{endpoint}]: {resp.text}")
