@@ -6819,11 +6819,20 @@ def recommend_radius(clinic_id: int = 1):
     if not distances:
         # デバッグ調査用: DBの全体状況
         with db.get_conn() as conn:
-            all_total = conn.execute("SELECT COUNT(*) FROM logiction_patients").fetchone()[0]
-            clinic_total = conn.execute("SELECT COUNT(*) FROM logiction_patients WHERE clinic_id=?", (clinic_id,)).fetchone()[0]
-            with_city = conn.execute("SELECT COUNT(*) FROM logiction_patients WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''", (clinic_id,)).fetchone()[0]
+            r_all = conn.execute("SELECT COUNT(*) as cnt FROM logiction_patients").fetchone()
+            all_total = r_all["cnt"] if r_all else 0
+            
+            r_clinic = conn.execute("SELECT COUNT(*) as cnt FROM logiction_patients WHERE clinic_id=?", (clinic_id,)).fetchone()
+            clinic_total = r_clinic["cnt"] if r_clinic else 0
+            
+            r_city = conn.execute("SELECT COUNT(*) as cnt FROM logiction_patients WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''", (clinic_id,)).fetchone()
+            with_city = r_city["cnt"] if r_city else 0
+            
             sample_rows = conn.execute("SELECT address_pref, address_city FROM logiction_patients WHERE clinic_id=? LIMIT 5", (clinic_id,)).fetchall()
-            samples = [f"{r[0] or ''}{r[1] or ''}" for r in sample_rows]
+            samples = []
+            for r in sample_rows:
+                d = dict(r)
+                samples.append(f"{d.get('address_pref') or ''}{d.get('address_city') or ''}")
             
         print(f"[recommend-radius] 失敗デバッグ: 全体={all_total}, 院内={clinic_total}, 住所あり={with_city}, サンプル={samples}")
         return {
