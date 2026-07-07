@@ -33,3 +33,9 @@
 ## 4. External Geocoding API Blocks & Local Fallbacks
 * **Rule**: When requesting domestic geocoding APIs (like `msearch.gsi.go.jp`) from cloud servers (Render/AWS), always include a browser-like `User-Agent` header. Additionally, implement a local keyword-to-coordinate mapping dictionary as a fail-safe fallback.
 * **Reason**: GSI APIs block requests without a `User-Agent` and often restrict overseas cloud server IPs. A fallback dictionary of major target cities (e.g. Shizuoka local areas: Fujieda, Yaizu, Shimada) ensures 100% availability even if the external API blocks the server.
+## 5. Render Server Plan Status (No Cold Starts)
+* **Knowledge**: The Render server backend and database are running on a **paid plan** (active, non-free). It is running 24/7, and there is **no sleep mode or cold-start delay** (loads within 3 seconds). Do not mention or warn about sleep delays or server cold-starts in future conversations.
+
+## 6. Patient Segmentation: Referral vs. Ads Target
+* **Knowledge**: High-LTV patients at the very top (e.g., autonomic nervous system / self-discipline disorders) are primarily **referrals (word of mouth)** and do not align with the target audience of digital ads (Google/YouTube Ads).
+* **Rule**: For digital ad targeting and public website landing page optimization, focus on high-intent search symptoms related to mobility and severe pain, such as: `腰痛` (back pain), `脊柱管狭窄症` (spinal canal stenosis), `ヘルニア` (hernia), and `膝・股関節痛` (knee/hip joint pain), combined with the unique footwear/insole adjustment USP.
