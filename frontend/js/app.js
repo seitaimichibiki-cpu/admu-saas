@@ -1851,8 +1851,12 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
   if (!container) return;
 
   try {
-    const dg = await api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`);
+    const [dg, labelsRes] = await Promise.all([
+      api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`),
+      api(`/ad-labels?clinic_id=${currentClinicId}`).catch(() => ({ labels: {} }))
+    ]);
     const ads = dg.demand_gen_ads || [];
+    const adLabels = labelsRes.labels || {};
 
     // アコーディオン開閉ヘルパーをグローバル登録
     if (!window._ytAccordionsRegistered) {
@@ -1941,6 +1945,9 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
       const adStatus = ad.status || 'ENABLED';
       const isPaused = adStatus === 'PAUSED';
 
+      // ニックネーム（ラベル）
+      const savedLabel = (ad.resource_name && adLabels[ad.resource_name]) || '';
+      const displayLabel = savedLabel || `クリエイティブ #${index + 1}`;
       // 審査ステータス装飾
       const appStatus = ad.approval_status || 'UNKNOWN';
       let statusBadgeColor = 'background:#4b5563;color:#f3f4f6'; // UNKNOWN
@@ -1991,9 +1998,21 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
 
       formHtml += `
         <div class="yt-ad-card" style="border:1px solid ${isPaused ? 'rgba(107,114,128,0.5)' : 'var(--border)'};border-left:3px solid ${isPaused ? '#6b7280' : '#6366f1'};border-radius:6px;margin-bottom:10px;background:${isPaused ? 'rgba(17,24,39,0.8)' : '#1e293b'};overflow:hidden;opacity:${isPaused ? '0.75' : '1'};transition:opacity 0.2s">
-          <div onclick="toggleYtAdAccordion(${index})" style="padding:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
-            <span style="font-weight:bold;font-size:12px;color:${isPaused ? '#6b7280' : '#fff'}">📺 クリエイティブ #${index+1} (${merged.business_name || '名称未設定'})${pauseBadge}</span>
-            <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:bold;${statusBadgeColor}">${statusText}</span>
+          <div onclick="toggleYtAdAccordion(${index})" style="padding:10px 12px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+              <span style="font-size:13px">📺</span>
+              <div id="ytLabelDisplay_${index}" style="font-weight:bold;font-size:13px;color:${isPaused ? '#6b7280' : '#e2e8f0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${displayLabel}">${displayLabel}</div>
+              ${pauseBadge}
+              <button onclick="event.stopPropagation();showAdLabelEdit(${index})" title="ニックネームを変更" style="background:none;border:none;cursor:pointer;padding:2px 4px;opacity:0.5;color:var(--text-3);font-size:12px;flex-shrink:0;line-height:1" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'">✏️</button>
+              <div id="ytLabelEdit_${index}" style="display:none;align-items:center;gap:4px;flex:1" onclick="event.stopPropagation()">
+                <input id="ytLabelInput_${index}" type="text" maxlength="50" value="${savedLabel}" placeholder="表示名を入力（50字以内）"
+                  style="flex:1;padding:3px 7px;background:#0f172a;color:#fff;border:1px solid #6366f1;border-radius:4px;font-size:12px;min-width:0"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();saveAdLabel(${index},'${ad.resource_name || ''}', ${index})}else if(event.key==='Escape'){hideAdLabelEdit(${index})}">
+                <button onclick="saveAdLabel('${googleCampaignId}','${ad.resource_name || ''}',${index})" style="background:#6366f1;border:none;color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap">保存</button>
+                <button onclick="hideAdLabelEdit(${index})" style="background:none;border:1px solid var(--border);color:var(--text-3);padding:3px 6px;border-radius:4px;font-size:11px;cursor:pointer">×</button>
+              </div>
+            </div>
+            <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:bold;${statusBadgeColor};flex-shrink:0">${statusText}</span>
           </div>
           
           <div id="ytAdAccordionContent_${index}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px solid var(--border);display:${index === 0 ? 'block' : 'none'}">
@@ -2268,6 +2287,55 @@ async function pauseYouTubeAd(googleCampaignId, adResourceName, newStatus, index
   }
 }
 window.pauseYouTubeAd = pauseYouTubeAd;
+
+// ── クリエイティブ ニックネーム編集 ──
+function showAdLabelEdit(index) {
+  const display = document.getElementById(`ytLabelDisplay_${index}`);
+  const edit    = document.getElementById(`ytLabelEdit_${index}`);
+  if (!display || !edit) return;
+  display.style.display = 'none';
+  edit.style.display = 'flex';
+  const input = document.getElementById(`ytLabelInput_${index}`);
+  if (input) { input.focus(); input.select(); }
+}
+window.showAdLabelEdit = showAdLabelEdit;
+
+function hideAdLabelEdit(index) {
+  const display = document.getElementById(`ytLabelDisplay_${index}`);
+  const edit    = document.getElementById(`ytLabelEdit_${index}`);
+  if (!display || !edit) return;
+  edit.style.display = 'none';
+  display.style.display = '';
+}
+window.hideAdLabelEdit = hideAdLabelEdit;
+
+async function saveAdLabel(googleCampaignId, adResourceName, index) {
+  const input = document.getElementById(`ytLabelInput_${index}`);
+  if (!input) return;
+  const label = input.value.trim();
+  try {
+    await api('/ad-labels', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: parseInt(currentClinicId),
+        ad_resource_name: adResourceName,
+        label: label
+      })
+    });
+    // 表示名をその場で更新
+    const display = document.getElementById(`ytLabelDisplay_${index}`);
+    if (display) {
+      const newText = label || `クリエイティブ #${index + 1}`;
+      display.textContent = newText;
+      display.title = newText;
+    }
+    hideAdLabelEdit(index);
+    toast('✅ 表示名を保存しました', 'success');
+  } catch(e) {
+    toast('❌ 表示名の保存に失敗: ' + e.message, 'error');
+  }
+}
+window.saveAdLabel = saveAdLabel;
 
 // ── 広告配信スケジュール管理 ──
 const DAY_LABELS = {MONDAY:'月',TUESDAY:'火',WEDNESDAY:'水',THURSDAY:'木',FRIDAY:'金',SATURDAY:'土',SUNDAY:'日'};

@@ -316,6 +316,14 @@ def init_db():
             reason TEXT DEFAULT 'user_deleted',
             created_at {TS},
             UNIQUE(clinic_id, google_campaign_id))""",
+        # 広告クリエイティブ用ニックネーム（AdMu内装表示名）
+        f"""CREATE TABLE IF NOT EXISTS ad_labels (
+            id {PK},
+            clinic_id INTEGER NOT NULL,
+            ad_resource_name TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            updated_at {TS},
+            UNIQUE(clinic_id, ad_resource_name))""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -1713,3 +1721,45 @@ def delete_clinic(clinic_id: int) -> None:
         conn.commit()
 
 
+# ── 広告クリエイティブ ニックネーム管理 ──────────────────────────────
+
+def get_ad_label(clinic_id: int, ad_resource_name: str) -> str:
+    """指定クリエイティブのニックネームを取得する（存在しない場合は空文字）"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT label FROM ad_labels WHERE clinic_id=? AND ad_resource_name=?",
+            (clinic_id, ad_resource_name)
+        ).fetchone()
+        if row:
+            return dict(row).get("label", "")
+        return ""
+
+
+def get_ad_labels_for_clinic(clinic_id: int) -> dict:
+    """クリニックの全クリエイティブニックネームを {ad_resource_name: label} 形式で返す"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT ad_resource_name, label FROM ad_labels WHERE clinic_id=?",
+            (clinic_id,)
+        ).fetchall()
+        return {dict(r)["ad_resource_name"]: dict(r)["label"] for r in rows}
+
+
+def upsert_ad_label(clinic_id: int, ad_resource_name: str, label: str):
+    """クリエイティブのニックネームを保存（INSERT or UPDATE）"""
+    with get_conn() as conn:
+        if USE_PG:
+            conn.execute("""
+                INSERT INTO ad_labels (clinic_id, ad_resource_name, label, updated_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (clinic_id, ad_resource_name)
+                DO UPDATE SET label = EXCLUDED.label, updated_at = NOW()
+            """, (clinic_id, ad_resource_name, label))
+        else:
+            conn.execute("""
+                INSERT INTO ad_labels (clinic_id, ad_resource_name, label, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (clinic_id, ad_resource_name)
+                DO UPDATE SET label = excluded.label, updated_at = CURRENT_TIMESTAMP
+            """, (clinic_id, ad_resource_name, label))
+        conn.commit()

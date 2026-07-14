@@ -7651,6 +7651,29 @@ async def pause_youtube_ad(campaign_id: str, req: YouTubeAdPauseReq):
         raise HTTPException(500, f"YouTube広告ステータス変更エラー: {str(e)})")
 
 
+# ── 広告クリエイティブ ニックネーム API ──────────────────────────────
+
+class AdLabelReq(BaseModel):
+    clinic_id: int = 1
+    ad_resource_name: str
+    label: str
+
+
+@app.get("/api/ad-labels")
+def get_ad_labels(clinic_id: int = 1):
+    """クリニックの全クリエイティブニックネームを返す"""
+    labels = db.get_ad_labels_for_clinic(clinic_id)
+    return {"success": True, "labels": labels}
+
+
+@app.post("/api/ad-labels")
+def save_ad_label(req: AdLabelReq):
+    """クリエイティブのニックネームを保存（INSERT or UPDATE）"""
+    label = req.label.strip()[:50]  # 最大50文字
+    db.upsert_ad_label(req.clinic_id, req.ad_resource_name, label)
+    return {"success": True, "label": label}
+
+
 # ── コンバージョントラッキング状態確認 ──────────────────────────────
 
 @app.get("/api/conversion-tracking/status")
