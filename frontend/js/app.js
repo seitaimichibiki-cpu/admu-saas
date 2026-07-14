@@ -1290,8 +1290,13 @@ async function loadCampaigns() {
     wrap.innerHTML = campaigns.map(c => {
       const typeBadge = c.campaign_type === 'VIDEO' ? '🎬' : c.campaign_type === 'DEMAND_GEN' ? '🎬' : c.campaign_type === 'DISPLAY' ? '🖼' : '🔍';
       const typeLabel = c.campaign_type === 'VIDEO' ? 'YouTube' : c.campaign_type === 'DEMAND_GEN' ? 'YouTube' : c.campaign_type === 'DISPLAY' ? 'Display' : '検索';
+      const statusClass = c.status === 'ENABLED' ? 'status-enabled' : 'status-paused';
+      // CTRカラー & バー幅（最大10%を100%として換算）
+      const ctrColor = c.ctr > 3 ? '#10b981' : c.ctr > 1 ? '#f59e0b' : '#ef4444';
+      const ctrBarW = Math.min(100, (c.ctr / 10) * 100).toFixed(1);
+      const cvColor = (c.conversions || 0) > 0 ? '#34d399' : 'var(--text-2)';
       return `
-      <div class="campaign-item" id="campaign-item-${c.id}" onclick="openCampDrawer('${c.id}', '${(c.name||'').replace(/'/g,"\\'")}', '${c.status||''}', event)">
+      <div class="campaign-item ${statusClass}" id="campaign-item-${c.id}" onclick="openCampDrawer('${c.id}', '${(c.name||'').replace(/'/g,"\\'")}', '${c.status||''}', event)">
         <div class="campaign-header">
           <div class="campaign-name">
             <span style="font-size:10px; background:rgba(255,255,255,0.08); padding:2px 6px; border-radius:4px; margin-right:6px;">${typeBadge} ${typeLabel}</span>
@@ -1305,11 +1310,27 @@ async function loadCampaigns() {
           <button class="btn btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteCampaign(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑 削除</button>
         </div>
         <div class="campaign-stats">
-          <div class="campaign-stat"><div class="campaign-stat-label">表示回数</div><div class="campaign-stat-value">${fmtNum(c.impressions)}</div></div>
-          <div class="campaign-stat"><div class="campaign-stat-label">CTR</div><div class="campaign-stat-value" style="color:${c.ctr>3?'#10b981':c.ctr>1?'#f59e0b':'#ef4444'}">${fmtPct(c.ctr)}</div></div>
-          <div class="campaign-stat"><div class="campaign-stat-label">平均CPC</div><div class="campaign-stat-value">${microsToYen(c.avg_cpc_micros)}</div></div>
-          <div class="campaign-stat"><div class="campaign-stat-label">費用</div><div class="campaign-stat-value">${microsToYen(c.cost_micros)}</div></div>
-          <div class="campaign-stat"><div class="campaign-stat-label">CV数</div><div class="campaign-stat-value">${(c.conversions||0).toFixed(1)}</div></div>
+          <div class="campaign-stat">
+            <div class="campaign-stat-label">👁 表示回数</div>
+            <div class="campaign-stat-value" style="color:#a78bfa">${fmtNum(c.impressions)}</div>
+          </div>
+          <div class="campaign-stat">
+            <div class="campaign-stat-label">📈 CTR</div>
+            <div class="campaign-stat-value" style="color:${ctrColor}">${fmtPct(c.ctr)}</div>
+            <div class="campaign-stat-bar"><div class="campaign-stat-bar-fill" style="width:${ctrBarW}%;background:${ctrColor}"></div></div>
+          </div>
+          <div class="campaign-stat">
+            <div class="campaign-stat-label">💴 平均CPC</div>
+            <div class="campaign-stat-value">${microsToYen(c.avg_cpc_micros)}</div>
+          </div>
+          <div class="campaign-stat">
+            <div class="campaign-stat-label">💰 費用</div>
+            <div class="campaign-stat-value" style="color:#fbbf24">${microsToYen(c.cost_micros)}</div>
+          </div>
+          <div class="campaign-stat">
+            <div class="campaign-stat-label">🎯 CV数</div>
+            <div class="campaign-stat-value" style="color:${cvColor};font-size:${(c.conversions||0)>0?'22':'17'}px">${(c.conversions||0).toFixed(1)}</div>
+          </div>
         </div>
       </div>
     `;}).join('');
@@ -1916,6 +1937,10 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         }
       }
 
+      // 広告ステータス (ENABLED / PAUSED)
+      const adStatus = ad.status || 'ENABLED';
+      const isPaused = adStatus === 'PAUSED';
+
       // 審査ステータス装飾
       const appStatus = ad.approval_status || 'UNKNOWN';
       let statusBadgeColor = 'background:#4b5563;color:#f3f4f6'; // UNKNOWN
@@ -1933,34 +1958,41 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
         statusBadgeColor = 'background:#78350f;color:#fbbf24';
         statusText = '⏳ 審査中';
       }
+      // 一時停止中は上書き
+      const pauseBadge = isPaused
+        ? `<span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:bold;background:#374151;color:#9ca3af;margin-left:6px">⏸ 停止中</span>`
+        : '';
 
       // メトリクス表示ブロック
       const m = ad.metrics || { impressions: 0, clicks: 0, ctr: 0, conversions: 0, cost: 0, cpa: 0 };
+      const mCtrColor = m.ctr > 3 ? 'green' : m.ctr > 1 ? 'amber' : 'blue';
       const metricsHtml = `
-        <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:12px;display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;text-align:center;font-size:10px;color:var(--text-3)">
-          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
-            <div style="color:var(--text-2);font-size:9px">表示回数</div>
-            <div style="font-weight:bold;color:#fff;font-size:12px;margin-top:2px">${m.impressions.toLocaleString()}</div>
+        <div class="ad-metrics-grid">
+          <div class="ad-metric-card impressions">
+            <div class="ad-metric-label">👁 表示回数</div>
+            <div class="ad-metric-value purple">${(m.impressions||0).toLocaleString()}</div>
           </div>
-          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
-            <div style="color:var(--text-2);font-size:9px">クリック (率)</div>
-            <div style="font-weight:bold;color:#fff;font-size:12px;margin-top:2px">${m.clicks} <span style="font-size:9px;color:#38bdf8">(${m.ctr}%)</span></div>
+          <div class="ad-metric-card ctr">
+            <div class="ad-metric-label">📈 CTR</div>
+            <div class="ad-metric-value ${mCtrColor}">${(m.ctr||0).toFixed(2)}%</div>
+            <div class="ad-metric-sub">${(m.clicks||0).toLocaleString()} クリック</div>
           </div>
-          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px">
-            <div style="color:var(--text-2);font-size:9px">獲得数 (CPA)</div>
-            <div style="font-weight:bold;color:#10b981;font-size:12px;margin-top:2px">${m.conversions}件 <span style="font-size:9px;color:#34d399">(${m.cpa > 0 ? m.cpa.toLocaleString() + '円' : '-'})</span></div>
+          <div class="ad-metric-card cv">
+            <div class="ad-metric-label">🎯 獲得 (CV)</div>
+            <div class="ad-metric-value green">${(m.conversions||0)}件</div>
+            <div class="ad-metric-sub">CPA: ${m.cpa > 0 ? m.cpa.toLocaleString() + '円' : '—'}</div>
           </div>
-          <div style="padding:4px;background:rgba(255,255,255,0.01);border-radius:4px;grid-column:span 3">
-            <div style="color:var(--text-2);font-size:9px;display:inline-block;margin-right:6px">消化費用:</div>
-            <span style="font-weight:bold;color:#f59e0b">${m.cost.toLocaleString()} 円</span> (過去累計)
+          <div class="ad-metric-card cost">
+            <div class="ad-metric-label">💰 消化費用（過去累計）</div>
+            <div class="ad-metric-value amber" style="font-size:18px">${(m.cost||0).toLocaleString()} 円</div>
           </div>
         </div>
       `;
 
       formHtml += `
-        <div class="yt-ad-card" style="border:1px solid var(--border);border-radius:6px;margin-bottom:10px;background:#1e293b;overflow:hidden">
+        <div class="yt-ad-card" style="border:1px solid ${isPaused ? 'rgba(107,114,128,0.5)' : 'var(--border)'};border-left:3px solid ${isPaused ? '#6b7280' : '#6366f1'};border-radius:6px;margin-bottom:10px;background:${isPaused ? 'rgba(17,24,39,0.8)' : '#1e293b'};overflow:hidden;opacity:${isPaused ? '0.75' : '1'};transition:opacity 0.2s">
           <div onclick="toggleYtAdAccordion(${index})" style="padding:10px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
-            <span style="font-weight:bold;font-size:12px;color:#fff">📺 クリエイティブ #${index+1} (${merged.business_name || '名称未設定'})</span>
+            <span style="font-weight:bold;font-size:12px;color:${isPaused ? '#6b7280' : '#fff'}">📺 クリエイティブ #${index+1} (${merged.business_name || '名称未設定'})${pauseBadge}</span>
             <span style="font-size:10px;padding:2px 6px;border-radius:3px;font-weight:bold;${statusBadgeColor}">${statusText}</span>
           </div>
           
@@ -2019,6 +2051,9 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
                 💾 広告を保存・更新
               </button>
               ${ad.resource_name ? `
+                <button class="btn btn-secondary" id="btnPauseYtAd_${index}" style="flex:1;font-size:12px;padding:8px;${isPaused ? 'background:#065f46;border-color:#047857;color:#6ee7b7' : 'background:#1e3a5f;border-color:#1e40af;color:#93c5fd'}" onclick="pauseYouTubeAd('${googleCampaignId}', '${ad.resource_name}', '${isPaused ? 'ENABLED' : 'PAUSED'}', ${index})">
+                  ${isPaused ? '▶️ 再開' : '⏸ 一時停止'}
+                </button>
                 <button class="btn btn-secondary" style="flex:1;font-size:12px;padding:8px;background:#7f1d1d;border-color:#991b1b;color:#fecaca" onclick="deleteYouTubeAd('${googleCampaignId}', '${ad.resource_name}', ${index})">
                   🗑️ 削除
                 </button>
@@ -2207,6 +2242,32 @@ async function deleteYouTubeAd(googleCampaignId, adResourceName, index) {
   }
 }
 window.deleteYouTubeAd = deleteYouTubeAd;
+
+async function pauseYouTubeAd(googleCampaignId, adResourceName, newStatus, index) {
+  if (!adResourceName) return;
+  const action = newStatus === 'PAUSED' ? '一時停止' : '再開';
+  if (!confirm(`このクリエイティブを${action}しますか？\n（データはそのまま保持されます）`)) return;
+
+  const btn = document.getElementById(`btnPauseYtAd_${index}`);
+  if (btn) { btn.disabled = true; btn.textContent = '処理中...'; }
+
+  try {
+    await api(`/campaigns/${googleCampaignId}/youtube-ad-pause`, {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: parseInt(currentClinicId),
+        ad_resource_name: adResourceName,
+        status: newStatus
+      })
+    });
+    toast(`✅ クリエイティブを${action}しました`, 'success');
+    loadYouTubeAdEditForm(googleCampaignId);
+  } catch(e) {
+    toast(`❌ ${action}に失敗: ` + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = newStatus === 'PAUSED' ? '⏸ 一時停止' : '▶️ 再開'; }
+  }
+}
+window.pauseYouTubeAd = pauseYouTubeAd;
 
 // ── 広告配信スケジュール管理 ──
 const DAY_LABELS = {MONDAY:'月',TUESDAY:'火',WEDNESDAY:'水',THURSDAY:'木',FRIDAY:'金',SATURDAY:'土',SUNDAY:'日'};

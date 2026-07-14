@@ -414,16 +414,98 @@ select.form-input { cursor: pointer; }
 /* ---- Campaign Items ---- */
 .campaign-item {
   background: var(--bg-card); border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: var(--radius); padding: 20px; margin-bottom: 12px;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
-.campaign-item:hover { border-color: var(--border2); transform: translateY(-1px); }
-.campaign-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-.campaign-name { font-size: 16px; font-weight: 700; flex: 1; }
-.campaign-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-.campaign-stat { text-align: center; }
+.campaign-item.status-enabled {
+  border-left-color: #10b981;
+}
+.campaign-item.status-paused {
+  border-left-color: #6b7280;
+}
+.campaign-item:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+.campaign-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.campaign-name { font-size: 15px; font-weight: 700; flex: 1; line-height: 1.3; }
+.campaign-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.campaign-stat {
+  text-align: center;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 6px;
+  position: relative;
+  overflow: hidden;
+}
 .campaign-stat-label { font-size: 10px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.campaign-stat-value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+.campaign-stat-value { font-size: 17px; font-weight: 700; margin-top: 3px; }
+/* CTRバー（視覚的インジケータ）*/
+.campaign-stat-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  margin-top: 5px;
+  overflow: hidden;
+}
+.campaign-stat-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* ---- YouTube広告クリエイティブ メトリクスカード ---- */
+.ad-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.ad-metric-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.15s;
+}
+.ad-metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+.ad-metric-card.impressions::before { background: linear-gradient(90deg, #6366f1, #8b5cf6); }
+.ad-metric-card.ctr::before { background: linear-gradient(90deg, #38bdf8, #0ea5e9); }
+.ad-metric-card.cv::before { background: linear-gradient(90deg, #10b981, #059669); }
+.ad-metric-card.cost { grid-column: span 3; }
+.ad-metric-card.cost::before { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.ad-metric-label {
+  font-size: 10px;
+  color: rgba(255,255,255,0.45);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.ad-metric-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+}
+.ad-metric-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 2px;
+}
+.ad-metric-value.green { color: #34d399; }
+.ad-metric-value.blue  { color: #38bdf8; }
+.ad-metric-value.amber { color: #fbbf24; }
+.ad-metric-value.purple { color: #a78bfa; }
 
 /* ---- Modal ---- */
 .modal-overlay {

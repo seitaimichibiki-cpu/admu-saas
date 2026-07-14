@@ -7613,6 +7613,44 @@ async def delete_youtube_ad(campaign_id: str, req: YouTubeAdDeleteReq):
         raise HTTPException(500, f"YouTube広告削除エラー: {str(e)}")
 
 
+class YouTubeAdPauseReq(BaseModel):
+    clinic_id: int = 1
+    ad_resource_name: str
+    status: str  # "PAUSED" or "ENABLED"
+
+
+@app.post("/api/campaigns/{campaign_id}/youtube-ad-pause")
+async def pause_youtube_ad(campaign_id: str, req: YouTubeAdPauseReq):
+    """YouTube広告（Demand Gen）の特定の広告を一時停止または再開する"""
+    import traceback
+    if req.status not in ("PAUSED", "ENABLED"):
+        raise HTTPException(400, "statusはPAUSEDまたはENABLEDのみ指定できます")
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        if client.mock_mode:
+            return {"success": True, "mock": True, "message": f"[モック] 広告を{'一時停止' if req.status == 'PAUSED' else '再開'}しました"}
+
+        token = client._get_rest_access_token()
+
+        res = _rest_mutate(client, "adGroupAds", [{
+            "update": {
+                "resourceName": req.ad_resource_name,
+                "status": req.status
+            },
+            "updateMask": "status"
+        }], token)
+        action = "一時停止" if req.status == "PAUSED" else "再開"
+        print(f"[youtube-ad-pause] 広告{action}完了: {req.ad_resource_name} -> {req.status} res={res}")
+
+        db.create_alert(req.clinic_id, f"YouTube広告を{action}しました (campaign_id: {campaign_id})", level="INFO")
+        return {"success": True, "message": f"広告を{action}しました", "new_status": req.status}
+    except Exception as e:
+        print(f"[youtube-ad-pause] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"YouTube広告ステータス変更エラー: {str(e)})")
+
+
 # ── コンバージョントラッキング状態確認 ──────────────────────────────
 
 @app.get("/api/conversion-tracking/status")
