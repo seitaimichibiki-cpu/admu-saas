@@ -696,35 +696,32 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     
     # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート/更新）
     db_campaigns = db.list_campaigns(clinic_id)
-    db_camp_map = {c.get("google_campaign_id"): c for c in db_campaigns if c.get("google_campaign_id")}
-    
-    for c in api_campaigns:
-        g_id = str(c.get("id"))
-        if g_id in db_camp_map:
-            # 既に存在する場合は最新情報に更新（同期）
-            db_c = db_camp_map[g_id]
-            if (db_c.get("status") != c.get("status") or 
-                db_c.get("budget_micros") != c.get("budget_micros") or 
-                db_c.get("name") != c.get("name")):
-                
-                db.upsert_campaign(clinic_id, {
-                    "id": db_c["id"],
-                    "name": c.get("name"),
-                    "status": c.get("status"),
-                    "google_campaign_id": g_id,
-                    "budget_micros": c.get("budget_micros", 0),
-                })
-        else:
-            # 新規検知したキャンペーンをローカルDBに登録
-            db.upsert_campaign(clinic_id, {
-                "name": c.get("name"),
-                "status": c.get("status"),
-                "google_campaign_id": g_id,
-                "budget_micros": c.get("budget_micros", 0),
-            })
-            
-    db_campaigns = db.list_campaigns(clinic_id)
+
+    # ── Google Ads上のキャンペーン名をキーにしたマップ ──
+    api_name_set = {c.get("name") for c in api_campaigns}
+    api_gid_set  = {str(c.get("id")) for c in api_campaigns}
+
+    # ── DB専用「エイリアス」キャンペーン: 同じgoogle_campaign_idを参照するが
+    #    Google Adsの名前とは異なるDB独自の表示名を持つもの（秋山広告など）を追加 ──
+    for db_c in db_campaigns:
+        gid = str(db_c.get("google_campaign_id") or "")
+        name = db_c.get("name", "")
+        # google_campaign_idがAPIに存在するが、名前が違う → エイリアスとして追加
+        if gid and gid in api_gid_set and name not in api_name_set:
+            # 元のAPIキャンペーンのデータを参照としてコピーし、名前だけ上書き
+            base = next((c for c in api_campaigns if str(c.get("id")) == gid), {})
+            alias = {
+                **base,
+                "name":           name,
+                "campaign_type":  db_c.get("campaign_type") or base.get("campaign_type"),
+                "db_id":          db_c.get("id"),
+                "db_alias":       True,          # フロントエンド識別フラグ
+                "youtube_video_id": db_c.get("youtube_video_id", ""),
+            }
+            api_campaigns = api_campaigns + [alias]
+
     return {"campaigns": api_campaigns, "local_campaigns": db_campaigns}
+
 
 @app.post("/api/campaigns")
 def create_campaign(req: CampaignCreateReq):
