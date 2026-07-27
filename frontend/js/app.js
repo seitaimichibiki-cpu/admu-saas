@@ -2062,10 +2062,17 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) 
             </div>
 
             <div style="margin-bottom:12px">
-              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL</label>
-              <input type="url" id="ytEditLogoUrl_${index}" value="${(merged.logo_image_url || '').replace(/"/g, '&quot;')}"
-                style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
-                placeholder="https://example.com/logo.png">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL（Google Adsアセット）</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="ytEditLogoUrl_${index}" value="${(merged.logo_image_url || '').replace(/"/g, '&quot;')}"
+                  style="flex:1;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:11px"
+                  placeholder="アップロード後に自動入力されます">
+                <label style="cursor:pointer;background:rgba(59,130,246,0.2);border:1px solid #3b82f6;color:#60a5fa;font-size:10px;padding:5px 10px;border-radius:4px;white-space:nowrap;font-weight:bold">
+                  📁 アップロード
+                  <input type="file" accept="image/*" style="display:none" onchange="uploadLogoAsset(this, 'ytEditLogoUrl_${index}')">
+                </label>
+              </div>
+              <p id="ytLogoUploadStatus_${index}" style="font-size:10px;color:var(--text-3);margin:3px 0 0"></p>
             </div>
 
             <div style="margin-bottom:12px">
@@ -2151,10 +2158,20 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) 
 
           <div style="margin-bottom:12px">
             <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL</label>
-            <input type="url" id="ytEditLogoUrl_${newIndex}" value=""
-              style="width:100%;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px"
-              placeholder="https://example.com/logo.png">
-          </div>
+            <div style="margin-bottom:12px">
+              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🖼️ ロゴ画像URL（Google Adsアセット）</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="ytEditLogoUrl_${newIndex}" value=""
+                  style="flex:1;padding:6px;background:#0f172a;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:11px"
+                  placeholder="アップロード後に自動入力されます">
+                <label style="cursor:pointer;background:rgba(59,130,246,0.2);border:1px solid #3b82f6;color:#60a5fa;font-size:10px;padding:5px 10px;border-radius:4px;white-space:nowrap;font-weight:bold">
+                  📁 アップロード
+                  <input type="file" accept="image/*" style="display:none" onchange="uploadLogoAsset(this, 'ytEditLogoUrl_${newIndex}')">
+                </label>
+              </div>
+              <p id="ytLogoUploadStatus_${newIndex}" style="font-size:10px;color:var(--text-3);margin:3px 0 0"></p>
+            </div>
+
 
           <div style="margin-bottom:12px">
             <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">📝 見出し（最大5件・各40文字）</label>
@@ -2188,6 +2205,47 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) 
   }
 }
 window.loadYouTubeAdEditForm = loadYouTubeAdEditForm;
+
+async function uploadLogoAsset(fileInput, targetInputId) {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  // ステータス表示
+  const statusId = targetInputId.replace('ytEditLogoUrl_', 'ytLogoUploadStatus_');
+  const statusEl = document.getElementById(statusId);
+  const targetInput = document.getElementById(targetInputId);
+  if (statusEl) statusEl.innerHTML = '<span style="color:#60a5fa">⏳ アップロード中...</span>';
+
+  try {
+    // FileをBase64に変換
+    const b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result); // data:image/...;base64,XXX 形式
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const result = await api('/upload-logo-asset', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: parseInt(currentClinicId),
+        image_b64: b64,
+        asset_name: `admu_logo_${currentClinicId}_${Date.now()}`
+      })
+    });
+
+    const rn = result.resource_name || '';
+    if (targetInput) targetInput.value = rn;
+    if (statusEl) statusEl.innerHTML = `<span style="color:#10b981">✅ アップロード完了${result.mock ? ' (モック)' : ''}</span>`;
+    toast('✅ ロゴ画像をGoogle Adsにアップロードしました', 'success');
+
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:#ef4444">❌ エラー: ${e.message}</span>`;
+    toast('❌ ロゴアップロード失敗: ' + e.message, 'error');
+  }
+}
+window.uploadLogoAsset = uploadLogoAsset;
+
 
 async function saveYouTubeAdChanges(googleCampaignId, adResourceName, index) {
   const btn = document.getElementById(`btnSaveYtAd_${index}`);

@@ -7065,6 +7065,42 @@ def upload_campaign_asset(req: UploadAssetReq):
     }
 
 
+class UploadLogoAssetReq(BaseModel):
+    clinic_id: int = 1
+    image_b64: str   # Base64エンコード済み画像データ（data:image/...;base64,XXX でも可）
+    asset_name: Optional[str] = None
+
+
+@app.post("/api/upload-logo-asset")
+def upload_logo_asset(req: UploadLogoAssetReq):
+    """ロゴ画像をGoogle Adsにアセットとしてアップロードし、resource_nameを返す"""
+    import traceback
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        # data:image/...;base64, プレフィックスを除去
+        b64 = req.image_b64
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+
+        asset_name = req.asset_name or f"admu_logo_{req.clinic_id}"
+        res = client.upload_image_asset(b64, asset_name)
+
+        if not res.get("success"):
+            raise HTTPException(500, f"ロゴアップロード失敗: {res.get('error')}")
+
+        rn = res.get("resource_name", "")
+        print(f"[upload-logo-asset] 完了: {rn}")
+        return {"success": True, "resource_name": rn, "mock": res.get("mock", False)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[upload-logo-asset] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"ロゴアップロードエラー: {str(e)}")
+
+
 class LtvConversionReq(BaseModel):
     clinic_id: int = 1
     gclid: str
@@ -8060,7 +8096,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260727-monthly-metrics', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260727-logo-upload', html)
 
 
         return HTMLResponse(
