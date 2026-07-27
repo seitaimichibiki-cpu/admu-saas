@@ -2047,7 +2047,66 @@ async def register_existing_campaign(req: RegisterExistingCampaignReq, request: 
         raise HTTPException(500, f"キャンペーン登録エラー: {str(e)}")
 
 
+@app.delete("/api/campaigns/db/{db_id}")
+async def delete_db_campaign_record(db_id: int, clinic_id: int = 1):
+    """DBからキャンペーンレコードを削除する（Google Adsには影響しない）"""
+    try:
+        with db.get_conn() as conn:
+            conn.execute("DELETE FROM campaigns WHERE id=? AND clinic_id=?", (db_id, clinic_id))
+            conn.commit()
+        return {"success": True, "message": f"DBレコード id={db_id} を削除しました"}
+    except Exception as e:
+        raise HTTPException(500, f"DB削除エラー: {str(e)}")
+
+
+class RenameCampaignReq(BaseModel):
+    clinic_id: int = 1
+    new_name: str
+
+
+@app.post("/api/campaigns/{campaign_id}/rename")
+async def rename_campaign(campaign_id: str, req: RenameCampaignReq):
+    """Google Adsのキャンペーン名を変更する"""
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+        if client.mock_mode:
+            return {"success": True, "mock": True, "message": f"[モック] 名前を「{req.new_name}」に変更しました"}
+
+        token = client._get_rest_access_token()
+        CID = client.customer_id
+        campaign_rn = f"customers/{CID}/campaigns/{campaign_id}"
+
+        res = _rest_mutate(client, "campaigns", [{
+            "update": {
+                "resourceName": campaign_rn,
+                "name": req.new_name,
+            },
+            "updateMask": "name",
+        }], token)
+        print(f"[rename-campaign] {campaign_rn} → {req.new_name}: {res}")
+
+        # DBも更新
+        camps = db.list_campaigns(req.clinic_id)
+        for c in camps:
+            if str(c.get("google_campaign_id")) == str(campaign_id):
+                db.upsert_campaign(req.clinic_id, {
+                    "id": c["id"],
+                    "google_campaign_id": str(campaign_id),
+                    "name": req.new_name,
+                })
+                break
+
+        ads_cache.clear()
+        return {"success": True, "message": f"キャンペーン名を「{req.new_name}」に変更しました"}
+    except Exception as e:
+        import traceback
+        print(f"[rename-campaign] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"キャンペーン名変更エラー: {str(e)}")
+
+
 @app.post("/api/campaigns/create-youtube")
+
 
 async def create_youtube_campaign(req: YouTubeCampaignReq):
     """YouTube広告（Demand Genキャンペーン）を作成する"""
