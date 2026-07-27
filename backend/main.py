@@ -1975,7 +1975,46 @@ def _extract_youtube_video_id(url: str) -> str:
     return ""
 
 
+class RegisterExistingCampaignReq(BaseModel):
+    clinic_id: int = 1
+    name: str                        # AdMu上の表示名
+    google_campaign_id: str          # Google広告のキャンペーンID
+    campaign_type: str = "DEMAND_GEN"
+    budget_daily_yen: int = 1000
+    target_region: str = ""
+    status: str = "ENABLED"
+    youtube_video_id: str = ""
+
+
+@app.post("/api/campaigns/register-existing")
+async def register_existing_campaign(req: RegisterExistingCampaignReq, request: Request):
+    """既存のGoogle広告キャンペーンをAdMu DBに登録する（Google APIは叩かない）"""
+    try:
+        db.upsert_campaign(req.clinic_id, {
+            "google_campaign_id": req.google_campaign_id,
+            "name": req.name,
+            "status": req.status,
+            "campaign_type": req.campaign_type,
+            "budget_micros": req.budget_daily_yen * 1_000_000,
+            "target_region": req.target_region,
+            "youtube_video_id": req.youtube_video_id,
+        })
+        # 登録後に一覧を返す
+        camps = db.get_campaigns(req.clinic_id)
+        registered = next((c for c in camps if str(c.get("google_campaign_id")) == str(req.google_campaign_id) and c.get("name") == req.name), None)
+        return {
+            "success": True,
+            "message": f"「{req.name}」をAdMuに登録しました",
+            "campaign": registered,
+        }
+    except Exception as e:
+        import traceback
+        print(f"[register-existing] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"キャンペーン登録エラー: {str(e)}")
+
+
 @app.post("/api/campaigns/create-youtube")
+
 async def create_youtube_campaign(req: YouTubeCampaignReq):
     """YouTube広告（Demand Genキャンペーン）を作成する"""
     import traceback
@@ -8096,7 +8135,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260727-logo-upload', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260728-register-existing', html)
 
 
         return HTMLResponse(
