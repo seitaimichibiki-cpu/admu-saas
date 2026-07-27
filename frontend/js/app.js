@@ -1846,17 +1846,19 @@ function renderCampDrawer(d) {
   }
 }
 
-async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
+async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) {
   const container = document.getElementById('ytEditFormContainer');
   if (!container) return;
+  dateRange = dateRange || 'THIS_MONTH';
 
   try {
     const [dg, labelsRes] = await Promise.all([
-      api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}`),
+      api(`/campaigns/${googleCampaignId}/youtube-ad-details?clinic_id=${currentClinicId}&date_range=${dateRange}`),
       api(`/ad-labels?clinic_id=${currentClinicId}`).catch(() => ({ labels: {} }))
     ]);
     const ads = dg.demand_gen_ads || [];
     const adLabels = labelsRes.labels || {};
+    const currentDateRange = dg.date_range || dateRange;
 
     // アコーディオン開閉ヘルパーをグローバル登録
     if (!window._ytAccordionsRegistered) {
@@ -1918,7 +1920,23 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName) {
       return html;
     };
 
-    let formHtml = '';
+    // 期間ラベル
+    const rangeLabels = {
+      'THIS_MONTH': '今月', 'LAST_MONTH': '先月',
+      'LAST_30_DAYS': '過去30日', 'LAST_7_DAYS': '過去7日', 'ALL_TIME': '全期間'
+    };
+    const dateRangeSwitcher = `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--text-3)">期間:</span>
+        ${['THIS_MONTH','LAST_MONTH','LAST_30_DAYS','ALL_TIME'].map(r => `
+          <button onclick="loadYouTubeAdEditForm('${googleCampaignId}','${campaignName || ''}','${r}')" 
+            style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border);cursor:pointer;
+            background:${currentDateRange===r?'#3b82f6':'transparent'};color:${currentDateRange===r?'#fff':'var(--text-2)'};
+            font-weight:${currentDateRange===r?'bold':'normal'}">${rangeLabels[r]}</button>
+        `).join('')}
+      </div>`;
+
+    let formHtml = dateRangeSwitcher;
 
     // ① 各広告（クリエイティブ）をレンダリング
     ads.forEach((ad, index) => {
@@ -2228,7 +2246,7 @@ async function saveYouTubeAdChanges(googleCampaignId, adResourceName, index) {
 
     // 1.5秒後にフォームをリロードして最新のステータスに更新
     setTimeout(() => {
-      loadYouTubeAdEditForm(googleCampaignId);
+      loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange);
     }, 1500);
 
   } catch(e) {
@@ -2255,7 +2273,7 @@ async function deleteYouTubeAd(googleCampaignId, adResourceName, index) {
       })
     });
     toast('✅ クリエイティブを削除しました', 'success');
-    loadYouTubeAdEditForm(googleCampaignId);
+    loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange);
   } catch(e) {
     toast('❌ クリエイティブの削除に失敗: ' + e.message, 'error');
   }
@@ -2280,7 +2298,7 @@ async function pauseYouTubeAd(googleCampaignId, adResourceName, newStatus, index
       })
     });
     toast(`✅ クリエイティブを${action}しました`, 'success');
-    loadYouTubeAdEditForm(googleCampaignId);
+    loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange);
   } catch(e) {
     toast(`❌ ${action}に失敗: ` + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = newStatus === 'PAUSED' ? '⏸ 一時停止' : '▶️ 再開'; }

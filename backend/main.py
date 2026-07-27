@@ -6110,6 +6110,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
     """YouTube広告（Demand Gen）の広告詳細（複数）を取得する"""
     import traceback
     clinic_id = int(request.query_params.get("clinic_id", "1"))
+    date_range = request.query_params.get("date_range", "THIS_MONTH")  # THIS_MONTH / LAST_MONTH / LAST_30_DAYS / ALL_TIME
     try:
         acc = _require_account(clinic_id)
         client = _get_ads_client(acc, "google")
@@ -6182,6 +6183,11 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         # 1. Google広告API（GAQL）から広告一覧を取得
         token = client._get_rest_access_token()
         # LIMIT 1を外して複数取得するクエリ
+        # DURING句: ALL_TIMEの場合は期間指定なし（全期間）
+        valid_ranges = {"THIS_MONTH", "LAST_MONTH", "LAST_30_DAYS", "LAST_7_DAYS", "TODAY", "ALL_TIME"}
+        dr = date_range.upper() if date_range.upper() in valid_ranges else "THIS_MONTH"
+        during_clause = f"AND segments.date DURING {dr}" if dr != "ALL_TIME" else ""
+
         query = f"""
             SELECT ad_group_ad.resource_name,
                    ad_group_ad.ad.id,
@@ -6202,10 +6208,56 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             FROM ad_group_ad
             WHERE campaign.id = {g_id}
               AND ad_group_ad.status != REMOVED
+              {during_clause}
         """
         print(f"[youtube-ad-details] GAQL取得開始 campaign_id={campaign_id} -> g_id={g_id}")
         rows = _gaql_search(client, query, token)
         print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
+
+        # ── ① 全広告のvideoアセットresource_nameを収集してバッチで動画ID取得（高速化）──
+        # まず全rowを一時解析してasset resource_nameを集める
+        asset_rns_needed = set()
+        for r in rows:
+            dg_tmp = r.get("adGroupAd", {}).get("ad", {}).get("demandGenVideoResponsiveAd") or {}
+            for v in dg_tmp.get("videos", []):
+                rn = v.get("asset", "")
+                if rn:
+                    asset_rns_needed.add(rn)
+
+        # バッチでassetクエリを1回だけ実行
+        asset_video_map = {}  # {resource_name: youtube_video_id}
+        if asset_rns_needed:
+            rn_list = "', '".join(asset_rns_needed)
+            batch_asset_query = f"""
+                SELECT asset.resource_name,
+                       asset.youtube_video_asset.youtube_video_id
+                FROM asset
+                WHERE asset.resource_name IN ('{rn_list}')
+            """
+            batch_rows = _gaql_search(client, batch_asset_query, token)
+            for ar in batch_rows:
+                a = ar.get("asset", {})
+                rn = a.get("resourceName", "")
+                vid_id = a.get("youtubeVideoAsset", {}).get("youtubeVideoId", "")
+                if rn and vid_id:
+                    asset_video_map[rn] = vid_id
+        # ── ② 重複集計を避けるため ad_id ごとに指標を合算 ──
+        # DURING付きクエリは同じ広告が日付ごとに複数行返る場合があるため
+        merged: dict = {}
+        for r in rows:
+            aga = r.get("adGroupAd", {})
+            ad_data = aga.get("ad", {})
+            ad_id = ad_data.get("id", aga.get("resourceName", ""))
+            m = r.get("metrics", {})
+            if ad_id not in merged:
+                merged[ad_id] = {"row": r, "impressions": 0, "clicks": 0, "conversions": 0.0, "cost_micros": 0}
+            merged[ad_id]["impressions"] += int(m.get("impressions", 0))
+            merged[ad_id]["clicks"]      += int(m.get("clicks", 0))
+            merged[ad_id]["conversions"] += float(m.get("conversions", 0.0))
+            merged[ad_id]["cost_micros"] += int(m.get("costMicros", 0))
+
+        rows = [v["row"] for v in merged.values()]
+        merged_metrics = {v["row"].get("adGroupAd", {}).get("ad", {}).get("id", "") or v["row"].get("adGroupAd", {}).get("resourceName", ""): v for v in merged.values()}
 
         for r in rows:
             aga = r.get("adGroupAd", {})
@@ -6229,28 +6281,20 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             youtube_video_id = ""
             if videos:
                 video_asset_rn = videos[0].get("asset", "")
-                if video_asset_rn:
-                    asset_query = f"""
-                        SELECT asset.youtube_video_asset.youtube_video_id
-                        FROM asset
-                        WHERE asset.resource_name = '{video_asset_rn}'
-                    """
-                    asset_rows = _gaql_search(client, asset_query, token)
-                    if asset_rows:
-                        yt_asset = asset_rows[0].get("asset", {}).get("youtubeVideoAsset", {})
-                        youtube_video_id = yt_asset.get("youtubeVideoId", "")
+                youtube_video_id = asset_video_map.get(video_asset_rn, "")
 
             # 審査ステータス取得
             p_summary = aga.get("policySummary", {})
             approval = p_summary.get("approvalStatus", "UNKNOWN")
             topics = [e.get("topic", "") for e in p_summary.get("policyTopicEntries", [])]
 
-            # 指標データ解決
-            metrics_data = r.get("metrics", {})
-            impressions = int(metrics_data.get("impressions", 0))
-            clicks = int(metrics_data.get("clicks", 0))
-            conversions = float(metrics_data.get("conversions", 0.0))
-            cost_micros = int(metrics_data.get("costMicros", 0))
+            # 指標データ解決（合算済みデータを使用）
+            ad_key = ad_data.get("id", "") or aga.get("resourceName", "")
+            agg = merged_metrics.get(ad_key, {})
+            impressions = agg.get("impressions", 0)
+            clicks = agg.get("clicks", 0)
+            conversions = agg.get("conversions", 0.0)
+            cost_micros = agg.get("cost_micros", 0)
             cost_yen = int(cost_micros / 1000000)
 
             ctr = (clicks / impressions * 100) if impressions > 0 else 0.0
@@ -6317,6 +6361,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             "success": True,
             "mock": False,
             "demand_gen_ads": demand_gen_ads,
+            "date_range": dr,
         }
 
     except Exception as e:
@@ -8015,7 +8060,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260727-cv-details', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260727-monthly-metrics', html)
 
 
         return HTMLResponse(
