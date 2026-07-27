@@ -2000,7 +2000,7 @@ async def register_existing_campaign(req: RegisterExistingCampaignReq, request: 
             "youtube_video_id": req.youtube_video_id,
         })
         # 登録後に一覧を返す
-        camps = db.get_campaigns(req.clinic_id)
+        camps = db.list_campaigns(req.clinic_id)
         registered = next((c for c in camps if str(c.get("google_campaign_id")) == str(req.google_campaign_id) and c.get("name") == req.name), None)
         return {
             "success": True,
