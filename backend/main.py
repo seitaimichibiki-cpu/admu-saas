@@ -7749,6 +7749,115 @@ def get_conversion_tracking_status(clinic_id: int = 1, platform: str = "google")
     }
 
 
+@app.get("/api/conversion-tracking/details")
+def get_conversion_tracking_details(clinic_id: int = 1, platform: str = "google"):
+    """コンバージョンアクション詳細一覧（プライマリ/セカンダリ判定付き）"""
+    import traceback
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc, platform)
+
+        if client.mock_mode:
+            return {
+                "success": True, "mock": True,
+                "actions": [
+                    {"id": "123", "name": "inquiry_complete", "type": "WEBPAGE", "category": "SUBMIT_LEAD_FORM", "origin": "WEBSITE", "counting_type": "ONE_PER_CLICK", "is_primary": True},
+                    {"id": "456", "name": "Page view", "type": "WEBPAGE", "category": "PAGE_VIEW", "origin": "WEBSITE", "counting_type": "MANY_PER_CLICK", "is_primary": True},
+                ]
+            }
+
+        token = client._get_rest_access_token()
+
+        # 1. 全conversion_actionを取得
+        ca_query = """
+            SELECT conversion_action.id,
+                   conversion_action.name,
+                   conversion_action.type,
+                   conversion_action.status,
+                   conversion_action.category,
+                   conversion_action.origin,
+                   conversion_action.counting_type
+            FROM conversion_action
+            WHERE conversion_action.status = ENABLED
+        """
+        ca_rows = _gaql_search(client, ca_query, token)
+
+        # 2. customer_conversion_goalを取得（プライマリ判定）
+        goal_query = """
+            SELECT customer_conversion_goal.category,
+                   customer_conversion_goal.origin,
+                   customer_conversion_goal.biddable
+            FROM customer_conversion_goal
+        """
+        goal_rows = _gaql_search(client, goal_query, token)
+
+        # プライマリマップ: {(category, origin): biddable}
+        primary_map = {}
+        for r in goal_rows:
+            g = r.get("customerConversionGoal", {})
+            cat = g.get("category", "")
+            ori = g.get("origin", "")
+            primary_map[(cat, ori)] = g.get("biddable", False)
+
+        actions = []
+        for r in ca_rows:
+            ca = r.get("conversionAction", {})
+            cat = ca.get("category", "")
+            ori = ca.get("origin", "")
+            actions.append({
+                "id": ca.get("id", ""),
+                "name": ca.get("name", ""),
+                "type": ca.get("type", ""),
+                "category": cat,
+                "origin": ori,
+                "counting_type": ca.get("countingType", ""),
+                "is_primary": primary_map.get((cat, ori), False),
+            })
+
+        return {"success": True, "actions": actions}
+    except Exception as e:
+        print(f"[cv-details] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"CVアクション取得エラー: {str(e)}")
+
+
+class ToggleConversionGoalReq(BaseModel):
+    clinic_id: int = 1
+    category: str
+    origin: str
+    biddable: bool
+
+
+@app.post("/api/conversion-tracking/toggle-primary")
+def toggle_conversion_goal_primary(req: ToggleConversionGoalReq):
+    """コンバージョンゴールのプライマリ/セカンダリを切り替える"""
+    import traceback
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+
+        if client.mock_mode:
+            return {"success": True, "mock": True, "message": f"[モック] {'ON' if req.biddable else 'OFF'}に切替"}
+
+        token = client._get_rest_access_token()
+
+        res = _rest_mutate(client, "customerConversionGoals", [{
+            "update": {
+                "resourceName": f"customers/{client.customer_id}/customerConversionGoals/{req.category}~{req.origin}",
+                "biddable": req.biddable
+            },
+            "updateMask": "biddable"
+        }], token)
+
+        action = "プライマリ (ON)" if req.biddable else "セカンダリ (OFF)"
+        print(f"[cv-toggle] {req.category}~{req.origin} -> {action} res={res}")
+        db.create_alert(req.clinic_id, f"CVゴールを{action}に切替: {req.category}", level="INFO")
+
+        return {"success": True, "message": f"{action}に切り替えました", "new_biddable": req.biddable}
+    except Exception as e:
+        print(f"[cv-toggle] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"CVゴール切替エラー: {str(e)}")
+
+
 # ── 広告スケジュール（配信時間帯）設定 ──────────────────────────────
 
 class AdScheduleReq(BaseModel):
