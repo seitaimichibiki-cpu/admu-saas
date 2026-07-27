@@ -39,3 +39,22 @@
 ## 6. Patient Segmentation: Referral vs. Ads Target
 * **Knowledge**: High-LTV patients at the very top (e.g., autonomic nervous system / self-discipline disorders) are primarily **referrals (word of mouth)** and do not align with the target audience of digital ads (Google/YouTube Ads).
 * **Rule**: For digital ad targeting and public website landing page optimization, focus on high-intent search symptoms related to mobility and severe pain, such as: `腰痛` (back pain), `脊柱管狭窄症` (spinal canal stenosis), `ヘルニア` (hernia), and `膝・股関節痛` (knee/hip joint pain), combined with the unique footwear/insole adjustment USP.
+
+## 7. Conversion Action Primary/Secondary Management
+* **Knowledge**: The Google Ads account has 17 conversion actions. Most are auto-generated (Page view, Purchase, etc.) and should be set to **Secondary (biddable=false)** so they don't pollute the bidding optimization.
+* **Rule**: Only the following conversion actions should be **Primary (biddable=true)**:
+  * `LOGICTION予約完了` (actual booking completion)
+  * `WEB予約タップ(SATTOU)` (booking button tap)
+  * `整体院導_リニューアル (web) #問い合わせ完了` (inquiry form submission)
+  * `Calls from ads` / `Calls from ads (1)` (actual phone calls)
+* **Rule**: `line_button_click` and `tel_button_click` should be **Secondary** — they only track button clicks, not actual calls/messages, and inflate CV counts without real conversions.
+* **API**: Use `GET /api/conversion-tracking/details` to see all actions with primary status, and `POST /api/conversion-tracking/toggle-primary` (with `category`, `origin`, `biddable`) to toggle via `customerConversionGoals:mutate`.
+
+## 8. Frontend Cache Busting (app.js Version String)
+* **Rule**: After any change to `frontend/js/app.js`, always update the cache-busting version string in `main.py` (search for `app.js?v=`). Use format `YYYYMMDD-feature-name`. Without this, browsers will serve the old cached JS file and new features won't appear.
+* **Location**: `main.py` near the end, in the `re.sub(r'app\.js\?v=...')` line.
+
+## 9. LP Conversion Tracking Setup (GTM + Contact Form 7)
+* **Knowledge**: The LP at `michibiki-seitai.com` uses GTM (`GTM-NVWWGNQR`) with Contact Form 7 integration. The CV event is `inquiry_complete`, fired on `wpcf7mailsent` (CF7 mail sent event). This is the real "inquiry submission" conversion.
+* **Knowledge**: The LP currently has `<meta name="format-detection" content="telephone=no">` which disables phone tap on mobile — this should be removed by the web agency. There is no LINE button or sticky footer CTA on the LP — these should be added by the web agency.
+* **Knowledge**: The booking system URL is `logiction-system.onrender.com/public-booking.html` (Logiction予約システム).
