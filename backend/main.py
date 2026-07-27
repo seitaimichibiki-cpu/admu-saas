@@ -697,30 +697,67 @@ def list_campaigns(clinic_id: int = 1, platform: str = "google"):
     # Google広告上の既存キャンペーンをローカルデータベースに自動同期（インポート/更新）
     db_campaigns = db.list_campaigns(clinic_id)
 
-    # ── Google Ads上のキャンペーン名をキーにしたマップ ──
-    api_name_set = {c.get("name") for c in api_campaigns}
+    # ── API campaign ID セット ──
     api_gid_set  = {str(c.get("id")) for c in api_campaigns}
+    api_name_set = {c.get("name") for c in api_campaigns}
 
-    # ── DB専用「エイリアス」キャンペーン: 同じgoogle_campaign_idを参照するが
-    #    Google Adsの名前とは異なるDB独自の表示名を持つもの（秋山広告など）を追加 ──
+    # ── Google Ads → DB 同期（ただしカスタム名のエイリアスは名前を上書きしない）──
+    # google_campaign_id → DBレコード一覧（複数ある場合あり）
+    db_by_gid: dict = {}
     for db_c in db_campaigns:
         gid = str(db_c.get("google_campaign_id") or "")
+        if gid:
+            db_by_gid.setdefault(gid, []).append(db_c)
+
+    for api_c in api_campaigns:
+        g_id = str(api_c.get("id"))
+        records = db_by_gid.get(g_id, [])
+        # このgoogle_campaign_idに対してAPIと同名のDBレコードを探す
+        canonical = next((r for r in records if r.get("name") == api_c.get("name")), None)
+
+        if canonical:
+            # 既存の「正規」レコードを最新のステータス・予算に同期
+            if (canonical.get("status") != api_c.get("status") or
+                    canonical.get("budget_micros") != api_c.get("budget_micros")):
+                db.upsert_campaign(clinic_id, {
+                    "id": canonical["id"],
+                    "name": api_c.get("name"),
+                    "status": api_c.get("status"),
+                    "google_campaign_id": g_id,
+                    "budget_micros": api_c.get("budget_micros", 0),
+                })
+        elif not records:
+            # DB未登録 → 新規インポート
+            db.upsert_campaign(clinic_id, {
+                "name": api_c.get("name"),
+                "status": api_c.get("status"),
+                "google_campaign_id": g_id,
+                "budget_micros": api_c.get("budget_micros", 0),
+            })
+        # ※ records はあるが canonical なし = カスタム名エイリアスのみ存在 → 名前は上書きしない
+
+    # ── DB再取得（同期後）──
+    db_campaigns = db.list_campaigns(clinic_id)
+
+    # ── DB専用エイリアス（秋山広告など）を campaigns リストに追加 ──
+    for db_c in db_campaigns:
+        gid  = str(db_c.get("google_campaign_id") or "")
         name = db_c.get("name", "")
-        # google_campaign_idがAPIに存在するが、名前が違う → エイリアスとして追加
+        # google_campaign_idがAPIに存在するが、名前が異なる → エイリアスとして追加
         if gid and gid in api_gid_set and name not in api_name_set:
-            # 元のAPIキャンペーンのデータを参照としてコピーし、名前だけ上書き
             base = next((c for c in api_campaigns if str(c.get("id")) == gid), {})
             alias = {
                 **base,
-                "name":           name,
-                "campaign_type":  db_c.get("campaign_type") or base.get("campaign_type"),
-                "db_id":          db_c.get("id"),
-                "db_alias":       True,          # フロントエンド識別フラグ
+                "name":            name,
+                "campaign_type":   db_c.get("campaign_type") or base.get("campaign_type"),
+                "db_id":           db_c.get("id"),
+                "db_alias":        True,
                 "youtube_video_id": db_c.get("youtube_video_id", ""),
             }
             api_campaigns = api_campaigns + [alias]
 
     return {"campaigns": api_campaigns, "local_campaigns": db_campaigns}
+
 
 
 @app.post("/api/campaigns")
