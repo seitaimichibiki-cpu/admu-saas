@@ -2147,8 +2147,10 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
         lat = acc.get("lat") or acc.get("target_lat")
         lon = acc.get("lon") or acc.get("target_lon")
 
-        # ターゲット地域名（地名）を解決
-        region_name = acc.get("target_region") or ""
+        # ターゲット地域名（地名）を解決 ── ユーザー入力を最優先
+        region_name = req.region or ""
+        if not region_name:
+            region_name = acc.get("target_region") or ""
         if not region_name:
             address = clinic.get("address") or ""
             if address:
@@ -2158,6 +2160,7 @@ async def create_youtube_campaign(req: YouTubeCampaignReq):
                     region_name = _m.group(1)
         if not region_name:
             region_name = "東京都"
+        print(f"[create-youtube] ターゲット地域: {region_name} (req.region={req.region!r})")
 
         config = {
             "campaign_name": req.campaign_name,
