@@ -2112,13 +2112,16 @@ class GenderTargetReq(BaseModel):
 
 @app.post("/api/campaigns/{campaign_id}/gender-target")
 async def set_gender_target(campaign_id: str, req: GenderTargetReq):
-    """キャンペーンの性別ターゲティングを設定する
-    
-    gender="FEMALE" → 男性・不明を除外（女性のみ配信）
-    gender="MALE" → 女性・不明を除外（男性のみ配信）
-    gender="ALL" → 除外を全て解除（全性別に配信）
+    """キャンペーンの性別ターゲティングを設定する（adGroupCriteria経由）
+
+    Demand GenキャンペーンではcampaignCriteriaで性別除外ができないため、
+    adGroupCriteriaでbidModifier=0（入札ゼロ＝実質配信停止）を使う。
+
+    gender="FEMALE" → 男性のbidModifier=0, 女性のbidModifier=1
+    gender="MALE"   → 女性のbidModifier=0, 男性のbidModifier=1
+    gender="ALL"    → 全てのbidModifierを1に（または既存クライテリアを削除）
     """
-    import traceback
+    import traceback, requests as _rq
     try:
         acc = _require_account(req.clinic_id)
         client = _get_ads_client(acc, "google")
@@ -2127,18 +2130,8 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
 
         token = client._get_rest_access_token()
         CID = client.customer_id
-        campaign_rn = f"customers/{CID}/campaigns/{campaign_id}"
 
-        # Google Ads gender constants:
-        # genderConstants/10 = MALE
-        # genderConstants/11 = FEMALE
-        # genderConstants/20 = UNDETERMINED
-        MALE_RN = "genderConstants/10"
-        FEMALE_RN = "genderConstants/11"
-        UNDETERMINED_RN = "genderConstants/20"
-
-        # まず既存の性別クライテリアを取得して削除
-        import requests as _rq
+        # 1. キャンペーンの広告グループIDを取得
         search_url = f"https://googleads.googleapis.com/v23/customers/{CID}/googleAds:searchStream"
         _rest_headers = {
             "Authorization": f"Bearer {token}",
@@ -2146,50 +2139,88 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
             "login-customer-id": client._login_customer_id,
             "Content-Type": "application/json",
         }
-        gaql = f"""
-            SELECT campaign_criterion.resource_name, campaign_criterion.gender.type, campaign_criterion.negative
-            FROM campaign_criterion
+
+        ag_gaql = f"""
+            SELECT ad_group.resource_name, ad_group.id
+            FROM ad_group
             WHERE campaign.id = {campaign_id}
-              AND campaign_criterion.type = 'GENDER'
+              AND ad_group.status != 'REMOVED'
+            LIMIT 5
         """
-        sr = _rq.post(search_url, headers=_rest_headers, json={"query": gaql})
-        existing_criteria = []
-        if sr.status_code == 200:
-            for batch in sr.json():
+        ag_resp = _rq.post(search_url, headers=_rest_headers, json={"query": ag_gaql})
+        ad_groups = []
+        if ag_resp.status_code == 200:
+            for batch in ag_resp.json():
                 for row in batch.get("results", []):
-                    cc = row.get("campaignCriterion", {})
-                    existing_criteria.append(cc.get("resourceName"))
-        print(f"[gender-target] 既存の性別クライテリア: {existing_criteria}")
+                    ag = row.get("adGroup", {})
+                    ad_groups.append(ag.get("resourceName"))
+        if not ad_groups:
+            raise HTTPException(400, "広告グループが見つかりません")
+        print(f"[gender-target] 広告グループ: {ad_groups}")
 
-        # 既存のクライテリアを全て削除
-        if existing_criteria:
-            remove_ops = [{"remove": rn} for rn in existing_criteria]
-            _rest_mutate(client, "campaignCriteria", remove_ops, token)
-            print(f"[gender-target] 既存クライテリアを削除しました")
+        for ag_rn in ad_groups:
+            # 2. 既存の性別adGroupCriteriaを取得
+            ag_id = ag_rn.split("/")[-1]
+            gender_gaql = f"""
+                SELECT ad_group_criterion.resource_name,
+                       ad_group_criterion.gender.type,
+                       ad_group_criterion.bid_modifier
+                FROM ad_group_criterion
+                WHERE ad_group.id = {ag_id}
+                  AND ad_group_criterion.type = 'GENDER'
+            """
+            gr = _rq.post(search_url, headers=_rest_headers, json={"query": gender_gaql})
+            existing = {}
+            if gr.status_code == 200:
+                for batch in gr.json():
+                    for row in batch.get("results", []):
+                        agc = row.get("adGroupCriterion", {})
+                        g_type = agc.get("gender", {}).get("type", "")
+                        existing[g_type] = {
+                            "resource_name": agc.get("resourceName"),
+                            "bid_modifier": agc.get("bidModifier"),
+                        }
+            print(f"[gender-target] AG={ag_id} 既存性別クライテリア: {existing}")
 
-        # 新しいクライテリアを設定
-        create_ops = []
-        if req.gender == "FEMALE":
-            # 男性と不明を除外 → 女性のみ配信
-            create_ops = [
-                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "MALE"}}},
-                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "UNDETERMINED"}}},
-            ]
-        elif req.gender == "MALE":
-            # 女性と不明を除外 → 男性のみ配信
-            create_ops = [
-                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "FEMALE"}}},
-                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "UNDETERMINED"}}},
-            ]
-        # gender == "ALL" → 除外なし（何も作成しない）
+            # 3. 性別ごとのbidModifier値を決定
+            if req.gender == "FEMALE":
+                targets = {"MALE": 0.0, "FEMALE": 1.0, "UNDETERMINED": 0.0}
+            elif req.gender == "MALE":
+                targets = {"MALE": 1.0, "FEMALE": 0.0, "UNDETERMINED": 0.0}
+            else:  # ALL
+                targets = {"MALE": 1.0, "FEMALE": 1.0, "UNDETERMINED": 1.0}
 
-        if create_ops:
-            _rest_mutate(client, "campaignCriteria", create_ops, token)
-            print(f"[gender-target] 性別ターゲット設定完了: {req.gender}")
+            ops = []
+            for g_type, bid_mod in targets.items():
+                if g_type in existing:
+                    # 更新
+                    rn = existing[g_type]["resource_name"]
+                    ops.append({
+                        "update": {
+                            "resourceName": rn,
+                            "bidModifier": bid_mod,
+                        },
+                        "updateMask": "bidModifier",
+                    })
+                else:
+                    # 新規作成
+                    ops.append({
+                        "create": {
+                            "adGroup": ag_rn,
+                            "gender": {"type": g_type},
+                            "bidModifier": bid_mod,
+                        },
+                    })
+
+            if ops:
+                _rest_mutate(client, "adGroupCriteria", ops, token)
+                print(f"[gender-target] AG={ag_id} 性別ターゲット設定完了: {req.gender}")
 
         ads_cache.clear()
         label = {"FEMALE": "女性のみ", "MALE": "男性のみ", "ALL": "全性別"}
         return {"success": True, "message": f"性別ターゲットを「{label.get(req.gender, req.gender)}」に設定しました"}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[gender-target] エラー: {traceback.format_exc()}")
         raise HTTPException(500, f"性別ターゲット設定エラー: {str(e)}")
@@ -2197,7 +2228,7 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
 
 @app.get("/api/campaigns/{campaign_id}/gender-target")
 async def get_gender_target(campaign_id: str, clinic_id: int = 1):
-    """現在の性別ターゲティング設定を取得する"""
+    """現在の性別ターゲティング設定を取得する（adGroupCriteria経由）"""
     try:
         acc = _require_account(clinic_id)
         client = _get_ads_client(acc, "google")
@@ -2214,30 +2245,53 @@ async def get_gender_target(campaign_id: str, clinic_id: int = 1):
             "login-customer-id": client._login_customer_id,
             "Content-Type": "application/json",
         }
+
+        # まず広告グループIDを取得
+        ag_gaql = f"""
+            SELECT ad_group.id
+            FROM ad_group
+            WHERE campaign.id = {campaign_id} AND ad_group.status != 'REMOVED'
+            LIMIT 1
+        """
+        ag_r = _rq.post(search_url, headers=_rest_headers, json={"query": ag_gaql})
+        ag_id = None
+        if ag_r.status_code == 200:
+            for batch in ag_r.json():
+                for row in batch.get("results", []):
+                    ag_id = row.get("adGroup", {}).get("id")
+
+        if not ag_id:
+            return {"gender": "ALL", "message": "広告グループなし"}
+
+        # adGroupCriteriaで性別設定を取得
         gaql = f"""
-            SELECT campaign_criterion.gender.type, campaign_criterion.negative
-            FROM campaign_criterion
-            WHERE campaign.id = {campaign_id}
-              AND campaign_criterion.type = 'GENDER'
+            SELECT ad_group_criterion.gender.type, ad_group_criterion.bid_modifier
+            FROM ad_group_criterion
+            WHERE ad_group.id = {ag_id}
+              AND ad_group_criterion.type = 'GENDER'
         """
         sr = _rq.post(search_url, headers=_rest_headers, json={"query": gaql})
-        excluded_genders = []
+        gender_settings = {}
         if sr.status_code == 200:
             for batch in sr.json():
                 for row in batch.get("results", []):
-                    cc = row.get("campaignCriterion", {})
-                    if cc.get("negative"):
-                        g = cc.get("gender", {}).get("type", "")
-                        excluded_genders.append(g)
+                    agc = row.get("adGroupCriterion", {})
+                    g_type = agc.get("gender", {}).get("type", "")
+                    bid_mod = agc.get("bidModifier", 1.0)
+                    gender_settings[g_type] = bid_mod
 
-        if "MALE" in excluded_genders:
+        # bidModifierからターゲット状態を判定
+        male_bid = gender_settings.get("MALE", 1.0)
+        female_bid = gender_settings.get("FEMALE", 1.0)
+
+        if male_bid == 0 and female_bid > 0:
             current = "FEMALE"
-        elif "FEMALE" in excluded_genders:
+        elif female_bid == 0 and male_bid > 0:
             current = "MALE"
         else:
             current = "ALL"
 
-        return {"gender": current, "excluded": excluded_genders}
+        return {"gender": current, "details": gender_settings}
     except Exception as e:
         import traceback
         print(f"[gender-target-get] エラー: {traceback.format_exc()}")
