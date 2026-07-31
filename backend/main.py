@@ -2105,7 +2105,147 @@ async def rename_campaign(campaign_id: str, req: RenameCampaignReq):
         raise HTTPException(500, f"キャンペーン名変更エラー: {str(e)}")
 
 
+class GenderTargetReq(BaseModel):
+    clinic_id: int = 1
+    gender: str  # "FEMALE", "MALE", "ALL"
+
+
+@app.post("/api/campaigns/{campaign_id}/gender-target")
+async def set_gender_target(campaign_id: str, req: GenderTargetReq):
+    """キャンペーンの性別ターゲティングを設定する
+    
+    gender="FEMALE" → 男性・不明を除外（女性のみ配信）
+    gender="MALE" → 女性・不明を除外（男性のみ配信）
+    gender="ALL" → 除外を全て解除（全性別に配信）
+    """
+    import traceback
+    try:
+        acc = _require_account(req.clinic_id)
+        client = _get_ads_client(acc, "google")
+        if client.mock_mode:
+            return {"success": True, "mock": True, "message": f"[モック] 性別ターゲットを{req.gender}に設定しました"}
+
+        token = client._get_rest_access_token()
+        CID = client.customer_id
+        campaign_rn = f"customers/{CID}/campaigns/{campaign_id}"
+
+        # Google Ads gender constants:
+        # genderConstants/10 = MALE
+        # genderConstants/11 = FEMALE
+        # genderConstants/20 = UNDETERMINED
+        MALE_RN = "genderConstants/10"
+        FEMALE_RN = "genderConstants/11"
+        UNDETERMINED_RN = "genderConstants/20"
+
+        # まず既存の性別クライテリアを取得して削除
+        import requests as _rq
+        search_url = f"https://googleads.googleapis.com/v23/customers/{CID}/googleAds:searchStream"
+        _rest_headers = {
+            "Authorization": f"Bearer {token}",
+            "developer-token": client._developer_token,
+            "login-customer-id": client._login_customer_id,
+            "Content-Type": "application/json",
+        }
+        gaql = f"""
+            SELECT campaign_criterion.resource_name, campaign_criterion.gender.type, campaign_criterion.negative
+            FROM campaign_criterion
+            WHERE campaign.id = {campaign_id}
+              AND campaign_criterion.type = 'GENDER'
+        """
+        sr = _rq.post(search_url, headers=_rest_headers, json={"query": gaql})
+        existing_criteria = []
+        if sr.status_code == 200:
+            for batch in sr.json():
+                for row in batch.get("results", []):
+                    cc = row.get("campaignCriterion", {})
+                    existing_criteria.append(cc.get("resourceName"))
+        print(f"[gender-target] 既存の性別クライテリア: {existing_criteria}")
+
+        # 既存のクライテリアを全て削除
+        if existing_criteria:
+            remove_ops = [{"remove": rn} for rn in existing_criteria]
+            _rest_mutate(client, "campaignCriteria", remove_ops, token)
+            print(f"[gender-target] 既存クライテリアを削除しました")
+
+        # 新しいクライテリアを設定
+        create_ops = []
+        if req.gender == "FEMALE":
+            # 男性と不明を除外 → 女性のみ配信
+            create_ops = [
+                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "MALE"}}},
+                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "UNDETERMINED"}}},
+            ]
+        elif req.gender == "MALE":
+            # 女性と不明を除外 → 男性のみ配信
+            create_ops = [
+                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "FEMALE"}}},
+                {"create": {"campaign": campaign_rn, "negative": True, "gender": {"type": "UNDETERMINED"}}},
+            ]
+        # gender == "ALL" → 除外なし（何も作成しない）
+
+        if create_ops:
+            _rest_mutate(client, "campaignCriteria", create_ops, token)
+            print(f"[gender-target] 性別ターゲット設定完了: {req.gender}")
+
+        ads_cache.clear()
+        label = {"FEMALE": "女性のみ", "MALE": "男性のみ", "ALL": "全性別"}
+        return {"success": True, "message": f"性別ターゲットを「{label.get(req.gender, req.gender)}」に設定しました"}
+    except Exception as e:
+        print(f"[gender-target] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"性別ターゲット設定エラー: {str(e)}")
+
+
+@app.get("/api/campaigns/{campaign_id}/gender-target")
+async def get_gender_target(campaign_id: str, clinic_id: int = 1):
+    """現在の性別ターゲティング設定を取得する"""
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc, "google")
+        if client.mock_mode:
+            return {"gender": "ALL", "mock": True}
+
+        token = client._get_rest_access_token()
+        CID = client.customer_id
+        import requests as _rq
+        search_url = f"https://googleads.googleapis.com/v23/customers/{CID}/googleAds:searchStream"
+        _rest_headers = {
+            "Authorization": f"Bearer {token}",
+            "developer-token": client._developer_token,
+            "login-customer-id": client._login_customer_id,
+            "Content-Type": "application/json",
+        }
+        gaql = f"""
+            SELECT campaign_criterion.gender.type, campaign_criterion.negative
+            FROM campaign_criterion
+            WHERE campaign.id = {campaign_id}
+              AND campaign_criterion.type = 'GENDER'
+        """
+        sr = _rq.post(search_url, headers=_rest_headers, json={"query": gaql})
+        excluded_genders = []
+        if sr.status_code == 200:
+            for batch in sr.json():
+                for row in batch.get("results", []):
+                    cc = row.get("campaignCriterion", {})
+                    if cc.get("negative"):
+                        g = cc.get("gender", {}).get("type", "")
+                        excluded_genders.append(g)
+
+        if "MALE" in excluded_genders:
+            current = "FEMALE"
+        elif "FEMALE" in excluded_genders:
+            current = "MALE"
+        else:
+            current = "ALL"
+
+        return {"gender": current, "excluded": excluded_genders}
+    except Exception as e:
+        import traceback
+        print(f"[gender-target-get] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"性別ターゲット取得エラー: {str(e)}")
+
+
 @app.post("/api/campaigns/create-youtube")
+
 
 
 async def create_youtube_campaign(req: YouTubeCampaignReq):
