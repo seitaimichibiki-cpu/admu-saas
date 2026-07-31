@@ -2159,8 +2159,47 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
         print(f"[gender-target] 広告グループ: {ad_groups}")
 
         for ag_rn in ad_groups:
-            # 2. 既存の性別adGroupCriteriaを取得
             ag_id = ag_rn.split("/")[-1]
+
+            # 2. useAudienceGrouped を確認し、true なら false に変更
+            uas_gaql = f"""
+                SELECT ad_group.audience_setting.use_audience_grouped
+                FROM ad_group
+                WHERE ad_group.id = {ag_id}
+            """
+            uas_r = _rq.post(search_url, headers=_rest_headers, json={"query": uas_gaql})
+            use_grouped = False
+            if uas_r.status_code == 200:
+                for batch in uas_r.json():
+                    for row in batch.get("results", []):
+                        ag_data = row.get("adGroup", {})
+                        as_data = ag_data.get("audienceSetting", {})
+                        use_grouped = as_data.get("useAudienceGrouped", False)
+            print(f"[gender-target] AG={ag_id} useAudienceGrouped={use_grouped}")
+
+            if use_grouped:
+                # useAudienceGrouped を false に変更
+                print(f"[gender-target] AG={ag_id} useAudienceGroupedをfalseに変更中...")
+                try:
+                    _rest_mutate(client, "adGroups", [{
+                        "update": {
+                            "resourceName": ag_rn,
+                            "audienceSetting": {
+                                "useAudienceGrouped": False,
+                            },
+                        },
+                        "updateMask": "audienceSetting.useAudienceGrouped",
+                    }], token)
+                    print(f"[gender-target] AG={ag_id} useAudienceGrouped=false に変更完了")
+                except Exception as e_uas:
+                    print(f"[gender-target] useAudienceGrouped変更エラー: {e_uas}")
+                    # フォールバック: フラグ解除不可の場合は直接UIでの設定を促す
+                    raise HTTPException(400,
+                        "Demand Genキャンペーンのオーディエンス設定が有効なため、"
+                        "API経由での性別設定ができません。Google Ads管理画面から"
+                        "「オーディエンス」→「ユーザー属性」→性別を設定してください。")
+
+            # 3. 既存の性別adGroupCriteriaを取得
             gender_gaql = f"""
                 SELECT ad_group_criterion.resource_name,
                        ad_group_criterion.gender.type,
@@ -2182,7 +2221,7 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
                         }
             print(f"[gender-target] AG={ag_id} 既存性別クライテリア: {existing}")
 
-            # 3. 性別ごとのbidModifier値を決定
+            # 4. 性別ごとのbidModifier値を決定
             if req.gender == "FEMALE":
                 targets = {"MALE": 0.0, "FEMALE": 1.0, "UNDETERMINED": 0.0}
             elif req.gender == "MALE":
@@ -2193,7 +2232,6 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
             ops = []
             for g_type, bid_mod in targets.items():
                 if g_type in existing:
-                    # 更新
                     rn = existing[g_type]["resource_name"]
                     ops.append({
                         "update": {
@@ -2203,7 +2241,6 @@ async def set_gender_target(campaign_id: str, req: GenderTargetReq):
                         "updateMask": "bidModifier",
                     })
                 else:
-                    # 新規作成
                     ops.append({
                         "create": {
                             "adGroup": ag_rn,
