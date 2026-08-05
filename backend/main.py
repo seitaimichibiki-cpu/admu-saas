@@ -463,6 +463,28 @@ def _require_admin(request: Request) -> dict:
     return user
 
 # ---- API: 資料請求 (共通エンドポイント) ----
+def _send_line_notify(message: str) -> bool:
+    """資料請求通知をLINEへ送る。LINE_NOTIFY_TOKEN環境変数が必要。"""
+    import urllib.request, urllib.parse, os
+    token = os.environ.get("LINE_NOTIFY_TOKEN", "")
+    if not token:
+        print("⚠️ LINE_NOTIFY_TOKENが未設定")
+        return False
+    try:
+        data = urllib.parse.urlencode({"message": message}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://notify-api.line.me/api/notify",
+            data=data,
+            headers={"Authorization": f"Bearer {token}"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as res:
+            return res.status == 200
+    except Exception as e:
+        print(f"⚠️ LINE通知エラー: {e}")
+        return False
+
+
 class DocumentRequestInput(BaseModel):
     name: str
     company: str
@@ -488,6 +510,13 @@ def create_document_request(req: DocumentRequestInput, response: Response):
                 (req.name, req.company, req.address, req.phone, req.email, req.system)
             )
             conn.commit()
+        _send_line_notify(
+            f"\n\U0001f4c4 「AdMu」資料請求\n"
+            f"氏名: {req.name}\n"
+            f"法人/屋号: {req.company}\n"
+            f"電話: {req.phone}\n"
+            f"メール: {req.email}"
+        )
         return {"status": "ok", "message": "資料請求を受け付けました"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
