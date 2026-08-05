@@ -462,6 +462,36 @@ def _require_admin(request: Request) -> dict:
         raise HTTPException(status_code=403, detail="管理者権限が必要です。")
     return user
 
+# ---- API: 資料請求 (共通エンドポイント) ----
+class DocumentRequestInput(BaseModel):
+    name: str
+    company: str
+    address: str = ""
+    phone: str = ""
+    email: str
+    system: str
+
+@app.options("/api/document-request")
+def options_document_request(response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return {}
+
+@app.post("/api/document-request")
+def create_document_request(req: DocumentRequestInput, response: Response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    try:
+        with db.get_conn() as conn:
+            conn.execute(
+                "INSERT INTO document_requests (name, company, address, phone, email, system) VALUES (?, ?, ?, ?, ?, ?)",
+                (req.name, req.company, req.address, req.phone, req.email, req.system)
+            )
+            conn.commit()
+        return {"status": "ok", "message": "資料請求を受け付けました"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
+
 # ---- API: お知らせ ----
 class AnnouncementReq(BaseModel):
     title: str

@@ -151,6 +151,10 @@ def init_db():
         DT = "TEXT DEFAULT (date('now','localtime'))"
 
     tables = [
+        f"""CREATE TABLE IF NOT EXISTS document_requests (
+            id {PK}, name TEXT NOT NULL, company TEXT NOT NULL,
+            address TEXT, phone TEXT, email TEXT NOT NULL, system TEXT NOT NULL,
+            created_at {TS})""",
         f"""CREATE TABLE IF NOT EXISTS clinics (
             id {PK}, name TEXT NOT NULL, license_key TEXT UNIQUE,
             parent_clinic_id INTEGER DEFAULT NULL, max_sub_accounts INTEGER DEFAULT 1,
