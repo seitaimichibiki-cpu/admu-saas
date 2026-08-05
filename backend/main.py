@@ -463,25 +463,34 @@ def _require_admin(request: Request) -> dict:
     return user
 
 # ---- API: 資料請求 (共通エンドポイント) ----
-def _send_line_notify(message: str) -> bool:
-    """資料請求通知をLINEへ送る。LINE_NOTIFY_TOKEN環境変数が必要。"""
-    import urllib.request, urllib.parse, os
-    token = os.environ.get("LINE_NOTIFY_TOKEN", "")
-    if not token:
-        print("⚠️ LINE_NOTIFY_TOKENが未設定")
+def _send_email_notify(subject: str, body: str) -> bool:
+    """資料請求通知をメールで送信する。
+    環境変数: SMTP_EMAIL, SMTP_PASSWORD, NOTIFY_EMAIL
+    NOTIFY_EMAILは未設定時は SMTP_EMAIL へ送信。
+    """
+    import smtplib, os
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    smtp_email = os.environ.get("SMTP_EMAIL", "")
+    smtp_pass  = os.environ.get("SMTP_PASSWORD", "")
+    to_email   = os.environ.get("NOTIFY_EMAIL") or smtp_email
+    if not smtp_email or not smtp_pass:
+        print("⚠️ SMTP_EMAIL/SMTP_PASSWORDが未設定です。Render環境変数に追加してください。")
         return False
     try:
-        data = urllib.parse.urlencode({"message": message}).encode("utf-8")
-        req = urllib.request.Request(
-            "https://notify-api.line.me/api/notify",
-            data=data,
-            headers={"Authorization": f"Bearer {token}"},
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=10) as res:
-            return res.status == 200
+        msg = MIMEMultipart()
+        msg["From"]    = smtp_email
+        msg["To"]      = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.starttls()
+            server.login(smtp_email, smtp_pass)
+            server.sendmail(smtp_email, to_email, msg.as_string())
+        print(f"✅ メール送信完了 → {to_email}")
+        return True
     except Exception as e:
-        print(f"⚠️ LINE通知エラー: {e}")
+        print(f"⚠️ メール送信エラー: {e}")
         return False
 
 
@@ -510,12 +519,16 @@ def create_document_request(req: DocumentRequestInput, response: Response):
                 (req.name, req.company, req.address, req.phone, req.email, req.system)
             )
             conn.commit()
-        _send_line_notify(
-            f"\n\U0001f4c4 「AdMu」資料請求\n"
-            f"氏名: {req.name}\n"
-            f"法人/屋号: {req.company}\n"
-            f"電話: {req.phone}\n"
-            f"メール: {req.email}"
+        _send_email_notify(
+            subject="[資料請求] AdMu — " + (req.company or '') + " 様",
+            body=(
+                f"「AdMu」の資料請求がありました。\n\n"
+                f"氏名: {req.name}\n"
+                f"法人/屋号: {req.company}\n"
+                f"住所: {req.address}\n"
+                f"電話: {req.phone}\n"
+                f"メール: {req.email}\n"
+            )
         )
         return {"status": "ok", "message": "資料請求を受け付けました"}
     except Exception as e:
