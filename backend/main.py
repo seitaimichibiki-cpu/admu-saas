@@ -6826,7 +6826,13 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                    metrics.impressions,
                    metrics.clicks,
                    metrics.conversions,
-                   metrics.cost_micros
+                   metrics.cost_micros,
+                   metrics.video_views,
+                   metrics.video_view_rate,
+                   metrics.video_quartile_25_rate,
+                   metrics.video_quartile_50_rate,
+                   metrics.video_quartile_75_rate,
+                   metrics.video_quartile_100_rate
             FROM ad_group_ad
             WHERE campaign.id = {g_id}
               AND ad_group_ad.status != REMOVED
@@ -6837,7 +6843,6 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         print(f"[youtube-ad-details] GAQL returned {len(rows)} rows")
 
         # ── ① 全広告のvideoアセットresource_nameを収集してバッチで動画ID取得（高速化）──
-        # まず全rowを一時解析してasset resource_nameを集める
         asset_rns_needed = set()
         for r in rows:
             dg_tmp = r.get("adGroupAd", {}).get("ad", {}).get("demandGenVideoResponsiveAd") or {}
@@ -6846,8 +6851,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 if rn:
                     asset_rns_needed.add(rn)
 
-        # バッチでassetクエリを1回だけ実行
-        asset_video_map = {}  # {resource_name: youtube_video_id}
+        asset_video_map = {}
         if asset_rns_needed:
             rn_list = "', '".join(asset_rns_needed)
             batch_asset_query = f"""
@@ -6863,8 +6867,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                 vid_id = a.get("youtubeVideoAsset", {}).get("youtubeVideoId", "")
                 if rn and vid_id:
                     asset_video_map[rn] = vid_id
+
         # ── ② 重複集計を避けるため ad_id ごとに指標を合算 ──
-        # DURING付きクエリは同じ広告が日付ごとに複数行返る場合があるため
         merged: dict = {}
         for r in rows:
             aga = r.get("adGroupAd", {})
@@ -6872,11 +6876,21 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             ad_id = ad_data.get("id", aga.get("resourceName", ""))
             m = r.get("metrics", {})
             if ad_id not in merged:
-                merged[ad_id] = {"row": r, "impressions": 0, "clicks": 0, "conversions": 0.0, "cost_micros": 0}
+                merged[ad_id] = {
+                    "row": r, "impressions": 0, "clicks": 0, "conversions": 0.0, "cost_micros": 0,
+                    "video_views": 0, "vvr_sum": 0.0, "q25_sum": 0.0, "q50_sum": 0.0, "q75_sum": 0.0, "q100_sum": 0.0, "count": 0
+                }
             merged[ad_id]["impressions"] += int(m.get("impressions", 0))
             merged[ad_id]["clicks"]      += int(m.get("clicks", 0))
             merged[ad_id]["conversions"] += float(m.get("conversions", 0.0))
             merged[ad_id]["cost_micros"] += int(m.get("costMicros", 0))
+            merged[ad_id]["video_views"] += int(m.get("videoViews", 0))
+            merged[ad_id]["vvr_sum"]    += float(m.get("videoViewRate", 0.0))
+            merged[ad_id]["q25_sum"]    += float(m.get("videoQuartile25Rate", 0.0))
+            merged[ad_id]["q50_sum"]    += float(m.get("videoQuartile50Rate", 0.0))
+            merged[ad_id]["q75_sum"]    += float(m.get("videoQuartile75Rate", 0.0))
+            merged[ad_id]["q100_sum"]   += float(m.get("videoQuartile100Rate", 0.0))
+            merged[ad_id]["count"]      += 1
 
         rows = [v["row"] for v in merged.values()]
         merged_metrics = {v["row"].get("adGroupAd", {}).get("ad", {}).get("id", "") or v["row"].get("adGroupAd", {}).get("resourceName", ""): v for v in merged.values()}
@@ -6922,6 +6936,39 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             ctr = (clicks / impressions * 100) if impressions > 0 else 0.0
             cpa = int(cost_yen / conversions) if conversions > 0 else 0
 
+            # 視聴維持率データの計算 (平均)
+            cnt = agg.get("count", 1) or 1
+            vvr = round(agg.get("vvr_sum", 0.0) / cnt * 100, 1)
+            q25 = round(agg.get("q25_sum", 0.0) / cnt * 100, 1)
+            q50 = round(agg.get("q50_sum", 0.0) / cnt * 100, 1)
+            q75 = round(agg.get("q75_sum", 0.0) / cnt * 100, 1)
+            q100 = round(agg.get("q100_sum", 0.0) / cnt * 100, 1)
+            video_views = agg.get("video_views", 0)
+
+            # 視聴維持率AI診断
+            retention_advice = ""
+            if impressions > 50 or video_views > 10:
+                if q25 < 30.0:
+                    retention_advice = "冒頭25%での離脱率が高めです。最初の0.5秒でターゲット（地域名・性別・お悩み）を明確に呼びかけ、フックを強めてください。"
+                elif (q25 - q50) > 25.0:
+                    retention_advice = "動画の中盤（25%〜50%）で大きく離脱されています。悩み共感・解決策の説明をよりテンポよく短く展開してください。"
+                elif q100 > 15.0 and ctr < 0.8:
+                    retention_advice = "動画は最後までよく見られていますがクリック率が低めです。動画終盤（20秒以降）で「画面下リンクをタップして初回1,980円」の行動指示（CTA）をテロップと声で強調してください。"
+                else:
+                    retention_advice = "視聴維持率は良好です。LP（ランディングページ）のファーストビューと動画の訴求を完全に一致させることで、CV率がさらに上がります。"
+            else:
+                retention_advice = "データ蓄積中（インプレッション数が増えるとAI離脱診断が表示されます）"
+
+            video_retention = {
+                "video_views": video_views,
+                "view_rate": vvr,
+                "q25_rate": q25,
+                "q50_rate": q50,
+                "q75_rate": q75,
+                "q100_rate": q100,
+                "ai_advice": retention_advice
+            }
+
             demand_gen_ads.append({
                 "resource_name": aga.get("resourceName", ""),
                 "ad_id": ad_data.get("id", ""),
@@ -6943,7 +6990,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                     "conversions": conversions,
                     "cost": cost_yen,
                     "cpa": cpa
-                }
+                },
+                "video_retention": video_retention
             })
 
         # 2. もしGoogle広告APIから1件も取得できなかった場合、最後のフォールバックとしてDBキャッシュを返す
@@ -8718,7 +8766,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-conversion-insights', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-video-retention', html)
 
 
         return HTMLResponse(

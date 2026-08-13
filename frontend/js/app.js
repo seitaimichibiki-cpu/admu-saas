@@ -2014,6 +2014,40 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) 
         </div>
       `;
 
+      // 視聴維持率表示ブロック
+      const vr = ad.video_retention || {};
+      const retentionHtml = `
+        <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.2);border-radius:6px;padding:10px 12px;margin:10px 0 12px 0;">
+          <div style="font-size:11px;font-weight:bold;color:#a5b4fc;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+            <span>🎬 動画視聴維持率 (オーディエンス・リテンション)</span>
+            <span style="font-size:10px;color:#94a3b8">再生数: ${(vr.video_views||0).toLocaleString()} 回 (視聴率: ${vr.view_rate||0}%)</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;margin-bottom:8px;">
+            <div style="background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="font-size:10px;color:#94a3b8">25% 到達</div>
+              <div style="font-size:12px;font-weight:bold;color:#818cf8">${vr.q25_rate||0}%</div>
+              <div style="height:4px;background:#334155;border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(vr.q25_rate||0, 100)}%;background:#818cf8"></div></div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="font-size:10px;color:#94a3b8">50% 到達</div>
+              <div style="font-size:12px;font-weight:bold;color:#38bdf8">${vr.q50_rate||0}%</div>
+              <div style="height:4px;background:#334155;border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(vr.q50_rate||0, 100)}%;background:#38bdf8"></div></div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="font-size:10px;color:#94a3b8">75% 到達</div>
+              <div style="font-size:12px;font-weight:bold;color:#fbbf24">${vr.q75_rate||0}%</div>
+              <div style="height:4px;background:#334155;border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(vr.q75_rate||0, 100)}%;background:#fbbf24"></div></div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);padding:6px;border-radius:4px;text-align:center;">
+              <div style="font-size:10px;color:#94a3b8">100% 完走</div>
+              <div style="font-size:12px;font-weight:bold;color:#34d399">${vr.q100_rate||0}%</div>
+              <div style="height:4px;background:#334155;border-radius:2px;margin-top:3px;overflow:hidden"><div style="height:100%;width:${Math.min(vr.q100_rate||0, 100)}%;background:#34d399"></div></div>
+            </div>
+          </div>
+          ${vr.ai_advice ? `<div style="font-size:11px;color:#cbd5e1;background:rgba(99,102,241,0.1);padding:6px 8px;border-radius:4px;border-left:2px solid #6366f1">💡 <strong>AI診断:</strong> ${vr.ai_advice}</div>` : ''}
+        </div>
+      `;
+
       formHtml += `
         <div class="yt-ad-card" style="border:1px solid ${isPaused ? 'rgba(107,114,128,0.5)' : 'var(--border)'};border-left:3px solid ${isPaused ? '#6b7280' : '#6366f1'};border-radius:6px;margin-bottom:10px;background:${isPaused ? 'rgba(17,24,39,0.8)' : '#1e293b'};overflow:hidden;opacity:${isPaused ? '0.75' : '1'};transition:opacity 0.2s">
           <div onclick="toggleYtAdAccordion(${index})" style="padding:10px 12px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none">
@@ -2035,6 +2069,7 @@ async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) 
           
           <div id="ytAdAccordionContent_${index}" class="yt-ad-accordion-content" style="padding:12px;border-top:1px solid var(--border);display:${index === 0 ? 'block' : 'none'}">
             ${metricsHtml}
+            ${retentionHtml}
             <div style="margin-bottom:12px">
               <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:4px;font-weight:bold">🏢 ビジネス名（最大25文字）</label>
               <input type="text" id="ytEditBusinessName_${index}" maxlength="25" value="${(merged.business_name || '').replace(/"/g, '&quot;')}"
