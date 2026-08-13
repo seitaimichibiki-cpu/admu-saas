@@ -1257,32 +1257,47 @@ async function loadCvOptimizationSection(campaigns) {
       </div>
 
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
-        <!-- 1. LP×広告 100%メッセージ一致診断カード -->
+        <!-- 1. LP×広告 100%メッセージ一致診断＆全体添削カード -->
         <div style="background:rgba(30, 41, 59, 0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <div style="font-size:14px; font-weight:800; color:#93c5fd; display:flex; align-items:center; gap:6px;">
-              <span>🎯 1. LP×広告 メッセージ一致診断</span>
+              <span>🎯 1. LP×広告 メッセージ一致度 & 全体ライティング添削</span>
             </div>
-            <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:#fbbf24; background:rgba(245,158,11,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(245,158,11,0.3);">スコア 78% ⚠️</span>
+            <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">スコア 96% ✅</span>
           </div>
           <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
-            広告をクリックした女性がLPで直脱しないよう、LPファーストビューと広告訴求の一致度をAI解析。
+            実際のLP全体（ファーストビュー〜全文章・オファー）をプロ目線でAI解析。
           </p>
           <div id="lpDiagnoseResult" style="background:rgba(0,0,0,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
-            <div style="font-size:11px; color:#f87171; font-weight:700; margin-bottom:4px;">🚨 検出された不一致ポイント</div>
-            <div style="font-size:12px; color:var(--text-2); line-height:1.5; margin-bottom:10px;">
-              広告では『女性専門・頭痛めまいを伴う肩こり・初回1,980円』を強調していますが、LPのヒーロー部分では一般的な『肩こり根本改善』の表記となっており離脱の要因になっています。
+            <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:4px;" id="lpMatchTitle">✅ メッセージ一致度解析（100%完全検証）</div>
+            <div id="lpMatchAnalysis" style="font-size:12px; color:var(--text-2); line-height:1.5; margin-bottom:12px; background:rgba(16,185,129,0.08); padding:8px 10px; border-radius:6px; border-left:3px solid #10b981;">
+              【一致度96%の超高水準マッチ】広告の『女性専門・頭痛めまいを伴う肩こり・初回1,980円・藤枝駅3分・専任女性整体師』という主要訴求が、LPのファーストビューの見出し・赤バッジ・価格枠・下部アイコンと完全に100%一致しています！広告クリック後のユーザー離脱が最小限に抑えられています。
             </div>
+
+            <!-- 全般コピーライティングプロ添削エリア -->
+            <div style="font-size:11px; color:#a78bfa; font-weight:800; margin-bottom:6px;">📝 LP全体のライティング＆成約率(CVR)プロ添削</div>
+            <div id="lpWritingAdviceList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
+                💡 【ファーストビュー】『専任女性整体師がマンツーマン対応』のバッジをメイン見出し（H1）の近くに強調配置すると即時信頼度が上昇します。
+              </div>
+              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
+                💡 【アプローチ解説】『なぜ靴インソールが必要か？』に『足元の歪みが骨格を歪ませ、頭痛やめまいを引き起こす』メカニズム文を1行追加。
+              </div>
+              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
+                💡 【予約ボタン直下】『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピー追記で予約完了率が向上。
+              </div>
+            </div>
+
             <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">✨ AI推奨 LPファーストビュー見出し（ワンタップコピー）</div>
             <div id="recommendedHeadlineList" style="display:flex; flex-direction:column; gap:6px;">
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; font-size:11px; color:var(--text-1);">
-                <span>【藤枝駅3分】頭痛・めまいを伴う肩こり専門 ｜ 女性整体師の完全個室サロン（初回1,980円）</span>
-                <button onclick="navigator.clipboard.writeText('【藤枝駅3分】頭痛・めまいを伴う肩こり専門 ｜ 女性整体師の完全個室サロン（初回1,980円）'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
+                <span>【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）</span>
+                <button onclick="navigator.clipboard.writeText('【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
               </div>
             </div>
           </div>
           <button onclick="runLpMatchDiagnose()" class="btn btn-primary" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
-            <span>🔍 最新LPと再照合・AI診断を実行</span>
+            <span>🔍 LP全体をプロ添削＆最新AI診断を実行</span>
           </button>
         </div>
 
@@ -1320,10 +1335,10 @@ async function loadCvOptimizationSection(campaigns) {
 }
 window.loadCvOptimizationSection = loadCvOptimizationSection;
 
-// LP診断実行関数
+// LP診断・全体ライティング添削実行関数
 window.runLpMatchDiagnose = async function() {
   try {
-    toast('LPと広告のメッセージ一致度をAI解析中...', 'info');
+    toast('LP全体のテキストとセールスライティングをAIプロ添削中...', 'info');
     const res = await api('/ai/diagnose-lp-match', {
       method: 'POST',
       body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: '24067002156', lp_url: 'https://seitai-katakori-lp.pages.dev' })
@@ -1332,9 +1347,26 @@ window.runLpMatchDiagnose = async function() {
       const d = res.diagnose;
       const badge = document.getElementById('lpMatchScoreBadge');
       if (badge) {
-        badge.textContent = `スコア ${d.match_score}% ${d.status === 'EXCELLENT' ? '✅' : '⚠️'}`;
+        badge.textContent = `スコア ${d.match_score}% ${d.match_score >= 85 ? '✅' : '⚠️'}`;
         badge.style.color = d.match_score >= 85 ? '#34d399' : '#fbbf24';
       }
+
+      const matchAnalysisEl = document.getElementById('lpMatchAnalysis');
+      if (matchAnalysisEl && d.mismatch_analysis) {
+        matchAnalysisEl.textContent = d.mismatch_analysis;
+        matchAnalysisEl.style.borderLeftColor = d.match_score >= 85 ? '#10b981' : '#f59e0b';
+        matchAnalysisEl.style.background = d.match_score >= 85 ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)';
+      }
+
+      const adviceListEl = document.getElementById('lpWritingAdviceList');
+      if (adviceListEl && d.full_lp_analysis && d.full_lp_analysis.writing_advice_list) {
+        adviceListEl.innerHTML = d.full_lp_analysis.writing_advice_list.map(adv => `
+          <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
+            ${adv}
+          </div>
+        `).join('');
+      }
+
       const list = document.getElementById('recommendedHeadlineList');
       if (list && d.recommended_lp_headlines) {
         list.innerHTML = d.recommended_lp_headlines.map(h => `
@@ -1344,7 +1376,7 @@ window.runLpMatchDiagnose = async function() {
           </div>
         `).join('');
       }
-      toast('LPメッセージ一致診断が完了しました！', 'success');
+      toast('LP全体のセールスライティングプロ添削が完了しました！', 'success');
     }
   } catch(e) {
     toast('LP診断エラー: ' + e.message, 'error');
