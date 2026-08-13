@@ -6772,6 +6772,15 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                             "conversions": 2.0,
                             "cost": 3200,
                             "cpa": 1600,
+                        },
+                        "video_retention": {
+                            "video_views": 95,
+                            "view_rate": 25.5,
+                            "q25_rate": 56.1,
+                            "q50_rate": 35.7,
+                            "q75_rate": 20.4,
+                            "q100_rate": 10.2,
+                            "ai_advice": "動画視聴率は25.5%と良好です。20秒以降で画面下の予約ボタンタップを案内すると成約率が上がります。"
                         }
                     },
                     {
@@ -6795,6 +6804,15 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                             "conversions": 0.0,
                             "cost": 0,
                             "cpa": 0,
+                        },
+                        "video_retention": {
+                            "video_views": 0,
+                            "view_rate": 0.0,
+                            "q25_rate": 0.0,
+                            "q50_rate": 0.0,
+                            "q75_rate": 0.0,
+                            "q100_rate": 0.0,
+                            "ai_advice": "データ蓄積中"
                         }
                     }
                 ],
@@ -7008,6 +7026,15 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
                         "conversions": 0.0,
                         "cost": 0,
                         "cpa": 0
+                    },
+                    "video_retention": {
+                        "video_views": 0,
+                        "view_rate": 0.0,
+                        "q25_rate": 68.0,
+                        "q50_rate": 41.2,
+                        "q75_rate": 18.5,
+                        "q100_rate": 8.1,
+                        "ai_advice": "動画分析データ準備中（配信データが蓄積されると離脱箇所を全自動解析します）"
                     }
                 })
 
