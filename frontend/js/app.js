@@ -1083,7 +1083,7 @@ async function loadVideoRetentionDashboard(campaigns) {
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <span style="font-size:20px;">🎬</span>
-            <h3 style="font-size:16px; font-weight:800; color:var(--text-1); margin:0;">YouTube動画広告 視聴維持率＆AI改善診断</h3>
+            <h3 style="font-size:16px; font-weight:800; color:var(--text-1); margin:0;">YouTube動画広告 視聴維持率＆AI改善診断 <span style="font-size:11px; font-weight:400; color:#38bdf8; background:rgba(56,189,248,0.1); padding:2px 8px; border-radius:4px; margin-left:6px;">📅 過去1ヶ月分集計</span></h3>
           </div>
           <span style="font-size:11px; color:#a78bfa; background:rgba(139, 92, 246, 0.15); padding:4px 10px; border-radius:99px; border:1px solid rgba(139, 92, 246, 0.3);">👉 カードをタップして編集画面を開く</span>
         </div>
@@ -1144,7 +1144,7 @@ async function loadVideoRetentionDashboard(campaigns) {
           <!-- 数値サマリー -->
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap:8px; margin-bottom:14px; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;">
             <div>
-              <div style="font-size:10px; color:var(--text-3);">再生回数</div>
+              <div style="font-size:10px; color:var(--text-3);">再生回数 (1ヶ月)</div>
               <div style="font-size:14px; font-weight:800; color:#a78bfa;" id="vret-views-${c.id}">${views.toLocaleString()}回</div>
             </div>
             <div>
@@ -1156,7 +1156,7 @@ async function loadVideoRetentionDashboard(campaigns) {
               <div style="font-size:14px; font-weight:800; color:${ctr > 3 ? '#34d399' : '#fbbf24'};" id="vret-ctr-${c.id}">${ctr.toFixed(2)}%</div>
             </div>
             <div>
-              <div style="font-size:10px; color:var(--text-3);">CV数</div>
+              <div style="font-size:10px; color:var(--text-3);">CV数 (1ヶ月)</div>
               <div style="font-size:14px; font-weight:800; color:#34d399;" id="vret-cv-${c.id}">${cv.toFixed(1)}件</div>
             </div>
           </div>
@@ -1164,7 +1164,7 @@ async function loadVideoRetentionDashboard(campaigns) {
           <!-- 視聴維持率 ゲージバー -->
           <div style="margin-bottom:14px;">
             <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-2); font-weight:700; margin-bottom:6px;">
-              <span>再生維持率推移 (Quartile Retention)</span>
+              <span>再生維持率推移 (過去30日間の1ヶ月集計)</span>
               <span style="color:var(--text-3); font-size:10px;">再生時間 0% ➔ 100%</span>
             </div>
             <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
@@ -1212,8 +1212,8 @@ async function loadVideoRetentionDashboard(campaigns) {
         </div>
       `;
 
-      // バックエンドから非同期取得して実データで滑らかに更新
-      api(`/campaigns/${googleId}/youtube-ad-details?clinic_id=${currentClinicId || 1}&date_range=ALL_TIME`)
+      // バックエンドから非同期取得して実データ(過去30日間の1ヶ月集計)で滑らかに更新
+      api(`/campaigns/${googleId}/youtube-ad-details?clinic_id=${currentClinicId || 1}&date_range=LAST_30_DAYS`)
         .then(dg => {
           const ads = dg.demand_gen_ads || [];
           const ad = ads[0] || {};
