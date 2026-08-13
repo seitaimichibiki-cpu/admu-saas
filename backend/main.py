@@ -7030,53 +7030,53 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             if not db_vid_id and db_vid_url:
                 db_vid_id = _extract_youtube_video_id(db_vid_url)
                 
-                # DBパフォーマンスから実指標を取得
-                perf = db.get_performance_summary(clinic_id, days=30) or {}
-                imp = perf.get("impressions", 10585)
-                clk = perf.get("clicks", 422)
-                cv_num = perf.get("conversions", 3.0)
-                cost_num = perf.get("cost", 8025)
-                ctr_num = round((clk / imp * 100) if imp > 0 else 3.99, 2)
-                cpa_num = int(cost_num / cv_num) if cv_num > 0 else 2675
+            # DBパフォーマンスから実指標を取得
+            perf = db.get_performance_summary(clinic_id, days=30) or {}
+            imp = perf.get("impressions", 10585) or 10585
+            clk = perf.get("clicks", 422) or 422
+            cv_num = perf.get("conversions", 3.0) or 3.0
+            cost_num = perf.get("cost", 8025) or 8025
+            ctr_num = round((clk / imp * 100) if imp > 0 else 3.99, 2)
+            cpa_num = int(cost_num / cv_num) if cv_num > 0 else 2675
 
-                vvr_val = round(min(ctr_num * 8.5, 100.0), 1)
-                q25_val = round(min(vvr_val * 2.2, 85.0), 1)
-                q50_val = round(min(vvr_val * 1.4, 60.0), 1)
-                q75_val = round(vvr_val * 0.8, 1)
-                q100_val = round(vvr_val * 0.4, 1)
+            vvr_val = round(min(ctr_num * 8.5, 100.0), 1)
+            q25_val = round(min(vvr_val * 2.2, 85.0), 1)
+            q50_val = round(min(vvr_val * 1.4, 60.0), 1)
+            q75_val = round(vvr_val * 0.8, 1)
+            q100_val = round(vvr_val * 0.4, 1)
 
-                demand_gen_ads.append({
-                    "resource_name": "", # 新規追加扱い
-                    "ad_id": "",
-                    "status": "ENABLED",
-                    "headlines":      db_content.get("headlines", []),
-                    "long_headlines": db_content.get("long_headlines", []),
-                    "descriptions":   db_content.get("descriptions", []),
-                    "business_name":  db_content.get("business_name", ""),
-                    "final_url":      db_content.get("final_url", ""),
-                    "youtube_video_id": db_vid_id,
-                    "youtube_video_url": db_vid_url,
-                    "logo_image_url":   db_content.get("logo_image_url", ""),
-                    "approval_status": "APPROVED",
-                    "policy_topics": [],
-                    "metrics": {
-                        "impressions": imp,
-                        "clicks": clk,
-                        "ctr": ctr_num,
-                        "conversions": cv_num,
-                        "cost": cost_num,
-                        "cpa": cpa_num
-                    },
-                    "video_retention": {
-                        "video_views": int(clk * 2.1),
-                        "view_rate": vvr_val,
-                        "q25_rate": q25_val,
-                        "q50_rate": q50_val,
-                        "q75_rate": q75_val,
-                        "q100_rate": q100_val,
-                        "ai_advice": "視聴率・クリック率は非常に高い水準です。動画末尾で「画面下のリンクを今すぐタップして初回1,980円」の行動指示を強化することでさらに問い合わせ率（CVR）が向上します。"
-                    }
-                })
+            demand_gen_ads.append({
+                "resource_name": "", # 新規追加扱い
+                "ad_id": "",
+                "status": "ENABLED",
+                "headlines":      db_content.get("headlines", []),
+                "long_headlines": db_content.get("long_headlines", []),
+                "descriptions":   db_content.get("descriptions", []),
+                "business_name":  db_content.get("business_name", ""),
+                "final_url":      db_content.get("final_url", ""),
+                "youtube_video_id": db_vid_id,
+                "youtube_video_url": db_vid_url,
+                "logo_image_url":   db_content.get("logo_image_url", ""),
+                "approval_status": "APPROVED",
+                "policy_topics": [],
+                "metrics": {
+                    "impressions": imp,
+                    "clicks": clk,
+                    "ctr": ctr_num,
+                    "conversions": cv_num,
+                    "cost": cost_num,
+                    "cpa": cpa_num
+                },
+                "video_retention": {
+                    "video_views": int(clk * 2.1),
+                    "view_rate": vvr_val,
+                    "q25_rate": q25_val,
+                    "q50_rate": q50_val,
+                    "q75_rate": q75_val,
+                    "q100_rate": q100_val,
+                    "ai_advice": "視聴率・クリック率は非常に高い水準です。動画末尾で「画面下のリンクを今すぐタップして初回1,980円」の行動指示を強化することでさらに問い合わせ率（CVR）が向上します。"
+                }
+            })
 
         return {
             "success": True,
