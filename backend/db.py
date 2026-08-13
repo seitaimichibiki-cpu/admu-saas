@@ -809,7 +809,7 @@ def save_youtube_ad_content(clinic_id: int, google_campaign_id: str, content: di
 
 
 def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
-    """DBに保存されたYouTube広告内容を返す"""
+    """DBに保存されたYouTube広告内容を返す（PostgreSQL / SQLite 双方互換）"""
     import json
     with get_conn() as conn:
         try:
@@ -821,13 +821,12 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
                   AND ad_content_json != ''
                 ORDER BY id DESC LIMIT 1
             """, (clinic_id, str(google_campaign_id))).fetchone()
-            if row and row[0]:
-                try:
-                    return json.loads(row[0])
-                except Exception:
-                    pass
+            if row:
+                val = dict(row).get("ad_content_json")
+                if val:
+                    return json.loads(val)
             
-            # 2. clinic_id が食い違っている場合のために、clinic_id を無視して google_campaign_id のみで再検索（超強力フォールバック）
+            # 2. clinic_id が食い違っている場合のために、clinic_id を無視して google_campaign_id のみで再検索
             row = conn.execute("""
                 SELECT ad_content_json FROM campaigns 
                 WHERE google_campaign_id=? 
@@ -835,13 +834,26 @@ def get_youtube_ad_content(clinic_id: int, google_campaign_id: str) -> dict:
                   AND ad_content_json != ''
                 ORDER BY id DESC LIMIT 1
             """, (str(google_campaign_id),)).fetchone()
-            if row and row[0]:
-                try:
-                    return json.loads(row[0])
-                except Exception:
-                    pass
-        except Exception:
-            pass
+            if row:
+                val = dict(row).get("ad_content_json")
+                if val:
+                    return json.loads(val)
+
+            # 3. id (主キー) が直接指定された場合のフォールバック検索
+            try:
+                c_id_num = int(google_campaign_id)
+                row = conn.execute("""
+                    SELECT ad_content_json FROM campaigns 
+                    WHERE id=? AND ad_content_json IS NOT NULL AND ad_content_json != ''
+                """, (c_id_num,)).fetchone()
+                if row:
+                    val = dict(row).get("ad_content_json")
+                    if val:
+                        return json.loads(val)
+            except ValueError:
+                pass
+        except Exception as e:
+            print(f"[get_youtube_ad_content] エラー: {e}")
     return {}
 
 # ---- キャンペーン永久ブラックリスト ----
