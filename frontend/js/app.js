@@ -1301,32 +1301,46 @@ async function loadCvOptimizationSection(campaigns) {
           </button>
         </div>
 
-        <!-- 2. 曜日・時間帯別 CVゴールデンタイム自動入札最適化カード -->
+        <!-- 2. 曜日・時間帯別 キャンペーンターゲット連動 CVゴールデンタイム自動入札カード -->
         <div style="background:rgba(30, 41, 59, 0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <div style="font-size:14px; font-weight:800; color:#a78bfa; display:flex; align-items:center; gap:6px;">
-              <span>⏰ 2. CVゴールデンタイム自動入札</span>
+              <span>⏰ 2. キャンペーン属性別 ゴールデンタイム自動入札</span>
             </div>
-            <span style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">Logiction 355名解析</span>
+            <span style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">ターゲット属性連動</span>
           </div>
           <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
-            女性患者の予約が最も集中する時間帯に広告費を集中投入し、CV獲得数を爆発的にアップ。
+            各キャンペーンのターゲット（女性専門・40〜70代シニア・全性別社会人）に応じた予約ピーク時間帯に入札を集中ブースト。
           </p>
+
+          <!-- キャンペーン選択 -->
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">🎯 分析対象のキャンペーンを選択:</label>
+            <select id="goldenCampaignSelect" onchange="changeGoldenCampaign(this.value)" style="width:100%; background:rgba(15,23,42,0.8); color:var(--text-1); border:1px solid rgba(167,139,250,0.4); border-radius:6px; padding:6px; font-size:12px; font-weight:700;">
+              <option value="24067002156">秋山広告 （👩 女性専門 30〜60代・肩こり頭痛層）</option>
+              <option value="23924598676">腰痛｜藤枝市 新規集患 （👴👵 全性別 40〜70代・重症腰痛/脊柱管狭窄症層）</option>
+              <option value="23991077413">腰痛YT_1782803314_309 （👨👩 全性別 30〜50代・慢性腰痛層）</option>
+            </select>
+          </div>
+
           <div style="background:rgba(0,0,0,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
-            <div style="font-size:11px; color:#a78bfa; font-weight:700; margin-bottom:6px;">🔥 検出された予約殺到ゴールデンタイム</div>
-            <div style="display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-2);">
+            <div style="font-size:11px; color:#38bdf8; font-weight:800; margin-bottom:4px;" id="goldenTargetLabel">
+              🎯 ターゲット: 👩 女性専門（30〜60代・肩こり頭痛層）
+            </div>
+            <div style="font-size:11px; color:#a78bfa; font-weight:700; margin-bottom:6px;">🔥 このターゲットの予約殺到ゴールデンタイム</div>
+            <div id="goldenSlotsList" style="display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-2);">
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px;">
-                <span>平日（月〜金） <strong>18:00〜21:00</strong> （仕事終わり）</span>
-                <span style="color:#34d399; font-weight:800;">CV期待値 1.8倍</span>
+                <span>平日（月〜金） <strong>18:00〜21:00</strong> （仕事終わり・症状検索）</span>
+                <span style="color:#34d399; font-weight:800;">CV期待値 1.9倍</span>
               </div>
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px;">
-                <span>週末（土・日） <strong>09:00〜12:00</strong> （休日午前）</span>
-                <span style="color:#34d399; font-weight:800;">CV期待値 2.4倍</span>
+                <span>週末（土・日） <strong>09:00〜12:00</strong> （休日午前リフレッシュ）</span>
+                <span style="color:#34d399; font-weight:800;">CV期待値 2.5倍</span>
               </div>
             </div>
           </div>
           <button onclick="applyGoldenHoursBidding()" class="btn btn-success" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
-            <span>⚡ ゴールデンタイム入札+30%を自動適用</span>
+            <span id="applyGoldenBtnText">⚡ このターゲットのゴールデンタイムに入札+30%自動適用</span>
           </button>
         </div>
       </div>
@@ -1334,6 +1348,29 @@ async function loadCvOptimizationSection(campaigns) {
   `;
 }
 window.loadCvOptimizationSection = loadCvOptimizationSection;
+
+// キャンペーン選択変更イベント
+window.changeGoldenCampaign = async function(campaignId) {
+  try {
+    const res = await api(`/analytics/golden-hours?clinic_id=${currentClinicId || 1}&campaign_id=${campaignId}`);
+    if (res.success) {
+      const labelEl = document.getElementById('goldenTargetLabel');
+      if (labelEl) labelEl.textContent = `🎯 ターゲット: ${res.target_label}`;
+
+      const listEl = document.getElementById('goldenSlotsList');
+      if (listEl && res.golden_slots) {
+        listEl.innerHTML = res.golden_slots.map(s => `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px;">
+            <span>${s.day} <strong>${s.hours}</strong> （${s.reason}）</span>
+            <span style="color:#34d399; font-weight:800;">CV期待値 ${s.cv_multiplier}</span>
+          </div>
+        `).join('');
+      }
+    }
+  } catch(e) {
+    console.warn("changeGoldenCampaign error:", e);
+  }
+};
 
 // LP診断・全体ライティング添削実行関数
 window.runLpMatchDiagnose = async function() {

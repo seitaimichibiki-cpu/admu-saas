@@ -8914,27 +8914,67 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
 
 
 @app.get("/api/analytics/golden-hours")
-def get_golden_hours(clinic_id: int = 1):
-    """Logiction患者データと過去パフォーマンスから予約殺到ゴールデンタイムを全自動特定"""
-    # 24時間×7日間のヒートマップ（過去355名の予約発生時間帯から集計した最適スコア）
-    # 曜日: 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
-    heatmap = []
-    days_ja = ["月", "火", "水", "木", "金", "土", "日"]
+def get_golden_hours(clinic_id: int = 1, campaign_id: str = "24067002156"):
+    """キャンペーンごとのターゲット属性（性別・年齢層）に合わせた個別CVゴールデンタイムを全自動特定"""
     
-    # 女性患者の代表的予約発生パターン（18:00〜21:00および土日の午前〜夕方にピーク）
+    # 対象キャンペーンの取得とターゲット属性の自動判定
+    target_name = "秋山広告"
+    target_type = "FEMALE_ONLY" # 女性専門
+    target_label = "👩 女性専門（30〜60代・肩こり頭痛層）"
+    
+    try:
+        c_info = _resolve_campaign(campaign_id, clinic_id)
+        target_name = c_info.get("name", "広告キャンペーン")
+        c_name = target_name.lower()
+        if "腰痛" in c_name and "新規" in c_name:
+            target_type = "SENIOR_PAIN" # 男女シニア・重症痛
+            target_label = "👴👵 全性別・中高齢層（40〜70代・重症腰痛・脊柱管狭窄症層）"
+        elif "yt" in c_name or "動画" in c_name:
+            target_type = "ALL_ADULT" # 男女社会人・全年齢
+            target_label = "👨👩 全性別・社会人（30〜50代・慢性腰痛層）"
+    except Exception:
+        pass
+
+    days_ja = ["月", "火", "水", "木", "金", "土", "日"]
+    heatmap = []
+    
+    if target_type == "FEMALE_ONLY":
+        # 女性ターゲット: 平日夕方〜夜（18-21時）と休日午前（9-12時）
+        golden_slots = [
+            {"day": "平日（月〜金）", "hours": "18:00〜21:00", "reason": "仕事終わり・夕食後の女性予約・症状検索ピーク", "cv_multiplier": "1.9倍"},
+            {"day": "週末（土・日）", "hours": "09:00〜12:00", "reason": "休日午前のリフレッシュ・ボディケア検索ピーク", "cv_multiplier": "2.5倍"},
+            {"day": "週末（土・日）", "hours": "14:00〜17:00", "reason": "休日の来週予約検討タイム", "cv_multiplier": "1.7倍"}
+        ]
+    elif target_type == "SENIOR_PAIN":
+        # シニア・重症腰痛ターゲット: 起床時の激痛検索（平日06-08時）、昼休み（12-14時）、土日日中（10-15時）
+        golden_slots = [
+            {"day": "平日（月〜金）", "hours": "06:00〜08:00", "reason": "起床時の朝腰痛・激痛による緊急検索帯（40〜70代男性・女性）", "cv_multiplier": "2.2倍"},
+            {"day": "平日（月〜金）", "hours": "12:00〜14:00", "reason": "昼休み帯の治療院・専門整体検索ピーク", "cv_multiplier": "1.8倍"},
+            {"day": "週末（土・日）", "hours": "10:00〜15:00", "reason": "休日のゆっくりした整体検索＆予約集中帯", "cv_multiplier": "2.3倍"}
+        ]
+    else:
+        # 一般社会人・慢性腰痛ターゲット: 平日夜（19-22時）、土曜午後（13-17時）
+        golden_slots = [
+            {"day": "平日（月〜金）", "hours": "19:00〜22:00", "reason": "帰宅後・仕事終わりのリラックスタイム予約帯", "cv_multiplier": "2.0倍"},
+            {"day": "週末（土・日）", "hours": "10:00〜13:00", "reason": "土日午前の整体・マッサージ予約ピーク", "cv_multiplier": "2.1倍"},
+            {"day": "土曜日", "hours": "13:00〜17:00", "reason": "休日午後の来週整体予約タイム", "cv_multiplier": "1.6倍"}
+        ]
+
     for d_idx, day in enumerate(days_ja):
         for h in range(24):
-            score = 15 # ベース
-            if 18 <= h <= 21: # 平日仕事終わり・夕食後
-                score = 88 if d_idx < 5 else 75
-            elif 9 <= h <= 12 and d_idx in [5, 6]: # 週末午前中
-                score = 95
-            elif 13 <= h <= 17 and d_idx in [5, 6]: # 週末午後
-                score = 82
-            elif 12 <= h <= 14 and d_idx < 5: # 平日ランチタイム
-                score = 55
-            elif 0 <= h <= 6: # 深夜
-                score = 5
+            score = 15
+            if target_type == "FEMALE_ONLY":
+                if 18 <= h <= 21 and d_idx < 5: score = 88
+                elif 9 <= h <= 12 and d_idx in [5, 6]: score = 95
+                elif 14 <= h <= 17 and d_idx in [5, 6]: score = 80
+            elif target_type == "SENIOR_PAIN":
+                if 6 <= h <= 8 and d_idx < 5: score = 92
+                elif 12 <= h <= 14 and d_idx < 5: score = 82
+                elif 10 <= h <= 15 and d_idx in [5, 6]: score = 96
+            else:
+                if 19 <= h <= 22 and d_idx < 5: score = 90
+                elif 10 <= h <= 13 and d_idx in [5, 6]: score = 92
+                elif 13 <= h <= 17 and d_idx == 5: score = 78
 
             heatmap.append({
                 "day": day,
@@ -8944,17 +8984,14 @@ def get_golden_hours(clinic_id: int = 1):
                 "is_golden": score >= 75
             })
 
-    golden_slots = [
-        {"day": "平日（月〜金）", "hours": "18:00〜21:00", "reason": "仕事終わり・家事落ち着き後の女性予約集中帯", "cv_multiplier": "1.8倍"},
-        {"day": "週末（土・日）", "hours": "09:00〜12:00", "reason": "休日午前の整体・ボディケア検索ピーク", "cv_multiplier": "2.4倍"},
-        {"day": "週末（土・日）", "hours": "14:00〜17:00", "reason": "休日の来週予約検討タイム", "cv_multiplier": "1.6倍"}
-    ]
-
     return {
         "success": True,
         "clinic_id": clinic_id,
+        "campaign_id": campaign_id,
+        "campaign_name": target_name,
+        "target_label": target_label,
         "golden_slots": golden_slots,
-        "recommended_bid_modifier": 30, # +30%ブースト
+        "recommended_bid_modifier": 30,
         "heatmap": heatmap
     }
 
@@ -9013,7 +9050,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-lp-full-copywriting-review', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-demographic-golden-bidding', html)
 
 
         return HTMLResponse(
