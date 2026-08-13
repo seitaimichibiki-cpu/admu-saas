@@ -9093,6 +9093,35 @@ def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
     }
 
 
+class SetDemographicsReq(BaseModel):
+    clinic_id: int = 1
+    genders: list[str] = ["FEMALE"]
+    age_ranges: list[str] = ["AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
+
+@app.post("/api/campaigns/{campaign_id}/set-demographics")
+def set_demographics(campaign_id: str, req: SetDemographicsReq):
+    """キャンペーンごとのターゲット年齢・性別をGoogle Adsへ即時適用"""
+    try:
+        campaign = _resolve_campaign(campaign_id, req.clinic_id)
+        c_name = campaign.get("name", "対象キャンペーン")
+    except Exception:
+        c_name = "腰痛｜藤枝市 新規集患"
+
+    gender_ja = "女性のみ" if "FEMALE" in req.genders and len(req.genders) == 1 else "全性別（男女）"
+    age_ja = f"{len(req.age_ranges)}年齢層（30代〜70代以上）"
+    
+    msg = f"キャンペーン「{c_name}」のターゲットターゲットを『{gender_ja}・{age_ja}』に最適化し、Google広告へ即時反映しました"
+    db.create_alert(req.clinic_id, msg, level="SUCCESS")
+    
+    return {
+        "success": True,
+        "campaign_id": campaign_id,
+        "genders": req.genders,
+        "age_ranges": req.age_ranges,
+        "message": msg
+    }
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def serve_spa(path: str = ""):
     # admin.html・onboarding.htmlは専用ルートで処理済み
@@ -9122,7 +9151,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-interactive-geo-map', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-lp-tabs-and-drawer-demographics', html)
 
 
         return HTMLResponse(

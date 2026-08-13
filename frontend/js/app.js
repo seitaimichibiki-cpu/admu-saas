@@ -1266,6 +1266,20 @@ async function loadCvOptimizationSection(campaigns) {
             </div>
             <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">スコア 96% ✅</span>
           </div>
+
+          <!-- キャンペーン切替タブ -->
+          <div style="display:flex; gap:6px; margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">
+            <button onclick="switchLpTab('24067002156')" class="lp-tab-btn active" id="lptab-24067002156" style="background:rgba(59,130,246,0.2); border:1px solid #3b82f6; color:#93c5fd; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">
+              👩 秋山広告 (女性専門)
+            </button>
+            <button onclick="switchLpTab('23924598676')" class="lp-tab-btn" id="lptab-23924598676" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-3); padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">
+              👴👵 腰痛｜藤枝市 新規集患
+            </button>
+            <button onclick="switchLpTab('23991077413')" class="lp-tab-btn" id="lptab-23991077413" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-3); padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700; cursor:pointer;">
+              👨👩 腰痛YT
+            </button>
+          </div>
+
           <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
             実際のLP全体（ファーストビュー〜全文章・オファー）をプロ目線でAI解析。
           </p>
@@ -1303,7 +1317,7 @@ async function loadCvOptimizationSection(campaigns) {
             </button>
           </div>
           <button onclick="runLpMatchDiagnose()" class="btn btn-primary" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
-            <span>🔍 対象LPを動的取得＆プロ添削を実行</span>
+            <span>🔍 選択中キャンペーンのLPを動的取得＆プロ添削実行</span>
           </button>
         </div>
 
@@ -1392,16 +1406,97 @@ window.copyDeveloperPrompt = function() {
   toast('制作担当者・AI用指示プロンプトをクリップボードにコピーしました！', 'success');
 };
 
+// キャンペーン切替タブ切り替え処理
+window.activeLpCampaignId = '24067002156';
+window.switchLpTab = function(campaignId) {
+  window.activeLpCampaignId = campaignId;
+  document.querySelectorAll('.lp-tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+    btn.style.background = 'rgba(255,255,255,0.05)';
+    btn.style.borderColor = 'rgba(255,255,255,0.1)';
+    btn.style.color = 'var(--text-3)';
+  });
+  const activeBtn = document.getElementById(`lptab-${campaignId}`);
+  if (activeBtn) {
+    activeBtn.classList.add('active');
+    activeBtn.style.background = 'rgba(59,130,246,0.2)';
+    activeBtn.style.borderColor = '#3b82f6';
+    activeBtn.style.color = '#93c5fd';
+  }
+  // 自動診断を再実行
+  runLpMatchDiagnose();
+};
+
+// ドロワー内 地域チップトグル処理
+window.drawerSelectedLocations = {};
+window.toggleDrawerGeoChip = function(campId, locName) {
+  if (!window.drawerSelectedLocations[campId]) {
+    window.drawerSelectedLocations[campId] = new Set(["藤枝市全域", "藤枝駅周辺 5km"]);
+  }
+  const set = window.drawerSelectedLocations[campId];
+  if (set.has(locName)) {
+    set.delete(locName);
+  } else {
+    set.add(locName);
+  }
+  toast(`地域 『${locName}』 を選択しました`, 'info');
+};
+
+// ドロワー内 地域Google広告適用
+window.applyDrawerGeoLocation = async function(campId) {
+  const set = window.drawerSelectedLocations[campId] || new Set(["藤枝市全域", "藤枝駅周辺 5km"]);
+  const arr = Array.from(set);
+  try {
+    toast('選択した地域設定をGoogle広告へ適用中...', 'info');
+    const res = await api(`/campaigns/${campId}/set-geo-locations`, {
+      method: 'POST',
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, locations: arr })
+    });
+    if (res.success) {
+      toast(res.message || '配信地域をGoogle広告へ即時反映しました！', 'success');
+    }
+  } catch(e) {
+    toast('地域設定エラー: ' + e.message, 'error');
+  }
+};
+
+// ドロワー内 年齢・性別Google広告適用
+window.applyDrawerDemographics = async function(campId) {
+  const genderEl = document.querySelector(`input[name="drawerGender_${campId}"]:checked`);
+  const genderVal = genderEl ? genderEl.value : 'ALL';
+  const genders = genderVal === 'FEMALE_ONLY' ? ['FEMALE'] : genderVal === 'MALE_ONLY' ? ['MALE'] : ['FEMALE', 'MALE', 'UNSPECIFIED'];
+
+  const ages = [];
+  ['18_24', '25_34', '35_44', '45_54', '55_64', '65_UP'].forEach(aKey => {
+    const chk = document.getElementById(`age_${aKey}_${campId}`);
+    if (chk && chk.checked) {
+      ages.push(`AGE_RANGE_${aKey.toUpperCase()}`);
+    }
+  });
+
+  try {
+    toast('年齢・性別ターゲットをGoogle広告へ適用中...', 'info');
+    const res = await api(`/campaigns/${campId}/set-demographics`, {
+      method: 'POST',
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, genders, age_ranges: ages })
+    });
+    if (res.success) {
+      toast(res.message || 'ターゲット設定（年齢・性別）をGoogle広告へ即時反映しました！', 'success');
+    }
+  } catch(e) {
+    toast('ターゲット設定エラー: ' + e.message, 'error');
+  }
+};
+
 // LP診断・全体ライティング添削実行関数
 window.runLpMatchDiagnose = async function() {
   try {
-    toast('対象LP全体のテキストとセールスライティングをAIプロ添削中...', 'info');
-    const selectEl = document.getElementById('goldenCampaignSelect');
-    const selectedCampId = selectEl ? selectEl.value : '24067002156';
+    toast('選択中キャンペーンのLPテキストをAIプロ添削中...', 'info');
+    const targetCampId = window.activeLpCampaignId || '24067002156';
 
     const res = await api('/ai/diagnose-lp-match', {
       method: 'POST',
-      body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: selectedCampId, lp_url: '' })
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: targetCampId, lp_url: '' })
     });
     if (res.success && res.diagnose) {
       const d = res.diagnose;
@@ -2031,6 +2126,61 @@ function renderCampDrawer(d) {
         </div>
       `;
     }
+
+    // ―― 🗺️ キャンペーン専用: 配信地域マップ設定 ――――――――――――――――
+    let geoSettingsHtml = `
+      <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="font-size:13px; font-weight:800; color:#34d399; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>🗺️ 配信地域設定 (ワンタップGoogle広告即時適用)</span>
+        </div>
+        <p style="font-size:11px; color:var(--text-3); margin:0 0 8px 0;">
+          マップ上のエリアをタップして、このキャンペーンの配信地域を選択・即時適用します。
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+          <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">📍 藤枝市全域 ✅</button>
+          <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝駅周辺 5km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">🎯 藤枝駅周辺 5km ✅</button>
+          <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 吉田町全域 ＋</button>
+          <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町役場周辺 3km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">🎯 吉田町役場 3km ＋</button>
+          <button onclick="toggleDrawerGeoChip('${d.id}', '焼津市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 焼津市全域 ＋</button>
+          <button onclick="toggleDrawerGeoChip('${d.id}', '島田市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 島田市全域 ＋</button>
+        </div>
+        <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:6px;">
+          ⚡ 選択した配信地域をGoogle広告へ即時反映
+        </button>
+      </div>
+
+      <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
+      <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(167,139,250,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
+        <div style="font-size:13px; font-weight:800; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>👤 ターゲット性別・年齢層設定 (Google広告適用)</span>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">性別ターゲット:</label>
+          <div style="display:flex; gap:12px; font-size:11px; color:var(--text-1);">
+            <label><input type="radio" name="drawerGender_${d.id}" value="ALL" checked> 全性別（男女）</label>
+            <label><input type="radio" name="drawerGender_${d.id}" value="FEMALE_ONLY"> 女性のみ</label>
+            <label><input type="radio" name="drawerGender_${d.id}" value="MALE_ONLY"> 男性のみ</label>
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">年齢ターゲット（若年層除外可能）:</label>
+          <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; font-size:11px; color:var(--text-1);">
+            <label><input type="checkbox" id="age_18_24_${d.id}"> 18〜24歳</label>
+            <label><input type="checkbox" id="age_25_34_${d.id}"> 25〜34歳</label>
+            <label><input type="checkbox" id="age_35_44_${d.id}" checked> 35〜44歳</label>
+            <label><input type="checkbox" id="age_45_54_${d.id}" checked> 45〜54歳</label>
+            <label><input type="checkbox" id="age_55_64_${d.id}" checked> 55〜64歳</label>
+            <label><input type="checkbox" id="age_65_UP_${d.id}" checked> 65歳以上</label>
+          </div>
+        </div>
+
+        <button onclick="applyDrawerDemographics('${d.id}')" class="btn btn-primary" style="width:100%; font-size:11px; padding:6px;">
+          ⚡ 年齢・性別設定をGoogle広告へ即時反映
+        </button>
+      </div>
+    `;
 
     // 3. アクション（やるべきこと）リストの抽出
     let todoItems = [];
