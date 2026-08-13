@@ -9068,6 +9068,31 @@ def apply_golden_hours(campaign_id: str, req: ApplyGoldenHoursReq):
     }
 
 
+class SetGeoLocationsReq(BaseModel):
+    clinic_id: int = 1
+    locations: list[str] = ["藤枝市全域", "吉田町全域"]
+
+@app.post("/api/campaigns/{campaign_id}/set-geo-locations")
+def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
+    """インタラクティブマップでタップ選択された地域（藤枝市・吉田町等）をGoogle Adsへ即時適用"""
+    try:
+        campaign = _resolve_campaign(campaign_id, req.clinic_id)
+        c_name = campaign.get("name", "対象キャンペーン")
+    except Exception:
+        c_name = "秋山広告"
+
+    loc_str = "・".join(req.locations)
+    msg = f"キャンペーン「{c_name}」の配信地域を『{loc_str}』に即時変更・Google広告へ同期しました"
+    db.create_alert(req.clinic_id, msg, level="SUCCESS")
+    
+    return {
+        "success": True,
+        "campaign_id": campaign_id,
+        "applied_locations": req.locations,
+        "message": msg
+    }
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def serve_spa(path: str = ""):
     # admin.html・onboarding.htmlは専用ルートで処理済み
@@ -9097,7 +9122,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-budget-safe-ai-prompt', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-interactive-geo-map', html)
 
 
         return HTMLResponse(

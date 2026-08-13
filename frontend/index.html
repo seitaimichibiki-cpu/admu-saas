@@ -16,6 +16,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="stylesheet" href="css/main.css?v=20260607-nkw-push-v5">
   <style>
     .platform-switcher{display:flex;gap:6px;margin:12px 16px 4px;padding:4px;background:rgba(255,255,255,0.05);border-radius:10px;border:1px solid rgba(255,255,255,0.07)}
@@ -363,6 +365,9 @@
 
         <!-- 🚀 次世代CV最大化エンジン (1. LPメッセージ一致診断 / 2. ゴールデンタイム自動入札) -->
         <div id="cvOptimizationContainer" style="display:none; margin-bottom:16px;"></div>
+
+        <!-- 🗺️ タップで一発指定！配信地域インタラクティブマップ設定パネル -->
+        <div id="interactiveMapContainer" style="display:none; margin-bottom:16px;"></div>
 
         <!-- AI運用アドバイス＆推奨アクションパネル（動的表示） -->
         <div id="actionGuidanceContainer" style="display:none; margin-bottom:16px;"></div>
