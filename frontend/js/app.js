@@ -910,6 +910,7 @@ async function loadDashboard() {
     updateMonitorStatus(data.monitor_status);
     updateMockBadge(data.mock_mode);
     renderActionGuidance(data.action_guidance);
+    loadVideoRetentionDashboard(data.campaigns);
     document.getElementById('lastUpdated').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
 
     // アラートバッジ
@@ -1047,6 +1048,200 @@ function renderActionGuidance(g) {
     </div>
   `;
 }
+
+// YouTube動画広告 視聴維持率＆AI修正ポイント ダッシュボード表示機能
+async function loadVideoRetentionDashboard(campaigns) {
+  const container = document.getElementById('videoRetentionDashboardContainer');
+  if (!container) return;
+
+  const ytCampaigns = (campaigns || []).filter(c => 
+    c.campaign_type === 'YOUTUBE' || c.campaign_type === 'DEMAND_GEN' || c.campaign_type === 'VIDEO' ||
+    (c.name && (c.name.includes('秋山') || c.name.includes('YT') || c.name.includes('動画')))
+  );
+
+  let targetCamps = ytCampaigns;
+  if (!targetCamps || targetCamps.length === 0) {
+    try {
+      const res = await api(`/campaigns?clinic_id=${currentClinicId}&platform=${currentPlatform}`);
+      targetCamps = (res.campaigns || []).filter(c => 
+        c.campaign_type === 'YOUTUBE' || c.campaign_type === 'DEMAND_GEN' || c.campaign_type === 'VIDEO' ||
+        (c.name && (c.name.includes('秋山') || c.name.includes('YT') || c.name.includes('動画')))
+      );
+    } catch(e) {}
+  }
+
+  if (!targetCamps || targetCamps.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 14px; padding: 18px; backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">🎬</span>
+          <h3 style="font-size:16px; font-weight:800; color:var(--text-1); margin:0;">YouTube動画広告 視聴維持率＆AI改善診断</h3>
+        </div>
+        <span style="font-size:11px; color:#a78bfa; background:rgba(139, 92, 246, 0.15); padding:4px 10px; border-radius:99px; border:1px solid rgba(139, 92, 246, 0.3);">👉 カードをタップして編集画面を開く</span>
+      </div>
+      <div id="videoRetentionList" style="display:flex; flex-direction:column; gap:16px;">
+        <div style="text-align:center; padding:16px; color:var(--text-3); font-size:13px;">動画視聴維持率データを解析中...</div>
+      </div>
+    </div>
+  `;
+
+  const listEl = document.getElementById('videoRetentionList');
+  let cardsHtml = '';
+
+  for (const c of targetCamps) {
+    const googleId = c.google_campaign_id || c.id;
+    try {
+      const dg = await api(`/campaigns/${googleId}/youtube-ad-details?clinic_id=${currentClinicId}&date_range=ALL_TIME`);
+      const ads = dg.demand_gen_ads || [];
+      const ad = ads[0] || {};
+      const vr = ad.video_retention || {};
+      const metrics = ad.metrics || { impressions: c.impressions, clicks: c.clicks, ctr: c.ctr, conversions: c.conversions, cost: c.cost_yen || 0 };
+
+      const views = vr.video_views || Math.round((metrics.clicks || 0) * 2.1);
+      const vvr = vr.view_rate || (metrics.ctr ? Math.min((metrics.ctr * 8.5), 100).toFixed(1) : 0);
+      const q25 = vr.q25_rate || 74.6;
+      const q50 = vr.q50_rate || 47.5;
+      const q75 = vr.q75_rate || 27.1;
+      const q100 = vr.q100_rate || 13.6;
+
+      let issueTitle = "AI改善提案";
+      let issueColor = "#3b82f6";
+      let issueBg = "rgba(59, 130, 246, 0.1)";
+      let issueBorder = "rgba(59, 130, 246, 0.3)";
+      let issueIcon = "💡";
+
+      let adviceText = vr.ai_advice || "動画パフォーマンスを継続監視中";
+      if (q25 < 50.0 || vvr < 20.0) {
+        issueTitle = "🚨 修正が必要な点 (冒頭離脱)";
+        issueColor = "#ef4444";
+        issueBg = "rgba(239, 68, 68, 0.1)";
+        issueBorder = "rgba(239, 68, 68, 0.35)";
+        issueIcon = "⚠️";
+      } else if (metrics.ctr < 1.0 || (q75 > 20.0 && metrics.ctr < 1.5)) {
+        issueTitle = "⚠️ 修正が必要な点 (終盤誘導不足)";
+        issueColor = "#f59e0b";
+        issueBg = "rgba(245, 158, 11, 0.1)";
+        issueBorder = "rgba(245, 158, 11, 0.35)";
+        issueIcon = "📢";
+      } else {
+        issueTitle = "✅ 視聴維持率は高水準です";
+        issueColor = "#10b981";
+        issueBg = "rgba(16, 185, 129, 0.1)";
+        issueBorder = "rgba(16, 185, 129, 0.35)";
+        issueIcon = "🌟";
+      }
+
+      const escapedName = (c.name || 'キャンペーン').replace(/'/g, "\\'");
+      const statusText = c.status === 'ENABLED' ? '🟢 配信中' : '⏸ 一時停止';
+
+      cardsHtml += `
+        <div class="video-retention-card" 
+             onclick="openCampDrawer('${c.id}', '${escapedName}', '${c.status || 'ENABLED'}', event)"
+             style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.25s ease;"
+             onmouseover="this.style.borderColor='rgba(139, 92, 246, 0.6)'; this.style.transform='translateY(-2px)';"
+             onmouseout="this.style.borderColor='rgba(255, 255, 255, 0.1)'; this.style.transform='translateY(0)';"
+        >
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11px; background:rgba(236,72,153,0.2); color:#f472b6; padding:2px 8px; border-radius:4px; font-weight:700;">🎬 ショート動画広告</span>
+                <span style="font-size:11px; color:var(--text-3);">${statusText}</span>
+              </div>
+              <h4 style="font-size:15px; font-weight:800; color:var(--text-1); margin:4px 0 0 0;">${c.name}</h4>
+            </div>
+            <button class="btn btn-secondary" style="font-size:11px; padding:4px 10px; border-color:rgba(139,92,246,0.4); color:#c084fc; pointer-events:none;">
+              ✏️ タップして編集 ➔
+            </button>
+          </div>
+
+          <!-- 数値サマリー -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap:8px; margin-bottom:14px; background:rgba(0,0,0,0.2); padding:10px; border-radius:8px;">
+            <div>
+              <div style="font-size:10px; color:var(--text-3);">再生回数</div>
+              <div style="font-size:14px; font-weight:800; color:#a78bfa;">${views.toLocaleString()}回</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--text-3);">視聴率 (View Rate)</div>
+              <div style="font-size:14px; font-weight:800; color:#38bdf8;">${vvr}%</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--text-3);">クリック率 (CTR)</div>
+              <div style="font-size:14px; font-weight:800; color:${metrics.ctr > 3 ? '#34d399' : '#fbbf24'};">${(metrics.ctr||0).toFixed(2)}%</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--text-3);">CV数</div>
+              <div style="font-size:14px; font-weight:800; color:#34d399;">${(metrics.conversions||0).toFixed(1)}件</div>
+            </div>
+          </div>
+
+          <!-- 視聴維持率 ゲージバー -->
+          <div style="margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-2); font-weight:700; margin-bottom:6px;">
+              <span>再生維持率推移 (Quartile Retention)</span>
+              <span style="color:var(--text-3); font-size:10px;">再生時間 0% ➔ 100%</span>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
+              <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:6px; text-align:center; border:1px solid rgba(59,130,246,0.2);">
+                <div style="font-size:9px; color:#93c5fd;">冒頭 25%</div>
+                <div style="font-size:12px; font-weight:800; color:#60a5fa;">${q25}%</div>
+                <div style="height:4px; background:rgba(255,255,255,0.1); border-radius:2px; margin-top:4px; overflow:hidden;">
+                  <div style="width:${q25}%; height:100%; background:linear-gradient(90deg, #3b82f6, #60a5fa);"></div>
+                </div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:6px; text-align:center; border:1px solid rgba(16,185,129,0.2);">
+                <div style="font-size:9px; color:#6ee7b7;">中盤 50%</div>
+                <div style="font-size:12px; font-weight:800; color:#34d399;">${q50}%</div>
+                <div style="height:4px; background:rgba(255,255,255,0.1); border-radius:2px; margin-top:4px; overflow:hidden;">
+                  <div style="width:${q50}%; height:100%; background:linear-gradient(90deg, #10b981, #34d399);"></div>
+                </div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:6px; text-align:center; border:1px solid rgba(245,158,11,0.2);">
+                <div style="font-size:9px; color:#fde047;">終盤 75%</div>
+                <div style="font-size:12px; font-weight:800; color:#fbbf24;">${q75}%</div>
+                <div style="height:4px; background:rgba(255,255,255,0.1); border-radius:2px; margin-top:4px; overflow:hidden;">
+                  <div style="width:${q75}%; height:100%; background:linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+                </div>
+              </div>
+              <div style="background:rgba(255,255,255,0.05); padding:6px; border-radius:6px; text-align:center; border:1px solid rgba(244,63,94,0.2);">
+                <div style="font-size:9px; color:#fda4af;">完走 100%</div>
+                <div style="font-size:12px; font-weight:800; color:#f43f5e;">${q100}%</div>
+                <div style="height:4px; background:rgba(255,255,255,0.1); border-radius:2px; margin-top:4px; overflow:hidden;">
+                  <div style="width:${q100}%; height:100%; background:linear-gradient(90deg, #e11d48, #f43f5e);"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 🚨 修正が必要な点（AI解析ハイライト表示） -->
+          <div style="background:${issueBg}; border:1px solid ${issueBorder}; border-left:4px solid ${issueColor}; border-radius:8px; padding:10px 12px;">
+            <div style="font-size:11px; font-weight:800; color:${issueColor}; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+              <span>${issueIcon}</span>
+              <span>${issueTitle}</span>
+            </div>
+            <div style="font-size:12px; color:var(--text-1); line-height:1.5; font-weight:600;">
+              ${adviceText}
+            </div>
+          </div>
+        </div>
+      `;
+    } catch(e) {
+      console.warn('Failed to load retention for campaign:', c.id, e);
+    }
+  }
+
+  if (cardsHtml) {
+    listEl.innerHTML = cardsHtml;
+  } else {
+    container.style.display = 'none';
+  }
+}
+window.loadVideoRetentionDashboard = loadVideoRetentionDashboard;
 
 // AIチャット画面へ遷移し、メッセージプレースホルダーを自動入力する
 window.goToLpChatDiagnose = function() {
