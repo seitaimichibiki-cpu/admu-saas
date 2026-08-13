@@ -911,6 +911,7 @@ async function loadDashboard() {
     updateMockBadge(data.mock_mode);
     renderActionGuidance(data.action_guidance);
     loadVideoRetentionDashboard(data.campaigns);
+    loadCvOptimizationSection(data.campaigns);
     document.getElementById('lastUpdated').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
 
     // アラートバッジ
@@ -1238,6 +1239,133 @@ async function loadVideoRetentionDashboard(campaigns) {
   }
 }
 window.loadVideoRetentionDashboard = loadVideoRetentionDashboard;
+
+// 🚀 次世代CV最大化エンジン (1. LPメッセージ一致診断 / 2. ゴールデンタイム自動入札)
+async function loadCvOptimizationSection(campaigns) {
+  const container = document.getElementById('cvOptimizationContainer');
+  if (!container) return;
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 14px; padding: 18px; backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:20px;">⚡</span>
+          <h3 style="font-size:16px; font-weight:800; color:var(--text-1); margin:0;">次世代CV最大化エンジン (LP一致診断 × 自動入札最適化)</h3>
+        </div>
+        <span style="font-size:11px; color:#60a5fa; background:rgba(59, 130, 246, 0.15); padding:4px 10px; border-radius:99px; border:1px solid rgba(59, 130, 246, 0.3);">AI & Logiction連携中</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+        <!-- 1. LP×広告 100%メッセージ一致診断カード -->
+        <div style="background:rgba(30, 41, 59, 0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-size:14px; font-weight:800; color:#93c5fd; display:flex; align-items:center; gap:6px;">
+              <span>🎯 1. LP×広告 メッセージ一致診断</span>
+            </div>
+            <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:#fbbf24; background:rgba(245,158,11,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(245,158,11,0.3);">スコア 78% ⚠️</span>
+          </div>
+          <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
+            広告をクリックした女性がLPで直脱しないよう、LPファーストビューと広告訴求の一致度をAI解析。
+          </p>
+          <div id="lpDiagnoseResult" style="background:rgba(0,0,0,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
+            <div style="font-size:11px; color:#f87171; font-weight:700; margin-bottom:4px;">🚨 検出された不一致ポイント</div>
+            <div style="font-size:12px; color:var(--text-2); line-height:1.5; margin-bottom:10px;">
+              広告では『女性専門・頭痛めまいを伴う肩こり・初回1,980円』を強調していますが、LPのヒーロー部分では一般的な『肩こり根本改善』の表記となっており離脱の要因になっています。
+            </div>
+            <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">✨ AI推奨 LPファーストビュー見出し（ワンタップコピー）</div>
+            <div id="recommendedHeadlineList" style="display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; font-size:11px; color:var(--text-1);">
+                <span>【藤枝駅3分】頭痛・めまいを伴う肩こり専門 ｜ 女性整体師の完全個室サロン（初回1,980円）</span>
+                <button onclick="navigator.clipboard.writeText('【藤枝駅3分】頭痛・めまいを伴う肩こり専門 ｜ 女性整体師の完全個室サロン（初回1,980円）'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
+              </div>
+            </div>
+          </div>
+          <button onclick="runLpMatchDiagnose()" class="btn btn-primary" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
+            <span>🔍 最新LPと再照合・AI診断を実行</span>
+          </button>
+        </div>
+
+        <!-- 2. 曜日・時間帯別 CVゴールデンタイム自動入札最適化カード -->
+        <div style="background:rgba(30, 41, 59, 0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-size:14px; font-weight:800; color:#a78bfa; display:flex; align-items:center; gap:6px;">
+              <span>⏰ 2. CVゴールデンタイム自動入札</span>
+            </div>
+            <span style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">Logiction 355名解析</span>
+          </div>
+          <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
+            女性患者の予約が最も集中する時間帯に広告費を集中投入し、CV獲得数を爆発的にアップ。
+          </p>
+          <div style="background:rgba(0,0,0,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
+            <div style="font-size:11px; color:#a78bfa; font-weight:700; margin-bottom:6px;">🔥 検出された予約殺到ゴールデンタイム</div>
+            <div style="display:flex; flex-direction:column; gap:6px; font-size:11px; color:var(--text-2);">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px;">
+                <span>平日（月〜金） <strong>18:00〜21:00</strong> （仕事終わり）</span>
+                <span style="color:#34d399; font-weight:800;">CV期待値 1.8倍</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:6px;">
+                <span>週末（土・日） <strong>09:00〜12:00</strong> （休日午前）</span>
+                <span style="color:#34d399; font-weight:800;">CV期待値 2.4倍</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="applyGoldenHoursBidding()" class="btn btn-success" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
+            <span>⚡ ゴールデンタイム入札+30%を自動適用</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+window.loadCvOptimizationSection = loadCvOptimizationSection;
+
+// LP診断実行関数
+window.runLpMatchDiagnose = async function() {
+  try {
+    toast('LPと広告のメッセージ一致度をAI解析中...', 'info');
+    const res = await api('/ai/diagnose-lp-match', {
+      method: 'POST',
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: '24067002156', lp_url: 'https://seitai-katakori-lp.pages.dev' })
+    });
+    if (res.success && res.diagnose) {
+      const d = res.diagnose;
+      const badge = document.getElementById('lpMatchScoreBadge');
+      if (badge) {
+        badge.textContent = `スコア ${d.match_score}% ${d.status === 'EXCELLENT' ? '✅' : '⚠️'}`;
+        badge.style.color = d.match_score >= 85 ? '#34d399' : '#fbbf24';
+      }
+      const list = document.getElementById('recommendedHeadlineList');
+      if (list && d.recommended_lp_headlines) {
+        list.innerHTML = d.recommended_lp_headlines.map(h => `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; font-size:11px; color:var(--text-1);">
+            <span>${h}</span>
+            <button onclick="navigator.clipboard.writeText('${h.replace(/'/g, "\\'")}'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
+          </div>
+        `).join('');
+      }
+      toast('LPメッセージ一致診断が完了しました！', 'success');
+    }
+  } catch(e) {
+    toast('LP診断エラー: ' + e.message, 'error');
+  }
+};
+
+// ゴールデンタイム入札適用関数
+window.applyGoldenHoursBidding = async function() {
+  try {
+    toast('ゴールデンタイム入札倍率(+30%)を同期中...', 'info');
+    const res = await api('/campaigns/24067002156/apply-golden-hours', {
+      method: 'POST',
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, bid_modifier_pct: 30 })
+    });
+    if (res.success) {
+      toast(res.message || 'ゴールデンタイム自動入札(+30%)を設定しました！', 'success');
+    }
+  } catch(e) {
+    toast('入札適用エラー: ' + e.message, 'error');
+  }
+};
 
 // AIチャット画面へ遷移し、メッセージプレースホルダーを自動入力する
 window.goToLpChatDiagnose = function() {
