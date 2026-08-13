@@ -6889,7 +6889,8 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             m = r.get("metrics", {})
             if ad_id not in merged:
                 merged[ad_id] = {
-                    "row": r, "impressions": 0, "clicks": 0, "conversions": 0.0, "cost_micros": 0,
+                    "row": r, "impressions": 0, "clicks": 0, "conversions": 0.0, "cost_micros": 0, "count": 0
+                }
             merged[ad_id]["impressions"] += int(m.get("impressions", 0))
             merged[ad_id]["clicks"]      += int(m.get("clicks", 0))
             merged[ad_id]["conversions"] += float(m.get("conversions", 0.0))
