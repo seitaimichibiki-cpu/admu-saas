@@ -2539,12 +2539,12 @@ function renderCampDrawer(d) {
 
   // Demand Genの場合はキーワード・RSA広告文セクションを非表示にし、YouTube編集を表示
   if (d.campaign_type === 'DEMAND_GEN') {
-    body.innerHTML = policyHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
+    body.innerHTML = policyHtml + geoSettingsHtml + budgetHtml + ytEditHtml + scheduleHtml + aiActionsHtml;
     // 別APIからYouTube広告データを非同期取得
     const drawerTitle = document.getElementById('campDrawerTitle')?.textContent || '';
     loadYouTubeAdEditForm(d.google_campaign_id, d.name || drawerTitle);
   } else {
-    body.innerHTML = policyHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
+    body.innerHTML = policyHtml + geoSettingsHtml + budgetHtml + urlHtml + kwHtml + locationHtml + scheduleHtml + assetsHtml + adsHtml + aiActionsHtml;
   }
   if (!budgetHtml && !kwHtml && !locationHtml && !adsHtml && !ytEditHtml) {
     body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
