@@ -2054,6 +2054,61 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
+  // ―― 🗺️ キャンペーン専用: 配信地域マップ設定 & ターゲット設定カード ――――――――――――
+  const geoSettingsHtml = `
+    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:800; color:#34d399; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+        <span>🗺️ 配信地域設定 (ワンタップGoogle広告即時適用)</span>
+      </div>
+      <p style="font-size:11px; color:var(--text-3); margin:0 0 8px 0;">
+        マップ上のエリアをタップして、このキャンペーンの配信地域を選択・即時適用します。
+      </p>
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+        <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">📍 藤枝市全域 ✅</button>
+        <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝駅周辺 5km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">🎯 藤枝駅周辺 5km ✅</button>
+        <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 吉田町全域 ＋</button>
+        <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町役場周辺 3km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">🎯 吉田町役場 3km ＋</button>
+        <button onclick="toggleDrawerGeoChip('${d.id}', '焼津市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 焼津市全域 ＋</button>
+        <button onclick="toggleDrawerGeoChip('${d.id}', '島田市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 島田市全域 ＋</button>
+      </div>
+      <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:6px;">
+        ⚡ 選択した配信地域をGoogle広告へ即時反映
+      </button>
+    </div>
+
+    <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
+    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(167,139,250,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
+      <div style="font-size:13px; font-weight:800; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+        <span>👤 ターゲット性別・年齢層設定 (Google広告適用)</span>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">性別ターゲット:</label>
+        <div style="display:flex; gap:12px; font-size:11px; color:var(--text-1);">
+          <label><input type="radio" name="drawerGender_${d.id}" value="ALL" checked> 全性別（男女）</label>
+          <label><input type="radio" name="drawerGender_${d.id}" value="FEMALE_ONLY"> 女性のみ</label>
+          <label><input type="radio" name="drawerGender_${d.id}" value="MALE_ONLY"> 男性のみ</label>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">年齢ターゲット（若年層除外可能）:</label>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; font-size:11px; color:var(--text-1);">
+          <label><input type="checkbox" id="age_18_24_${d.id}"> 18〜24歳</label>
+          <label><input type="checkbox" id="age_25_34_${d.id}"> 25〜34歳</label>
+          <label><input type="checkbox" id="age_35_44_${d.id}" checked> 35〜44歳</label>
+          <label><input type="checkbox" id="age_45_54_${d.id}" checked> 45〜54歳</label>
+          <label><input type="checkbox" id="age_55_64_${d.id}" checked> 55〜64歳</label>
+          <label><input type="checkbox" id="age_65_UP_${d.id}" checked> 65歳以上</label>
+        </div>
+      </div>
+
+      <button onclick="applyDrawerDemographics('${d.id}')" class="btn btn-primary" style="width:100%; font-size:11px; padding:6px;">
+        ⚡ 年齢・性別設定をGoogle広告へ即時反映
+      </button>
+    </div>
+  `;
+
   // Google広告 同期・審査ステータスパネル (シンプルイズベスト版)
   let policyHtml = '';
   if (d.policy_statuses) {
@@ -2126,61 +2181,6 @@ function renderCampDrawer(d) {
         </div>
       `;
     }
-
-    // ―― 🗺️ キャンペーン専用: 配信地域マップ設定 ――――――――――――――――
-    let geoSettingsHtml = `
-      <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
-        <div style="font-size:13px; font-weight:800; color:#34d399; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-          <span>🗺️ 配信地域設定 (ワンタップGoogle広告即時適用)</span>
-        </div>
-        <p style="font-size:11px; color:var(--text-3); margin:0 0 8px 0;">
-          マップ上のエリアをタップして、このキャンペーンの配信地域を選択・即時適用します。
-        </p>
-        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
-          <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">📍 藤枝市全域 ✅</button>
-          <button onclick="toggleDrawerGeoChip('${d.id}', '藤枝駅周辺 5km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px; border-color:#10b981; color:#34d399;">🎯 藤枝駅周辺 5km ✅</button>
-          <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 吉田町全域 ＋</button>
-          <button onclick="toggleDrawerGeoChip('${d.id}', '吉田町役場周辺 3km')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">🎯 吉田町役場 3km ＋</button>
-          <button onclick="toggleDrawerGeoChip('${d.id}', '焼津市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 焼津市全域 ＋</button>
-          <button onclick="toggleDrawerGeoChip('${d.id}', '島田市全域')" class="btn btn-secondary" style="font-size:10px; padding:4px 8px;">📍 島田市全域 ＋</button>
-        </div>
-        <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:6px;">
-          ⚡ 選択した配信地域をGoogle広告へ即時反映
-        </button>
-      </div>
-
-      <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
-      <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(167,139,250,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
-        <div style="font-size:13px; font-weight:800; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-          <span>👤 ターゲット性別・年齢層設定 (Google広告適用)</span>
-        </div>
-
-        <div style="margin-bottom:10px;">
-          <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">性別ターゲット:</label>
-          <div style="display:flex; gap:12px; font-size:11px; color:var(--text-1);">
-            <label><input type="radio" name="drawerGender_${d.id}" value="ALL" checked> 全性別（男女）</label>
-            <label><input type="radio" name="drawerGender_${d.id}" value="FEMALE_ONLY"> 女性のみ</label>
-            <label><input type="radio" name="drawerGender_${d.id}" value="MALE_ONLY"> 男性のみ</label>
-          </div>
-        </div>
-
-        <div style="margin-bottom:10px;">
-          <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">年齢ターゲット（若年層除外可能）:</label>
-          <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; font-size:11px; color:var(--text-1);">
-            <label><input type="checkbox" id="age_18_24_${d.id}"> 18〜24歳</label>
-            <label><input type="checkbox" id="age_25_34_${d.id}"> 25〜34歳</label>
-            <label><input type="checkbox" id="age_35_44_${d.id}" checked> 35〜44歳</label>
-            <label><input type="checkbox" id="age_45_54_${d.id}" checked> 45〜54歳</label>
-            <label><input type="checkbox" id="age_55_64_${d.id}" checked> 55〜64歳</label>
-            <label><input type="checkbox" id="age_65_UP_${d.id}" checked> 65歳以上</label>
-          </div>
-        </div>
-
-        <button onclick="applyDrawerDemographics('${d.id}')" class="btn btn-primary" style="width:100%; font-size:11px; padding:6px;">
-          ⚡ 年齢・性別設定をGoogle広告へ即時反映
-        </button>
-      </div>
-    `;
 
     // 3. アクション（やるべきこと）リストの抽出
     let todoItems = [];
