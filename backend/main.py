@@ -6740,7 +6740,7 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
         # ローカルDBからGoogle IDを解決
         try:
             campaign = _resolve_campaign(campaign_id, clinic_id)
-            g_id = campaign.get("google_campaign_id") or campaign_id
+            g_id = campaign.get("google_campaign_id") or (str(campaign.get("id")) if campaign.get("id") else "") or campaign_id
         except HTTPException:
             raise
         except Exception:
