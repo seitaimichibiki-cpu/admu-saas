@@ -6883,13 +6883,21 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             merged[ad_id]["impressions"] += int(m.get("impressions", 0))
             merged[ad_id]["clicks"]      += int(m.get("clicks", 0))
             merged[ad_id]["conversions"] += float(m.get("conversions", 0.0))
-            merged[ad_id]["cost_micros"] += int(m.get("costMicros", 0))
-            merged[ad_id]["video_views"] += int(m.get("videoViews", 0))
-            merged[ad_id]["vvr_sum"]    += float(m.get("videoViewRate", 0.0))
-            merged[ad_id]["q25_sum"]    += float(m.get("videoQuartile25Rate", 0.0))
-            merged[ad_id]["q50_sum"]    += float(m.get("videoQuartile50Rate", 0.0))
-            merged[ad_id]["q75_sum"]    += float(m.get("videoQuartile75Rate", 0.0))
-            merged[ad_id]["q100_sum"]   += float(m.get("videoQuartile100Rate", 0.0))
+            merged[ad_id]["cost_micros"] += int(m.get("costMicros") or m.get("cost_micros") or 0)
+            
+            vv = int(m.get("videoViews") or m.get("video_views") or 0)
+            vr_rate = float(m.get("videoViewRate") or m.get("video_view_rate") or 0.0)
+            q25_raw = float(m.get("videoQuartile25Rate") or m.get("video_quartile_25_rate") or 0.0)
+            q50_raw = float(m.get("videoQuartile50Rate") or m.get("video_quartile_50_rate") or 0.0)
+            q75_raw = float(m.get("videoQuartile75Rate") or m.get("video_quartile_75_rate") or 0.0)
+            q100_raw = float(m.get("videoQuartile100Rate") or m.get("video_quartile_100_rate") or 0.0)
+
+            merged[ad_id]["video_views"] += vv
+            merged[ad_id]["vvr_sum"]    += vr_rate
+            merged[ad_id]["q25_sum"]    += q25_raw
+            merged[ad_id]["q50_sum"]    += q50_raw
+            merged[ad_id]["q75_sum"]    += q75_raw
+            merged[ad_id]["q100_sum"]   += q100_raw
             merged[ad_id]["count"]      += 1
 
         rows = [v["row"] for v in merged.values()]
@@ -6936,13 +6944,19 @@ async def get_youtube_ad_details(campaign_id: str, request: Request):
             ctr = (clicks / impressions * 100) if impressions > 0 else 0.0
             cpa = int(cost_yen / conversions) if conversions > 0 else 0
 
-            # 視聴維持率データの計算 (平均)
+            # 視聴維持率データの計算
             cnt = agg.get("count", 1) or 1
-            vvr = round(agg.get("vvr_sum", 0.0) / cnt * 100, 1)
-            q25 = round(agg.get("q25_sum", 0.0) / cnt * 100, 1)
-            q50 = round(agg.get("q50_sum", 0.0) / cnt * 100, 1)
-            q75 = round(agg.get("q75_sum", 0.0) / cnt * 100, 1)
-            q100 = round(agg.get("q100_sum", 0.0) / cnt * 100, 1)
+            vvr_avg = agg.get("vvr_sum", 0.0) / cnt
+            q25_avg = agg.get("q25_sum", 0.0) / cnt
+            q50_avg = agg.get("q50_sum", 0.0) / cnt
+            q75_avg = agg.get("q75_sum", 0.0) / cnt
+            q100_avg = agg.get("q100_sum", 0.0) / cnt
+
+            vvr = round(vvr_avg * 100 if vvr_avg <= 1.0 else vvr_avg, 1)
+            q25 = round(q25_avg * 100 if q25_avg <= 1.0 else q25_avg, 1)
+            q50 = round(q50_avg * 100 if q50_avg <= 1.0 else q50_avg, 1)
+            q75 = round(q75_avg * 100 if q75_avg <= 1.0 else q75_avg, 1)
+            q100 = round(q100_avg * 100 if q100_avg <= 1.0 else q100_avg, 1)
             video_views = agg.get("video_views", 0)
 
             # 視聴維持率AI診断
