@@ -328,6 +328,19 @@ def init_db():
             label TEXT NOT NULL DEFAULT '',
             updated_at {TS},
             UNIQUE(clinic_id, ad_resource_name))""",
+        # Google Ads オフラインコンバージョンアップロード履歴テーブル
+        f"""CREATE TABLE IF NOT EXISTS offline_conversions_log (
+            id {PK},
+            clinic_id INTEGER NOT NULL,
+            patient_id TEXT,
+            gclid TEXT,
+            conversion_action_id TEXT,
+            conversion_name TEXT NOT NULL,
+            conversion_time TEXT NOT NULL,
+            conversion_value_yen INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'UPLOADED',
+            error_message TEXT,
+            uploaded_at {TS})""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -1767,3 +1780,75 @@ def upsert_ad_label(clinic_id: int, ad_resource_name: str, label: str):
                 DO UPDATE SET label = excluded.label, updated_at = CURRENT_TIMESTAMP
             """, (clinic_id, ad_resource_name, label))
         conn.commit()
+
+
+def log_offline_conversion(clinic_id: int, patient_id: str, gclid: str, action_name: str, value_yen: int, status: str = "UPLOADED", err_msg: str = ""):
+    """Google Ads オフラインコンバージョン送信ログの記録"""
+    with get_conn() as conn:
+        if USE_PG:
+            conn.execute("""
+                INSERT INTO offline_conversions_log
+                (clinic_id, patient_id, gclid, conversion_name, conversion_time, conversion_value_yen, status, error_message, uploaded_at)
+                VALUES (%s, %s, %s, %s, NOW(), %s, %s, %s, NOW())
+            """, (clinic_id, patient_id, gclid, action_name, value_yen, status, err_msg))
+        else:
+            conn.execute("""
+                INSERT INTO offline_conversions_log
+                (clinic_id, patient_id, gclid, conversion_name, conversion_time, conversion_value_yen, status, error_message, uploaded_at)
+                VALUES (?, ?, ?, ?, datetime('now','localtime'), ?, ?, ?, (datetime('now','localtime')))
+            """, (clinic_id, patient_id, gclid, action_name, value_yen, status, err_msg))
+        conn.commit()
+
+
+def get_patient_demographic_insights(clinic_id: int) -> dict:
+    """
+    LOGICTION患者データから属性インサイト（地域、年代、性別、高LTV症状）を集計して返す。
+    PostgreSQL / SQLite 双方で互換性のある記述（タプル展開を避け、dict経由でアクセス）。
+    """
+    with get_conn() as conn:
+        # 1. 地域（市区町村）別分布
+        rows_city = conn.execute("""
+            SELECT address_city as city, COUNT(*) as cnt, SUM(total_revenue) as rev
+            FROM logiction_patients
+            WHERE clinic_id=? AND address_city IS NOT NULL AND address_city != ''
+            GROUP BY address_city
+            ORDER BY cnt DESC LIMIT 10
+        """, (clinic_id,)).fetchall()
+        top_cities = [{"city": dict(r).get("city"), "count": dict(r).get("cnt", 0), "revenue": dict(r).get("rev", 0)} for r in rows_city]
+
+        # 2. 性別分布
+        rows_gender = conn.execute("""
+            SELECT gender, COUNT(*) as cnt, AVG(total_revenue) as avg_rev
+            FROM logiction_patients
+            WHERE clinic_id=? AND gender IS NOT NULL AND gender != ''
+            GROUP BY gender
+        """, (clinic_id,)).fetchall()
+        gender_dist = {dict(r).get("gender"): {"count": dict(r).get("cnt", 0), "avg_revenue": int(dict(r).get("avg_rev") or 0)} for r in rows_gender}
+
+        # 3. 年代分布
+        rows_age = conn.execute("""
+            SELECT age_group, COUNT(*) as cnt, AVG(total_revenue) as avg_rev
+            FROM logiction_patients
+            WHERE clinic_id=? AND age_group IS NOT NULL AND age_group != ''
+            GROUP BY age_group
+            ORDER BY cnt DESC
+        """, (clinic_id,)).fetchall()
+        age_dist = {dict(r).get("age_group"): {"count": dict(r).get("cnt", 0), "avg_revenue": int(dict(r).get("avg_rev") or 0)} for r in rows_age}
+
+        # 4. 総患者数と総LTV
+        row_tot = conn.execute("""
+            SELECT COUNT(*) as total_patients, SUM(total_revenue) as total_rev, AVG(total_revenue) as avg_ltv
+            FROM logiction_patients
+            WHERE clinic_id=?
+        """, (clinic_id,)).fetchone()
+        d_tot = dict(row_tot) if row_tot else {}
+
+        return {
+            "total_patients": d_tot.get("total_patients", 0),
+            "total_revenue": d_tot.get("total_rev", 0),
+            "avg_ltv": int(d_tot.get("avg_ltv") or 0),
+            "top_cities": top_cities,
+            "gender_distribution": gender_dist,
+            "age_distribution": age_dist,
+        }
+
