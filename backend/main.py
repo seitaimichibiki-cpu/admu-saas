@@ -1911,6 +1911,190 @@ def compare_ad_copies(clinic_id: int = 1, variant_group: Optional[str] = None):
             "winner_id": winner["id"] if winner else None,
             "retire_suggestion_id": loser["id"] if loser else None}
 
+
+# ---- API: 患者属性インサイト & ターゲティングアドバイス ----
+@app.get("/api/insights/patient-targeting")
+def get_patient_targeting_insights(clinic_id: int = 1):
+    """LOGICTIONの患者属性（地域・年代・性別）を分析し、広告ターゲティング最適化アドバイスを返す"""
+    try:
+        insights = db.get_patient_demographic_insights(clinic_id)
+        
+        # アドバイスメッセージの自動生成
+        advices = []
+        top_cities = insights.get("top_cities", [])
+        if top_cities:
+            c_names = [c["city"] for c in top_cities[:3] if c.get("city")]
+            if c_names:
+                advices.append(f"集患実績の約7割が「{', '.join(c_names)}」に集中しています。ターゲット地域をこのエリアに絞り込むとCPAが改善します。")
+
+        g_dist = insights.get("gender_distribution", {})
+        if g_dist:
+            fem_cnt = g_dist.get("女性", {}).get("count", 0) + g_dist.get("女", {}).get("count", 0) + g_dist.get("FEMALE", {}).get("count", 0)
+            tot_g = sum(v.get("count", 0) for v in g_dist.values())
+            if tot_g > 0 and (fem_cnt / tot_g) >= 0.65:
+                advices.append(f"来院患者の{int(fem_cnt/tot_g*100)}%が女性です。YouTube/Demand Gen広告の性別ターゲットを「女性のみ」に設定することをお勧めします。")
+
+        age_dist = insights.get("age_distribution", {})
+        if age_dist:
+            top_age = max(age_dist.items(), key=lambda x: x[1].get("count", 0), default=None)
+            if top_age:
+                advices.append(f"最も来院数が多い年代は「{top_age[0]}」です。この年代層に刺さる訴求（長年の悩み・復職・予防）を中心に広告文を作成しましょう。")
+
+        return {
+            "success": True,
+            "insights": insights,
+            "advices": advices,
+        }
+    except Exception as e:
+        import traceback
+        print(f"[patient-targeting-insights] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"インサイト取得エラー: {str(e)}")
+
+
+class OfflineConversionUploadReq(BaseModel):
+    clinic_id: int = 1
+    patient_id: Optional[str] = None
+    gclid: Optional[str] = None
+    conversion_name: str = "LOGICTION予約完了"
+    conversion_value_yen: int = 10000
+
+
+@app.post("/api/conversions/upload-offline")
+def upload_offline_conversion_api(req: OfflineConversionUploadReq):
+    """LOGICTIONの来院成果データをGoogle AdsにオフラインCV（OCT）として同期アップロードする"""
+    try:
+        acc = db.get_ads_account(req.clinic_id)
+        if not acc:
+            raise HTTPException(404, "広告アカウントが未設定です")
+
+        target_gclid = req.gclid
+        patient_id = req.patient_id or ""
+
+        # gclidが指定されていない場合、LOGICTION患者テーブルからgclidを検索
+        if not target_gclid and patient_id:
+            with db.get_conn() as conn:
+                row = conn.execute(
+                    "SELECT gclid, total_revenue FROM logiction_patients WHERE clinic_id=? AND patient_id=?",
+                    (req.clinic_id, patient_id)
+                ).fetchone()
+                if row:
+                    d_row = dict(row)
+                    target_gclid = d_row.get("gclid")
+                    if not req.conversion_value_yen and d_row.get("total_revenue"):
+                        req.conversion_value_yen = d_row.get("total_revenue")
+
+        if not target_gclid:
+            db.log_offline_conversion(req.clinic_id, patient_id, "", req.conversion_name, req.conversion_value_yen, status="SKIPPED", err_msg="GCLIDが存在しないため送信をスキップしました")
+            return {"success": False, "message": "GCLIDが登録されていないため、Google Adsへの送信をスキップしました（DBにのみ記録）。"}
+
+        client = _get_ads_client(acc, "google")
+        from datetime import datetime
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S+09:00")
+        
+        res = client.upload_offline_conversion(
+            gclid=target_gclid,
+            conversion_name=req.conversion_name,
+            conversion_value=float(req.conversion_value_yen),
+            conversion_time=now_str
+        )
+
+        status_str = "UPLOADED" if res.get("success") else "FAILED"
+        err_msg = res.get("error", "") if not res.get("success") else ""
+        db.log_offline_conversion(req.clinic_id, patient_id, target_gclid, req.conversion_name, req.conversion_value_yen, status=status_str, err_msg=err_msg)
+
+        return {
+            "success": res.get("success", False),
+            "result": res,
+            "message": "Google AdsにオフラインCVをアップロードしました" if res.get("success") else f"送信失敗: {err_msg}"
+        }
+    except Exception as e:
+        import traceback
+        print(f"[upload-offline-conversion] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"オフラインCV送信エラー: {str(e)}")
+
+
+class PatientDrivenAdCopyReq(BaseModel):
+    clinic_id: int = 1
+    target_symptom: str = "腰痛・ヘルニア"
+    target_gender: str = "女性"
+    target_age_group: str = "40代"
+
+
+@app.post("/api/ai/generate-patient-ad-copy")
+def generate_patient_driven_ad_copy(req: PatientDrivenAdCopyReq):
+    """LOGICTION患者のリアルな症状・年代データを踏まえた、整体院特化の超高CV広告コピーをGeminiで生成"""
+    try:
+        clinic = db.get_clinic(req.clinic_id) or {}
+        clinic_name = clinic.get("name", "整体院導")
+
+        # インサイト取得
+        insights = db.get_patient_demographic_insights(req.clinic_id)
+        top_cities = [c["city"] for c in insights.get("top_cities", []) if c.get("city")]
+        region_text = top_cities[0] if top_cities else "藤枝市"
+
+        prompt = f"""あなたは整体院のGoogle広告・YouTube広告の最高峰コピーライターです。
+以下の院内患者データとターゲティング条件に基づき、思わずタップしたくなる超高CVな広告コピー（見出し・説明文）を作成してください。
+
+【院・ターゲット情報】
+・整体院名: {clinic_name}
+・主な地域: {region_text}
+・対象症状: {req.target_symptom}
+・対象性別: {req.target_gender}
+・対象年代: {req.target_age_group}
+
+【広告コピー制約事項】
+1. 見出し（Headlines）: 5個作成（全角15文字以内、半角30文字以内）。
+   - 「初回1,980円」「女性専門」「国家資格」「根本改善」「痛みの原因」などの強いオファーや安心感を盛り込む。
+   - 記号（【】や()や！）はポリシー違反になる可能性があるため避け、シンプルな文字で惹きつける。
+2. 長い見出し（Long Headlines / Demand Gen用）: 3個作成（全角40文字以内）。
+   - {region_text}の地域名と、症状改善のストーリーを含める。
+3. 説明文（Descriptions）: 4個作成（全角40文字以内）。
+   - 施術の特徴、個室、完全予約制、初回限定特典などを明確に記載する。
+
+以下のJSONフォーマットのみで出力してください:
+{{
+  "headlines": ["見出し1", "見出し2", "見出し3", "見出し4", "見出し5"],
+  "long_headlines": ["長い見出し1", "長い見出し2", "長い見出し3"],
+  "descriptions": ["説明文1", "説明文2", "説明文3", "説明文4"]
+}}"""
+
+        gemini_key = db.get_gemini_api_key(req.clinic_id)
+        if not gemini_key:
+            import os
+            gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        if not gemini_key:
+            raise HTTPException(400, "Gemini APIキーが設定されていません")
+
+        import google.genai as genai
+        gc = genai.Client(api_key=gemini_key)
+        response = gc.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+
+        resp_text = response.text or ""
+        import json, re
+        match = re.search(r'\{.*\}', resp_text, re.DOTALL)
+        if match:
+            copy_data = json.loads(match.group(0))
+        else:
+            copy_data = {
+                "headlines": [f"初回1,980円 {req.target_symptom}専門", f"{region_text}駅近く 根本改善整体", "女性整体師による丁寧な施術", "長年の悩みを根本から解消", "先着限定の特別体験プラン"],
+                "long_headlines": [f"初回1,980円 {region_text}の{req.target_symptom}専門 {clinic_name}", "姿勢と足元から整える根本施術で痛みを解放"],
+                "descriptions": [f"女性スタッフによる施術。{region_text}駅近く。完全予約制の個室空間で安心。初回1,980円", "どこに行っても良くならなかったお悩みに。根本からアプローチします。"]
+            }
+
+        return {
+            "success": True,
+            "clinic_name": clinic_name,
+            "region": region_text,
+            "copy": copy_data
+        }
+    except Exception as e:
+        import traceback
+        print(f"[generate-patient-ad-copy] エラー: {traceback.format_exc()}")
+        raise HTTPException(500, f"広告コピー生成エラー: {str(e)}")
+
 # ---- API: 除外キーワード ----
 @app.get("/api/negative-keywords")
 def list_negative_keywords(clinic_id: int = 1, campaign_id: Optional[int] = None):
