@@ -8799,27 +8799,33 @@ class DiagnoseLpMatchReq(BaseModel):
 
 @app.post("/api/ai/diagnose-lp-match")
 def diagnose_lp_match(req: DiagnoseLpMatchReq):
-    """LPと広告メッセージの100%一致度評価およびLP全体のセールスライティング総合添削を実施"""
+    """キャンペーンの実際の遷移先LPを動的取得し、100%メッセージ一致度評価およびAI修正指示プロンプト生成を実施"""
     import urllib.request, re, json
     
-    lp_text = ""
-    target_url = req.lp_url.strip() or "https://seitai-katakori-lp.pages.dev"
+    # 1. キャンペーンの実際の遷移先LP URLをGoogle Ads API / DBから動的取得
+    c_content = db.get_youtube_ad_content(req.clinic_id, req.campaign_id) or {}
+    final_urls = c_content.get("final_urls", [])
     
+    target_url = req.lp_url.strip()
+    if not target_url or target_url == "https://seitai-katakori-lp.pages.dev":
+        if final_urls and len(final_urls) > 0:
+            target_url = final_urls[0]
+        else:
+            target_url = "https://seitai-katakori-lp.pages.dev"
+    
+    lp_text = ""
     # LPの完全テキストスクレイピング取得
     try:
         req_obj = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
         with urllib.request.urlopen(req_obj, timeout=5) as resp:
             html_content = resp.read().decode('utf-8', errors='ignore')
-            # script, style, commentの除去
             cleaned_html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-            # テキストノードをすべて抽出
             raw_texts = re.findall(r'>([^<]+)<', cleaned_html)
             valid_texts = [t.strip() for t in raw_texts if t.strip() and len(t.strip()) > 1]
             lp_text = " / ".join(valid_texts[:30])
     except Exception as e:
         print(f"[diagnose_lp_match] LP取得スクレイピング通知: {e}")
 
-    # 実際のLPの忠実なフォールバックテキスト（スクショ画像の内容と100%一致）
     actual_lp_full_content = (
         "女性専門肩こり整体 整体院導 / 先着3名様限定（残りわずか） / "
         "もう一生付き合っていくしかないと諦めていませんか？ / "
@@ -8833,8 +8839,6 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
     if len(lp_text) < 30:
         lp_text = actual_lp_full_content
 
-    # キャンペーンの広告内容を取得
-    c_content = db.get_youtube_ad_content(req.clinic_id, req.campaign_id) or {}
     ad_headlines = c_content.get("headlines", ["初回1,980円 女性専門肩こり", "頭痛・めまいを伴う肩こりに", "女性整体師が丁寧に対応"])
     
     api_key = os.getenv("GEMINI_API_KEY")
@@ -8848,15 +8852,11 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
             
             prompt = f"""
 あなたは年商数億円クラスの整体院マーケティングおよびセールスライティングの最高専門家です。
-以下の広告文とLP（ランディングページ）全体のテキストを比較・熟読し、ファーストビューの一致度とLP全体のライティング添削結果をJSONで出力してください。
+以下の広告文とLP（ランディングページ: {target_url}）全体のテキストを比較・熟読し、ファーストビューの一致度とLP全体のライティング添削結果をJSONで出力してください。
 
 【広告の訴求文言】: {", ".join(ad_headlines)}
 【実際のLPテキスト】: {lp_text}
 【院の強み・オファー】: 静岡県藤枝市、女性専門整体院「整体院 導」、頭痛・めまいを伴う肩こり専門、施術＋運動＋靴インソール、専任女性整体師、初回1,980円
-
-分析指示:
-1. 広告の訴求と実際のLP文言は「女性専門」「頭痛めまいを伴う肩こり」「初回1980円」「藤枝駅3分」「専任女性整体師」のすべての重要要素が100%一致しているか厳密に判定してください。
-2. ヒーロー部分の一致度だけでなく、LP全体の構成・文章表現（コピーライティング）について改善すべき点をプロの目線で具体的に添削してください。
 
 以下の厳密なJSON形式のみで出力してください（コードブロック装飾は含めないでください）:
 {{
@@ -8875,7 +8875,8 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
       "💡 【本文アプローチ】『なぜ靴インソールが必要なのか？』の解説部分に『足元の歪みが首骨・骨格を歪ませ、頭痛やめまいを引き起こす』という短文のメカニズム説明を追加すると説得力が倍増します。",
       "💡 【予約オファー枠】オレンジ色の予約ボタンの直下に『※LINEなら24時間30秒でカンタン予約完了』というマイクロコピーを追記することで、Webフォーム入力の心理的ハードルを下げる効果が期待できます。"
     ]
-  }}
+  }},
+  "ai_prompt_for_developer": "【Web制作担当者・AIへのLP修正指示プロンプト】\\n以下の修正を行い、LPの成約率(CVR)を最大化させてください。\\n1. ファーストビュー見出し: 『【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）』に更新。\\n2. H1付近に『専任女性整体師がマンツーマン対応』バッジを太字で配置。\\n3. 予約ボタン直下に『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピーを追加。"
 }}
 """
             res = model.generate_content(prompt)
@@ -8903,13 +8904,59 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
                     "💡 【本文アプローチ】『なぜ靴インソールが必要なのか？』の解説部分に『足元の歪みが首骨・骨格を歪ませ、頭痛やめまいを引き起こす』という短文のメカニズム説明を追加すると説得力が倍増します。",
                     "💡 【予約オファー枠】オレンジ色の予約ボタンの直下に『※LINEなら24時間30秒でカンタン予約完了』というマイクロコピーを追記することで、Webフォーム入力の心理的ハードルを下げる効果が期待できます。"
                 ]
-            }
+            },
+            "ai_prompt_for_developer": "【Web制作担当者・AIへのLP修正指示プロンプト】\n以下の修正を行い、LPの成約率(CVR)を最大化させてください。\n1. ファーストビュー見出し: 『【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）』に更新。\n2. H1付近に『専任女性整体師がマンツーマン対応』バッジを太字で配置。\n3. 予約ボタン直下に『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピーを追加。"
         }
 
     return {
         "success": True,
         "lp_url": target_url,
         "diagnose": result_data
+    }
+
+
+@app.get("/api/debug/inspect-age-targeting")
+def inspect_age_targeting(clinic_id: int = 1):
+    """Google Adsのキャンペーンごとに設定されている実際のAge / Gender Criterionを検索調査"""
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, "google")
+    token = client["token"]
+    c_id = client["customer_id"]
+
+    # 1. 各キャンペーンのAdGroupCriterion（Age, Gender）設定を取得
+    query = """
+        SELECT
+            campaign.id,
+            campaign.name,
+            ad_group_criterion.gender.type,
+            ad_group_criterion.age_range.type,
+            ad_group_criterion.status
+        FROM ad_group_criterion
+        WHERE ad_group_criterion.type IN ('GENDER', 'AGE_RANGE')
+    """
+    rows = _gaql_query(c_id, query, token)
+    
+    results = {}
+    for r in rows:
+        camp_name = r.get("campaign", {}).get("name", "Unknown")
+        camp_id = r.get("campaign", {}).get("id", "Unknown")
+        key = f"{camp_name} ({camp_id})"
+        if key not in results:
+            results[key] = {"genders": [], "age_ranges": []}
+        
+        agc = r.get("adGroupCriterion", {})
+        gtype = agc.get("gender", {}).get("type")
+        atype = agc.get("ageRange", {}).get("type")
+        status = agc.get("status")
+
+        if gtype:
+            results[key]["genders"].append({"type": gtype, "status": status})
+        if atype:
+            results[key]["age_ranges"].append({"type": atype, "status": status})
+
+    return {
+        "success": True,
+        "targeting_by_campaign": results
     }
 
 
@@ -9050,7 +9097,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-demographic-golden-bidding', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260813-budget-safe-ai-prompt', html)
 
 
         return HTMLResponse(

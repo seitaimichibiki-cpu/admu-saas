@@ -1289,15 +1289,20 @@ async function loadCvOptimizationSection(campaigns) {
             </div>
 
             <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">✨ AI推奨 LPファーストビュー見出し（ワンタップコピー）</div>
-            <div id="recommendedHeadlineList" style="display:flex; flex-direction:column; gap:6px;">
+            <div id="recommendedHeadlineList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
               <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; font-size:11px; color:var(--text-1);">
                 <span>【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）</span>
                 <button onclick="navigator.clipboard.writeText('【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
               </div>
             </div>
+
+            <!-- 📋 AI/Web担当者用 指示プロンプト作成ボタン -->
+            <button id="copyAiPromptBtn" onclick="copyDeveloperPrompt()" class="btn btn-secondary" style="width:100%; font-size:11px; padding:6px; border-color:rgba(167,139,250,0.4); color:#c084fc; display:flex; justify-content:center; align-items:center; gap:6px;">
+              <span>📋 制作担当・AI用の修正指示プロンプトを作成＆コピー</span>
+            </button>
           </div>
           <button onclick="runLpMatchDiagnose()" class="btn btn-primary" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
-            <span>🔍 LP全体をプロ添削＆最新AI診断を実行</span>
+            <span>🔍 対象LPを動的取得＆プロ添削を実行</span>
           </button>
         </div>
 
@@ -1310,7 +1315,8 @@ async function loadCvOptimizationSection(campaigns) {
             <span style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">ターゲット属性連動</span>
           </div>
           <p style="font-size:12px; color:var(--text-3); margin:0 0 10px 0; line-height:1.4;">
-            各キャンペーンのターゲット（女性専門・40〜70代シニア・全性別社会人）に応じた予約ピーク時間帯に入札を集中ブースト。
+            各キャンペーンのターゲットに応じた予約ピーク時間帯に入札を集中ブースト。<br/>
+            <span style="color:#34d399; font-weight:700;">※設定されている日予算は増えません。同じ予算内で成果の出る時間に集中配分します。</span>
           </p>
 
           <!-- キャンペーン選択 -->
@@ -1340,7 +1346,7 @@ async function loadCvOptimizationSection(campaigns) {
             </div>
           </div>
           <button onclick="applyGoldenHoursBidding()" class="btn btn-success" style="width:100%; font-size:12px; padding:8px; display:flex; justify-content:center; align-items:center; gap:6px;">
-            <span id="applyGoldenBtnText">⚡ このターゲットのゴールデンタイムに入札+30%自動適用</span>
+            <span id="applyGoldenBtnText">⚡ このターゲットのゴールデンタイムに入札+30%自動適用（※日予算はそのまま配分最適化）</span>
           </button>
         </div>
       </div>
@@ -1372,16 +1378,35 @@ window.changeGoldenCampaign = async function(campaignId) {
   }
 };
 
+// プロンプト生成コピー関数
+window.lastGeneratedPrompt = "";
+window.copyDeveloperPrompt = function() {
+  const promptTxt = window.lastGeneratedPrompt || `【Web制作担当者・AIへのLP修正指示プロンプト】
+以下の修正を行い、LPの成約率(CVR)を最大化させてください。
+1. ファーストビュー見出し: 『【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）』に更新。
+2. H1付近に『専任女性整体師がマンツーマン対応』バッジを太字で配置。
+3. 予約ボタン直下に『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピーを追加。`;
+
+  navigator.clipboard.writeText(promptTxt);
+  toast('制作担当者・AI用指示プロンプトをクリップボードにコピーしました！', 'success');
+};
+
 // LP診断・全体ライティング添削実行関数
 window.runLpMatchDiagnose = async function() {
   try {
-    toast('LP全体のテキストとセールスライティングをAIプロ添削中...', 'info');
+    toast('対象LP全体のテキストとセールスライティングをAIプロ添削中...', 'info');
+    const selectEl = document.getElementById('goldenCampaignSelect');
+    const selectedCampId = selectEl ? selectEl.value : '24067002156';
+
     const res = await api('/ai/diagnose-lp-match', {
       method: 'POST',
-      body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: '24067002156', lp_url: 'https://seitai-katakori-lp.pages.dev' })
+      body: JSON.stringify({ clinic_id: currentClinicId || 1, campaign_id: selectedCampId, lp_url: '' })
     });
     if (res.success && res.diagnose) {
       const d = res.diagnose;
+      if (d.ai_prompt_for_developer) {
+        window.lastGeneratedPrompt = d.ai_prompt_for_developer;
+      }
       const badge = document.getElementById('lpMatchScoreBadge');
       if (badge) {
         badge.textContent = `スコア ${d.match_score}% ${d.match_score >= 85 ? '✅' : '⚠️'}`;
@@ -1413,7 +1438,7 @@ window.runLpMatchDiagnose = async function() {
           </div>
         `).join('');
       }
-      toast('LP全体のセールスライティングプロ添削が完了しました！', 'success');
+      toast(`LP (${res.lp_url || '対象ページ'}) のプロ添削＆AI指示作成が完了しました！`, 'success');
     }
   } catch(e) {
     toast('LP診断エラー: ' + e.message, 'error');
