@@ -1488,6 +1488,40 @@ window.initDrawerMap = function(campId) {
 
   if (typeof L === 'undefined') {
     mapEl.innerHTML = '<div style="padding:40px; color:#fbbf24; font-size:12px; text-align:center;">⚠️ 地図ライブラリを読み込み中...</div>';
+    // ★ Leaflet が未ロードなら動的にスクリプトを注入して自動リトライ ★
+    if (!window._leafletLoadAttempted) {
+      window._leafletLoadAttempted = true;
+      console.log('[initDrawerMap] Leaflet not found, dynamically loading...');
+      // CSS
+      const cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+      cssLink.crossOrigin = 'anonymous';
+      document.head.appendChild(cssLink);
+      // JS
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      script.crossOrigin = 'anonymous';
+      script.onload = function() {
+        console.log('[initDrawerMap] Leaflet dynamically loaded successfully');
+        // リトライ
+        setTimeout(() => { window.initDrawerMap(campId); }, 200);
+      };
+      script.onerror = function() {
+        console.error('[initDrawerMap] Failed to dynamically load Leaflet');
+        mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ 地図の読み込みに失敗しました。ページをリロードしてください。</div>';
+      };
+      document.head.appendChild(script);
+    } else {
+      // 既にロード試行済みなら数秒待ってリトライ
+      setTimeout(() => {
+        if (typeof L !== 'undefined') {
+          window.initDrawerMap(campId);
+        } else {
+          mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ 地図の読み込みに失敗しました。ページをリロードしてください。</div>';
+        }
+      }, 2000);
+    }
     return;
   }
 

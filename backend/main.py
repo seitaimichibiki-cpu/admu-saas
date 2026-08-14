@@ -9151,7 +9151,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260814-cartodb-voyager-map-v500', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-leaflet-dynamic-loader', html)
 
 
         return HTMLResponse(
