@@ -1486,13 +1486,21 @@ window.initDrawerMap = function(campId) {
     }
 
     // 藤枝市・吉田町中心に配置
-    const map = L.map(mapEl).setView([34.832, 138.235], 11);
+    const map = L.map(mapEl, {
+      center: [34.832, 138.235],
+      zoom: 11,
+      zoomControl: true
+    });
     window.drawerMapInstances[campId] = map;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
       attribution: '© OpenStreetMap'
     }).addTo(map);
+
+    // ★ ドロワー開口アニメーション完了後に Leaflet にサイズ再計算を行わせる（地図非表示の完全防止） ★
+    setTimeout(() => { map.invalidateSize(); }, 150);
+    setTimeout(() => { map.invalidateSize(); }, 400);
 
     // 院の中心ピン（藤枝駅前）
     L.marker([34.8494, 138.2533]).addTo(map)
@@ -2660,10 +2668,10 @@ function renderCampDrawer(d) {
     body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 
-  // ★ ドロワー内ビジュアルマップの描画初期化 ★
+  // ★ ドロワー内ビジュアルマップの描画初期化（アニメーション開口後） ★
   setTimeout(() => {
     initDrawerMap(d.id);
-  }, 250);
+  }, 400);
 }
 
 async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) {
