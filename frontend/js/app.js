@@ -1478,11 +1478,22 @@ window.toggleDrawerGeoChip = function(campId, locName) {
 // ドロワー内 ビジュアルマップ初期化（地図タップで直接エリア選択可能）
 window.initDrawerMap = function(campId) {
   const mapEl = document.getElementById(`drawerLeafletMap_${campId}`);
-  if (!mapEl || typeof L === 'undefined') return;
+  if (!mapEl) return;
+
+  // コンテナのCSSスタイルを強制設定
+  mapEl.style.height = '230px';
+  mapEl.style.width = '100%';
+  mapEl.style.position = 'relative';
+  mapEl.style.background = '#1e293b';
+
+  if (typeof L === 'undefined') {
+    mapEl.innerHTML = '<div style="padding:40px; color:#fbbf24; font-size:12px; text-align:center;">⚠️ 地図ライブラリを読み込み中...</div>';
+    return;
+  }
 
   try {
     if (window.drawerMapInstances[campId]) {
-      window.drawerMapInstances[campId].remove();
+      try { window.drawerMapInstances[campId].remove(); } catch(e) {}
     }
 
     // 藤枝市・吉田町中心に配置
@@ -1493,14 +1504,20 @@ window.initDrawerMap = function(campId) {
     });
     window.drawerMapInstances[campId] = map;
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // 高速で信頼性の高い CartoDB & OpenStreetMap タイルを使用
+    const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    L.tileLayer(tileUrl, {
       maxZoom: 18,
-      attribution: '© OpenStreetMap'
+      subdomains: 'abcd',
+      attribution: '© OpenStreetMap © CARTO'
     }).addTo(map);
 
-    // ★ ドロワー開口アニメーション完了後に Leaflet にサイズ再計算を行わせる（地図非表示の完全防止） ★
-    setTimeout(() => { map.invalidateSize(); }, 150);
-    setTimeout(() => { map.invalidateSize(); }, 400);
+    // ★ 複数回のサイズ調整を実行（アニメーション遅延完全克服） ★
+    [100, 300, 600, 1000].forEach(delay => {
+      setTimeout(() => {
+        try { map.invalidateSize(); } catch(e) {}
+      }, delay);
+    });
 
     // 院の中心ピン（藤枝駅前）
     L.marker([34.8494, 138.2533]).addTo(map)
@@ -1528,11 +1545,11 @@ window.initDrawerMap = function(campId) {
       const circle = L.circle(area.center, {
         color: isSelected ? '#10b981' : '#64748b',
         fillColor: isSelected ? '#10b981' : '#64748b',
-        fillOpacity: isSelected ? 0.35 : 0.08,
+        fillOpacity: isSelected ? 0.4 : 0.08,
         weight: isSelected ? 3 : 1
       }).addTo(map);
 
-      circle.bindTooltip(`📍 ${area.name} (タップで切り替え)`, { permanent: false, direction: "top" });
+      circle.bindTooltip(`📍 ${area.name} (${isSelected ? '選択中 ✅' : 'タップで選択'})`, { permanent: false, direction: "top" });
 
       // ★ 地図上の円（エリア）を直接タップした時の連動トグル ★
       circle.on('click', function() {
