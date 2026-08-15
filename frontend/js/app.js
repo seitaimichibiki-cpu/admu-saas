@@ -1797,7 +1797,10 @@ window.initDrawerMap = function(campId) {
       let chipsHtml = '';
 
       results.forEach(({ name: cityName, color: cityColor, data }) => {
-        if (!data || !data.features) return;
+        if (!data || !data.features) {
+          chipsHtml += `<div style="margin-bottom:4px;"><span style="font-size:9px; font-weight:700; color:${cityColor};">■ ${cityName}:</span> <span style="font-size:9px; color:#fbbf24;">⚠️ 境界データを準備中...</span></div>`;
+          return;
+        }
 
         let cityChips = '';
         data.features.forEach(feature => {
