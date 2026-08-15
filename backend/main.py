@@ -4187,8 +4187,15 @@ def get_geo_boundaries(pref_code: str, city_code: str):
     city_code_clean = city_code.replace('.json', '')
     geo_path = os.path.join(FRONTEND_DIR, "geo", pref_code, f"{city_code_clean}.json")
     
+    print(f"[GEO-API] pref={pref_code} city={city_code_clean} path={geo_path} exists={os.path.exists(geo_path)} FRONTEND_DIR={FRONTEND_DIR}")
+    
     if not os.path.exists(geo_path):
-        return JSONResponse({"error": f"boundary data not found for {pref_code}/{city_code_clean}"}, status_code=404)
+        # デバッグ: ディレクトリの中身を返す
+        geo_dir = os.path.join(FRONTEND_DIR, "geo")
+        dir_contents = []
+        if os.path.exists(geo_dir):
+            dir_contents = os.listdir(geo_dir)
+        return JSONResponse({"error": f"boundary data not found for {pref_code}/{city_code_clean}", "geo_path": geo_path, "frontend_dir": FRONTEND_DIR, "geo_dir_exists": os.path.exists(geo_dir), "geo_dir_contents": dir_contents}, status_code=404)
     
     with open(geo_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
