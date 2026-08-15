@@ -4347,53 +4347,53 @@ def _generate_pref_geojson(pref_code_str: str):
 def get_geo_boundaries(pref_code: str, city_code: str):
     """市区町村コードに対応する町丁字境界 GeoJSON を返却（オンデマンド生成対応）"""
     from fastapi.responses import JSONResponse, Response
+    import traceback as tb_mod
     
-    # パス安全チェック
-    if not pref_code.isdigit() or not city_code.replace('.json', '').isdigit():
-        return JSONResponse({"error": "invalid code"}, status_code=400)
-    
-    pref_code = pref_code.zfill(2)  # '1' → '01'
-    city_code_clean = city_code.replace('.json', '')
-    geo_path = os.path.join(FRONTEND_DIR, "geo", pref_code, f"{city_code_clean}.json")
-    
-    # ファイルが無ければオンデマンド生成
-    if not os.path.exists(geo_path):
-        # 都道府県ごとにロックを取得（同時リクエストで重複DL防止）
-        lock_key = pref_code
-        if lock_key not in _geo_gen_locks:
-            _geo_gen_locks[lock_key] = threading.Lock()
+    try:
+        # パス安全チェック
+        if not pref_code.isdigit() or not city_code.replace('.json', '').isdigit():
+            return JSONResponse({"error": "invalid code"}, status_code=400)
         
-        with _geo_gen_locks[lock_key]:
-            # ロック取得後に再チェック（別スレッドが先に生成済みの場合）
-            if not os.path.exists(geo_path):
-                try:
+        pref_code = pref_code.zfill(2)  # '1' → '01'
+        city_code_clean = city_code.replace('.json', '')
+        geo_path = os.path.join(FRONTEND_DIR, "geo", pref_code, f"{city_code_clean}.json")
+        
+        # ファイルが無ければオンデマンド生成
+        if not os.path.exists(geo_path):
+            # 都道府県ごとにロックを取得（同時リクエストで重複DL防止）
+            lock_key = pref_code
+            if lock_key not in _geo_gen_locks:
+                _geo_gen_locks[lock_key] = threading.Lock()
+            
+            with _geo_gen_locks[lock_key]:
+                # ロック取得後に再チェック（別スレッドが先に生成済みの場合）
+                if not os.path.exists(geo_path):
                     success = _generate_pref_geojson(pref_code)
-                except Exception as e:
-                    import traceback
-                    tb = traceback.format_exc()
-                    print(f"[geo-gen] Exception: {tb}")
-                    return JSONResponse(
-                        {"error": f"generation error: {str(e)}", "traceback": tb},
-                        status_code=500
-                    )
-                if not success or not os.path.exists(geo_path):
-                    return JSONResponse(
-                        {"error": f"boundary data generation failed for {pref_code}/{city_code_clean}"},
-                        status_code=404
-                    )
-    
-    # ファイルをバイト列でそのまま返却（再シリアライズ不要で高速・安全）
-    with open(geo_path, 'rb') as f:
-        raw = f.read()
-    
-    return Response(
-        content=raw,
-        media_type='application/json',
-        headers={
-            'Cache-Control': 'public, max-age=86400',
-            'Access-Control-Allow-Origin': '*'
-        }
-    )
+                    if not success or not os.path.exists(geo_path):
+                        return JSONResponse(
+                            {"error": f"boundary data generation failed for {pref_code}/{city_code_clean}"},
+                            status_code=404
+                        )
+        
+        # ファイルをバイト列でそのまま返却（再シリアライズ不要で高速・安全）
+        with open(geo_path, 'rb') as f:
+            raw = f.read()
+        
+        return Response(
+            content=raw,
+            media_type='application/json',
+            headers={
+                'Cache-Control': 'public, max-age=86400',
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+    except Exception as e:
+        tb = tb_mod.format_exc()
+        print(f"[geo-boundaries] ERROR: {tb}")
+        return JSONResponse(
+            {"error": str(e), "detail": tb},
+            status_code=500
+        )
 
 
 
