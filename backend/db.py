@@ -183,6 +183,7 @@ def init_db():
             line_harness_url TEXT,
             line_harness_api_key TEXT,
             line_harness_account_id TEXT,
+            target_geo_codes TEXT,
             created_at {TS}, FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
         f"""CREATE TABLE IF NOT EXISTS campaigns (
             id {PK}, clinic_id INTEGER NOT NULL, google_campaign_id TEXT,
@@ -406,6 +407,7 @@ def init_db():
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_url TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_api_key TEXT DEFAULT NULL",
         "ALTER TABLE ads_accounts ADD COLUMN line_harness_account_id TEXT DEFAULT NULL",
+        "ALTER TABLE ads_accounts ADD COLUMN target_geo_codes TEXT DEFAULT NULL",
         # YouTube広告編集内容のDB永続化（GAQL取得失敗時の復元用）
         "ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''",
         "ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''",

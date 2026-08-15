@@ -1047,7 +1047,42 @@
             </details>
           </div>
 
-          
+          <!-- 🗺️ 商圏設定（配信対象市区町村） -->
+          <div class="card settings-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(30,41,59,0.8) 100%); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 18px;">
+            <h3 class="card-title" style="color: #60a5fa; font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              🗺️ 商圏設定 (配信対象市区町村のブロック登録)
+            </h3>
+            <p style="font-size:12px; color:var(--text-3); margin: 4px 0 14px 0; line-height: 1.6;">
+              クリニックの商圏（配信対象とする市区町村）を登録してください。登録された市区町村の町丁字境界データがキャンペーン配信地域マップ上にブロック表示され、タップで細かくターゲティング選択できるようになります。
+            </p>
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+              <div style="flex: 1; min-width: 140px;">
+                <label style="font-size:11px; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">都道府県</label>
+                <select id="settGeoPrefSelect" class="form-input" style="width:100%; font-size:12px;" onchange="onSettGeoPrefChange()">
+                  <option value="">-- 都道府県を選択 --</option>
+                </select>
+              </div>
+              <div style="flex: 2; min-width: 200px;">
+                <label style="font-size:11px; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">市区町村</label>
+                <select id="settGeoCitySelect" class="form-input" style="width:100%; font-size:12px;">
+                  <option value="">-- まず都道府県を選択してください --</option>
+                </select>
+              </div>
+              <div style="align-self: flex-end;">
+                <button type="button" class="btn btn-primary" onclick="addMarketAreaCity()" style="font-size:12px; padding:0 16px; height:38px; white-space:nowrap; background:#2563eb; border-color:#3b82f6; font-weight:700;">
+                  ＋ 商圏に追加
+                </button>
+              </div>
+            </div>
+            <div style="font-size:11px; color:#60a5fa; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+              <span>登録済みの商圏市区町村（現在適用中）:</span>
+            </div>
+            <div id="settGeoChipsContainer" style="display:flex; flex-wrap:wrap; gap:8px; min-height:48px; padding:12px; background:rgba(15,23,42,0.6); border:1px dashed rgba(59,130,246,0.3); border-radius:8px; align-items:center;">
+              <span style="font-size:11px; color:var(--text-3);">読み込み中...</span>
+            </div>
+          </div>
+
           <div class="card settings-card">
             <h3 class="card-title">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>

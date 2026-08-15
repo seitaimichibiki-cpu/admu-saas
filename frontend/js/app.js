@@ -1435,6 +1435,205 @@ window.drawerGeoLayers = {};
 window._geoBoundaryCache = {};
 // クリニックの地域設定（都道府県コード・市区町村コードリスト）
 // ★ SaaS化時: クリニックの住所からDBで自動設定。デフォルトは藤枝市＆周辺 ★
+
+// ―― 🗺️ 全国対応 商圏マスター辞書 & 操作関数 ――――――――――――
+window.PREFECTURES = [
+  { code: '01', name: '北海道' }, { code: '02', name: '青森県' }, { code: '03', name: '岩手県' },
+  { code: '04', name: '宮城県' }, { code: '05', name: '秋田県' }, { code: '06', name: '山形県' },
+  { code: '07', name: '福島県' }, { code: '08', name: '茨城県' }, { code: '09', name: '栃木県' },
+  { code: '10', name: '群馬県' }, { code: '11', name: '埼玉県' }, { code: '12', name: '千葉県' },
+  { code: '13', name: '東京都' }, { code: '14', name: '神奈川県' }, { code: '15', name: '新潟県' },
+  { code: '16', name: '富山県' }, { code: '17', name: '石川県' }, { code: '18', name: '福井県' },
+  { code: '19', name: '山梨県' }, { code: '20', name: '長野県' }, { code: '21', name: '岐阜県' },
+  { code: '22', name: '静岡県' }, { code: '23', name: '愛知県' }, { code: '24', name: '三重県' },
+  { code: '25', name: '滋賀県' }, { code: '26', name: '京都府' }, { code: '27', name: '大阪府' },
+  { code: '28', name: '兵庫県' }, { code: '29', name: '奈良県' }, { code: '30', name: '和歌山県' },
+  { code: '31', name: '鳥取県' }, { code: '32', name: '島根県' }, { code: '33', name: '岡山県' },
+  { code: '34', name: '広島県' }, { code: '35', name: '山口県' }, { code: '36', name: '徳島県' },
+  { code: '37', name: '香川県' }, { code: '38', name: '愛媛県' }, { code: '39', name: '高知県' },
+  { code: '40', name: '福岡県' }, { code: '41', name: '佐賀県' }, { code: '42', name: '長崎県' },
+  { code: '43', name: '熊本県' }, { code: '44', name: '大分県' }, { code: '45', name: '宮崎県' },
+  { code: '46', name: '鹿児島県' }, { code: '47', name: '沖縄県' }
+];
+
+window.MUNICIPALITIES_BY_PREF = {
+  '22': [
+    { code: '22214', name: '藤枝市' }, { code: '22424', name: '吉田町' }, { code: '22212', name: '焼津市' },
+    { code: '22101', name: '静岡市葵区' }, { code: '22102', name: '静岡市駿河区' }, { code: '22103', name: '静岡市清水区' },
+    { code: '22131', name: '浜松市中央区' }, { code: '22203', name: '沼津市' }, { code: '22206', name: '三島市' },
+    { code: '22207', name: '富士宮市' }, { code: '22209', name: '島田市' }, { code: '22210', name: '富士市' },
+    { code: '22211', name: '磐田市' }, { code: '22213', name: '掛川市' }, { code: '22215', name: '御殿場市' },
+    { code: '22216', name: '袋井市' }, { code: '22220', name: '裾野市' }, { code: '22221', name: '湖西市' },
+    { code: '22225', name: '伊豆の国市' }, { code: '22226', name: '牧之原市' }
+  ],
+  '13': [
+    { code: '13101', name: '千代田区' }, { code: '13102', name: '中央区' }, { code: '13103', name: '港区' },
+    { code: '13104', name: '新宿区' }, { code: '13105', name: '文京区' }, { code: '13106', name: '台東区' },
+    { code: '13107', name: '墨田区' }, { code: '13108', name: '江東区' }, { code: '13109', name: '品川区' },
+    { code: '13110', name: '目黒区' }, { code: '13111', name: '大田区' }, { code: '13112', name: '世田谷区' },
+    { code: '13113', name: '渋谷区' }, { code: '13114', name: '中野区' }, { code: '13115', name: '杉並区' },
+    { code: '13116', name: '豊島区' }, { code: '13117', name: '北区' }, { code: '13118', name: '荒川区' },
+    { code: '13119', name: '板橋区' }, { code: '13120', name: '練馬区' }, { code: '13121', name: '足立区' },
+    { code: '13122', name: '葛飾区' }, { code: '13123', name: '江戸川区' }, { code: '13201', name: '八王子市' },
+    { code: '13202', name: '立川市' }, { code: '13203', name: '武蔵野市' }, { code: '13204', name: '三鷹市' },
+    { code: '13209', name: '町田市' }, { code: '13214', name: '国分寺市' }, { code: '13224', name: '多摩市' }
+  ],
+  '14': [
+    { code: '14103', name: '横浜市西区' }, { code: '14104', name: '横浜市中区' }, { code: '14109', name: '横浜市港北区' },
+    { code: '14117', name: '横浜市青葉区' }, { code: '14130', name: '川崎市' }, { code: '14150', name: '相模原市' },
+    { code: '14201', name: '横須賀市' }, { code: '14203', name: '平塚市' }, { code: '14204', name: '鎌倉市' },
+    { code: '14205', name: '藤沢市' }, { code: '14207', name: '茅ヶ崎市' }, { code: '14212', name: '厚木市' },
+    { code: '14213', name: '大和市' }
+  ],
+  '11': [
+    { code: '11103', name: 'さいたま市大宮区' }, { code: '11107', name: 'さいたま市浦和区' }, { code: '11201', name: '川越市' },
+    { code: '11203', name: '川口市' }, { code: '11208', name: '所沢市' }, { code: '11214', name: '春日部市' },
+    { code: '11222', name: '越谷市' }, { code: '11227', name: '朝霞市' }
+  ],
+  '12': [
+    { code: '12101', name: '千葉市中央区' }, { code: '12203', name: '市川市' }, { code: '12204', name: '船橋市' },
+    { code: '12207', name: '松戸市' }, { code: '12217', name: '柏市' }, { code: '12227', name: '浦安市' }
+  ],
+  '23': [
+    { code: '23106', name: '名古屋市中区' }, { code: '23101', name: '名古屋市千種区' }, { code: '23201', name: '豊橋市' },
+    { code: '23202', name: '岡崎市' }, { code: '23203', name: '一宮市' }, { code: '23206', name: '春日井市' },
+    { code: '23211', name: '豊田市' }, { code: '23212', name: '安城市' }
+  ],
+  '27': [
+    { code: '27127', name: '大阪市北区' }, { code: '27128', name: '大阪市中央区' }, { code: '27140', name: '堺市' },
+    { code: '27203', name: '豊中市' }, { code: '27205', name: '吹田市' }, { code: '27207', name: '高槻市' },
+    { code: '27210', name: '枚方市' }, { code: '27211', name: '茨木市' }, { code: '27212', name: '八尾市' },
+    { code: '27215', name: '寝屋川市' }, { code: '27227', name: '東大阪市' }
+  ],
+  '28': [
+    { code: '28110', name: '神戸市中央区' }, { code: '28101', name: '神戸市東灘区' }, { code: '28201', name: '姫路市' },
+    { code: '28202', name: '尼崎市' }, { code: '28203', name: '明石市' }, { code: '28204', name: '西宮市' },
+    { code: '28214', name: '宝塚市' }, { code: '28217', name: '川西市' }
+  ],
+  '26': [
+    { code: '26104', name: '京都市中京区' }, { code: '26106', name: '京都市下京区' }, { code: '26109', name: '京都市伏見区' },
+    { code: '26204', name: '宇治市' }, { code: '26206', name: '亀岡市' }
+  ],
+  '40': [
+    { code: '40133', name: '福岡市中央区' }, { code: '40132', name: '福岡市博多区' }, { code: '40100', name: '北九州市' },
+    { code: '40203', name: '久留米市' }, { code: '40205', name: '飯塚市' }
+  ]
+};
+
+window.GEO_COLOR_PALETTE = ['#3b82f6', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+window.initMarketAreaSettings = function() {
+  const prefSel = document.getElementById('settGeoPrefSelect');
+  if (!prefSel) return;
+
+  if (prefSel.options.length <= 1) {
+    let opts = '<option value="">-- 都道府県を選択 --</option>';
+    window.PREFECTURES.forEach(p => {
+      opts += `<option value="${p.code}">${p.code}. ${p.name}</option>`;
+    });
+    prefSel.innerHTML = opts;
+  }
+
+  window.renderMarketAreaChips();
+};
+
+window.onSettGeoPrefChange = function() {
+  const prefCode = document.getElementById('settGeoPrefSelect')?.value;
+  const citySel = document.getElementById('settGeoCitySelect');
+  if (!citySel) return;
+
+  if (!prefCode) {
+    citySel.innerHTML = '<option value="">-- まず都道府県を選択してください --</option>';
+    return;
+  }
+
+  const cities = window.MUNICIPALITIES_BY_PREF[prefCode] || [];
+  let opts = '<option value="">-- 市区町村を選択 --</option>';
+  cities.forEach(c => {
+    opts += `<option value="${c.code}" data-name="${c.name}">${c.name} (${c.code})</option>`;
+  });
+  opts += `<option value="MANUAL">✏️ [コード直接入力] 5桁の市区町村コードを入力...</option>`;
+  citySel.innerHTML = opts;
+};
+
+window.addMarketAreaCity = function() {
+  const prefCode = document.getElementById('settGeoPrefSelect')?.value;
+  const citySel = document.getElementById('settGeoCitySelect');
+  if (!prefCode || !citySel) {
+    toast('都道府県と市区町村を選択してください', 'error');
+    return;
+  }
+
+  let cityCode = citySel.value;
+  let cityName = '';
+
+  if (cityCode === 'MANUAL') {
+    cityCode = prompt('5桁の市区町村コードを入力してください（例: 22214）:');
+    if (!cityCode || !cityCode.match(/^\d{5}$/)) {
+      toast('5桁の数字コードを入力してください', 'error');
+      return;
+    }
+    cityName = prompt('市区町村名を入力してください（例: 藤枝市）:') || `コード:${cityCode}`;
+  } else if (!cityCode) {
+    toast('市区町村を選択してください', 'error');
+    return;
+  } else {
+    const selectedOpt = citySel.options[citySel.selectedIndex];
+    cityName = selectedOpt.getAttribute('data-name') || selectedOpt.text.split(' ')[0];
+  }
+
+  if (!window.clinicGeoCodes) window.clinicGeoCodes = [];
+
+  if (window.clinicGeoCodes.some(c => c.city === cityCode)) {
+    toast(`『${cityName}』は既に登録されています`, 'warning');
+    return;
+  }
+
+  const colorIndex = window.clinicGeoCodes.length % window.GEO_COLOR_PALETTE.length;
+  const color = window.GEO_COLOR_PALETTE[colorIndex];
+
+  window.clinicGeoCodes.push({
+    pref: prefCode,
+    city: cityCode,
+    name: cityName,
+    color: color
+  });
+
+  window.renderMarketAreaChips();
+  toast(`商圏に『${cityName}』を追加しました ✅ (「設定を保存」ボタンを押してください)`, 'success');
+};
+
+window.removeMarketAreaCity = function(index) {
+  if (window.clinicGeoCodes && index >= 0 && index < window.clinicGeoCodes.length) {
+    const removed = window.clinicGeoCodes.splice(index, 1)[0];
+    window.renderMarketAreaChips();
+    toast(`商圏『${removed.name}』を削除しました (「設定を保存」ボタンを押してください)`, 'info');
+  }
+};
+
+window.renderMarketAreaChips = function() {
+  const container = document.getElementById('settGeoChipsContainer');
+  if (!container) return;
+
+  if (!window.clinicGeoCodes || window.clinicGeoCodes.length === 0) {
+    container.innerHTML = '<span style="font-size:11px; color:var(--text-3);">商圏市区町村が登録されていません。（上部から都道府県・市区町村を選択して追加してください）</span>';
+    return;
+  }
+
+  let html = '';
+  window.clinicGeoCodes.forEach((c, idx) => {
+    html += `
+      <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(30,41,59,0.9); border:1px solid ${c.color}; border-radius:20px; padding:5px 12px; font-size:12px; color:#f8fafc;">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${c.color};"></span>
+        <span style="font-weight:700;">${c.name}</span>
+        <span style="font-size:10px; color:#94a3b8;">(${c.pref}/${c.city})</span>
+        <button type="button" onclick="removeMarketAreaCity(${idx})" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px; padding:0 2px; line-height:1; font-weight:bold; margin-left:4px;">&times;</button>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
+};
+
 window.clinicGeoCodes = window.clinicGeoCodes || [
   { pref: '22', city: '22214', name: '藤枝市', color: '#3b82f6' },
   { pref: '22', city: '22424', name: '吉田町', color: '#f59e0b' },
@@ -4998,6 +5197,18 @@ async function loadSettings() {
       lhApiKeyEl.placeholder = s.line_harness_api_key === '***設定済み***' ? '***設定済み（変更する場合のみ入力）***' : 'APIキーを入力';
     }
     const lhAccountIdEl = document.getElementById('settLineHarnessAccountId');
+    // 商圏設定 (target_geo_codes)
+    if (s.target_geo_codes) {
+      try {
+        const parsed = JSON.parse(s.target_geo_codes);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          window.clinicGeoCodes = parsed;
+        }
+      } catch(e) {}
+    }
+    if (typeof window.initMarketAreaSettings === 'function') {
+      window.initMarketAreaSettings();
+    }
     if (lhAccountIdEl) lhAccountIdEl.value = s.line_harness_account_id || '';
 
   } catch(e) {
@@ -5025,6 +5236,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     sitelink_reserve_url: document.getElementById('settSitelinkReserveUrl')?.value || null,
     line_harness_url: document.getElementById('settLineHarnessUrl')?.value || null,
     line_harness_account_id: document.getElementById('settLineHarnessAccountId')?.value || null,
+    target_geo_codes: JSON.stringify(window.clinicGeoCodes || []),
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;

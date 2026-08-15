@@ -377,6 +377,7 @@ class SettingsReq(BaseModel):
     line_harness_url: Optional[str] = None
     line_harness_api_key: Optional[str] = None
     line_harness_account_id: Optional[str] = None
+    target_geo_codes: Optional[str] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -9268,7 +9269,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-geo-boundary-api', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-market-area-settings', html)
 
 
         return HTMLResponse(
