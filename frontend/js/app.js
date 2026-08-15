@@ -1431,68 +1431,30 @@ window.switchLpTab = function(campaignId) {
 window.drawerSelectedLocations = {};
 window.drawerMapInstances = {};
 window.drawerGeoLayers = {};
+// キャンペーンごとにロード済みの町丁字データをキャッシュ
+window._geoBoundaryCache = {};
+// クリニックの地域設定（都道府県コード・市区町村コードリスト）
+// ★ SaaS化時: クリニックの住所からDBで自動設定。デフォルトは藤枝市＆周辺 ★
+window.clinicGeoCodes = window.clinicGeoCodes || [
+  { pref: '22', city: '22214', name: '藤枝市', color: '#3b82f6' },
+  { pref: '22', city: '22424', name: '吉田町', color: '#f59e0b' },
+  { pref: '22', city: '22212', name: '焼津市', color: '#ef4444' },
+];
 
-// ★ 大字ブロックマスターデータ（中心座標 + 半径 → 八角形ポリゴン自動生成） ★
-window.OAZA_AREAS = {
-  '藤枝市': {
-    color: '#3b82f6',
-    areas: [
-      { name: '田沼',       lat: 34.8454, lng: 138.2580, radius: 800 },
-      { name: '青木',       lat: 34.8525, lng: 138.2617, radius: 700 },
-      { name: '駅前',       lat: 34.8500, lng: 138.2530, radius: 500 },
-      { name: '瀬戸新屋',   lat: 34.8550, lng: 138.2450, radius: 900 },
-      { name: '高洲',       lat: 34.8385, lng: 138.2548, radius: 800 },
-      { name: '大洲',       lat: 34.8420, lng: 138.2680, radius: 800 },
-      { name: '前島',       lat: 34.8310, lng: 138.2620, radius: 900 },
-      { name: '志太',       lat: 34.8550, lng: 138.2760, radius: 800 },
-      { name: '上青島',     lat: 34.8700, lng: 138.2520, radius: 1000 },
-      { name: '下青島',     lat: 34.8410, lng: 138.2390, radius: 900 },
-      { name: '高柳',       lat: 34.8680, lng: 138.2360, radius: 900 },
-      { name: '内瀬戸',     lat: 34.8640, lng: 138.2250, radius: 800 },
-      { name: '岡部町岡部', lat: 34.8880, lng: 138.2100, radius: 1200 },
-    ]
-  },
-  '吉田町': {
-    color: '#f59e0b',
-    areas: [
-      { name: '片岡', lat: 34.7800, lng: 138.2500, radius: 1200 },
-      { name: '住吉', lat: 34.7700, lng: 138.2350, radius: 1200 },
-      { name: '川尻', lat: 34.7750, lng: 138.2200, radius: 1000 },
-      { name: '神戸', lat: 34.7850, lng: 138.2300, radius: 1000 },
-      { name: '大幡', lat: 34.7680, lng: 138.2480, radius: 1000 },
-    ]
-  },
-  '焼津市': {
-    color: '#ef4444',
-    areas: [
-      { name: '焼津',         lat: 34.8680, lng: 138.3180, radius: 1200 },
-      { name: '西焼津駅周辺', lat: 34.8530, lng: 138.2950, radius: 1000 },
-    ]
+// 町丁字境界データを API から取得（キャッシュ付き）
+window._loadGeoBoundary = async function(prefCode, cityCode) {
+  const key = `${prefCode}/${cityCode}`;
+  if (window._geoBoundaryCache[key]) return window._geoBoundaryCache[key];
+  try {
+    const res = await fetch(`/api/geo-boundaries/${prefCode}/${cityCode}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    window._geoBoundaryCache[key] = data;
+    return data;
+  } catch (e) {
+    console.warn(`[geo] 境界データ取得失敗: ${key}`, e);
+    return null;
   }
-};
-
-// 中心座標+半径 → 八角形ポリゴン座標を生成するユーティリティ
-window._generateOctagonCoords = function(lat, lng, radiusM) {
-  const coords = [];
-  const R = 6371000; // 地球の半径(m)
-  for (let i = 0; i < 8; i++) {
-    const angle = (i * 45) * Math.PI / 180;
-    const dLat = (radiusM * Math.cos(angle)) / R * (180 / Math.PI);
-    const dLng = (radiusM * Math.sin(angle)) / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
-    coords.push([lat + dLat, lng + dLng]);
-  }
-  return coords;
-};
-
-// 全大字をフラットリスト化
-window._getAllOazaAreas = function() {
-  const all = [];
-  Object.entries(window.OAZA_AREAS).forEach(([city, data]) => {
-    data.areas.forEach(a => {
-      all.push({ ...a, city, cityColor: data.color, fullName: `${city} ${a.name}` });
-    });
-  });
-  return all;
 };
 
 window.toggleDrawerGeoChip = function(campId, locName) {
@@ -1546,20 +1508,18 @@ window.toggleDrawerGeoChip = function(campId, locName) {
   toast(`地域『${locName}』を${isSel ? '選択 ✅' : '解除'}しました`, 'info');
 };
 
-// ドロワー内 ビジュアルマップ初期化（大字ポリゴンブロック表示）
+// ドロワー内 ビジュアルマップ初期化（町丁字境界ポリゴン動的ロード・全国対応）
 window.initDrawerMap = function(campId) {
   const mapEl = document.getElementById(`drawerLeafletMap_${campId}`);
   if (!mapEl) return;
 
-  // コンテナのCSSスタイルを強制設定
-  mapEl.style.height = '320px';
+  mapEl.style.height = '350px';
   mapEl.style.width = '100%';
   mapEl.style.position = 'relative';
   mapEl.style.background = '#1e293b';
 
   if (typeof L === 'undefined') {
     mapEl.innerHTML = '<div style="padding:40px; color:#fbbf24; font-size:12px; text-align:center;">⚠️ 地図ライブラリを読み込み中...</div>';
-    // ★ Leaflet が未ロードなら動的にスクリプトを注入して自動リトライ ★
     if (!window._leafletLoadAttempted) {
       window._leafletLoadAttempted = true;
       const cssLink = document.createElement('link');
@@ -1574,7 +1534,7 @@ window.initDrawerMap = function(campId) {
         setTimeout(() => { window.initDrawerMap(campId); }, 200);
       };
       script.onerror = function() {
-        mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ 地図の読み込みに失敗しました。ページをリロードしてください。</div>';
+        mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ 地図の読み込みに失敗しました。</div>';
       };
       document.head.appendChild(script);
     } else {
@@ -1586,89 +1546,136 @@ window.initDrawerMap = function(campId) {
     return;
   }
 
-  try {
-    if (window.drawerMapInstances[campId]) {
-      try { window.drawerMapInstances[campId].remove(); } catch(e) {}
-    }
+  mapEl.innerHTML = '<div style="padding:40px; color:#fbbf24; font-size:12px; text-align:center;">🗺️ 町丁字境界データを読み込み中...</div>';
 
-    // 藤枝市・吉田町中心に配置（大字が見渡せる広域表示）
-    const map = L.map(mapEl, {
-      center: [34.832, 138.250],
-      zoom: 12,
-      zoomControl: true
-    });
-    window.drawerMapInstances[campId] = map;
+  // ★ API から境界データを非同期ロードしてマップ描画 ★
+  const geoCodes = window.clinicGeoCodes || [];
+  const loadPromises = geoCodes.map(gc => window._loadGeoBoundary(gc.pref, gc.city).then(data => ({ ...gc, data })));
 
-    // CartoDB Voyager タイル
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 18,
-      subdomains: 'abcd',
-      attribution: '© OSM © CARTO'
-    }).addTo(map);
+  Promise.all(loadPromises).then(results => {
+    try {
+      if (window.drawerMapInstances[campId]) {
+        try { window.drawerMapInstances[campId].remove(); } catch(e) {}
+      }
 
-    // 複数回のサイズ調整
-    [100, 300, 600, 1000].forEach(delay => {
-      setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, delay);
-    });
+      mapEl.innerHTML = '';
 
-    // 整体院 導 マーカー
-    L.marker([34.8494, 138.2533]).addTo(map)
-      .bindPopup('<b>🏥 整体院 導</b><br>藤枝駅徒歩3分')
-      .openPopup();
+      // 最初の市区町村の中心座標でマップを初期化
+      let defaultCenter = [34.849, 138.253];
+      const firstValid = results.find(r => r.data && r.data.features && r.data.features.length > 0);
+      if (firstValid) {
+        const firstFeat = firstValid.data.features[0].properties;
+        defaultCenter = [firstFeat.lat || 34.849, firstFeat.lng || 138.253];
+      }
 
-    // 選択状態の初期化
-    if (!window.drawerSelectedLocations[campId]) {
-      window.drawerSelectedLocations[campId] = new Set(['田沼', '青木', '駅前', '高洲']);
-    }
-    const selectedSet = window.drawerSelectedLocations[campId];
+      const map = L.map(mapEl, {
+        center: defaultCenter,
+        zoom: 13,
+        zoomControl: true
+      });
+      window.drawerMapInstances[campId] = map;
 
-    window.drawerGeoLayers[campId] = {};
-
-    // ★ 全大字をポリゴンブロックとして描画 ★
-    const allAreas = window._getAllOazaAreas();
-    allAreas.forEach(area => {
-      const coords = window._generateOctagonCoords(area.lat, area.lng, area.radius);
-      const isSelected = selectedSet.has(area.name);
-
-      const polygon = L.polygon(coords, {
-        color: isSelected ? '#10b981' : area.cityColor,
-        fillColor: isSelected ? '#10b981' : area.cityColor,
-        fillOpacity: isSelected ? 0.45 : 0.1,
-        weight: isSelected ? 3 : 1.5
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 18,
+        subdomains: 'abcd',
+        attribution: '© OSM © CARTO'
       }).addTo(map);
 
-      // 市の色を保持（トグル時の戻り先）
-      polygon._oazaCityColor = area.cityColor;
-
-      polygon.bindTooltip(`📍 ${area.name} ${isSelected ? '✅ 選択中' : '(タップで選択)'}`, {
-        permanent: false,
-        direction: 'top',
-        className: 'oaza-tooltip'
+      [100, 300, 600, 1000].forEach(delay => {
+        setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, delay);
       });
 
-      // ★ ポリゴンをタップした時のトグル処理 ★
-      polygon.on('click', function() {
-        toggleDrawerGeoChip(campId, area.name);
+      // 選択状態の初期化
+      if (!window.drawerSelectedLocations[campId]) {
+        window.drawerSelectedLocations[campId] = new Set();
+      }
+      const selectedSet = window.drawerSelectedLocations[campId];
+      window.drawerGeoLayers[campId] = {};
+
+      // 全市区町村の全ポリゴンを一括ロード・描画
+      const allBounds = [];
+      const chipsContainer = document.getElementById(`geoChipsContainer_${campId}`);
+      let chipsHtml = '';
+
+      results.forEach(({ name: cityName, color: cityColor, data }) => {
+        if (!data || !data.features) return;
+
+        let cityChips = '';
+        data.features.forEach(feature => {
+          const areaName = feature.properties.name;
+          const lat = feature.properties.lat;
+          const lng = feature.properties.lng;
+          const geom = feature.geometry;
+          if (!geom || !areaName) return;
+
+          const isSelected = selectedSet.has(areaName);
+
+          // Leaflet GeoJSON → coordinates は [lng, lat] だが L.geoJSON が自動変換
+          const polygon = L.geoJSON(geom, {
+            style: {
+              color: isSelected ? '#10b981' : cityColor,
+              fillColor: isSelected ? '#10b981' : cityColor,
+              fillOpacity: isSelected ? 0.45 : 0.12,
+              weight: isSelected ? 3 : 1.5
+            }
+          }).addTo(map);
+
+          polygon._oazaCityColor = cityColor;
+          polygon._areaLat = lat;
+          polygon._areaLng = lng;
+
+          polygon.bindTooltip(`📍 ${areaName} ${isSelected ? '✅' : ''}`, {
+            permanent: false, direction: 'top'
+          });
+
+          polygon.on('click', function() {
+            toggleDrawerGeoChip(campId, areaName);
+          });
+
+          window.drawerGeoLayers[campId][areaName] = polygon;
+
+          // ポリゴンの範囲をマップ自動ズーム用に収集
+          try { allBounds.push(...polygon.getBounds().toBBoxString().split(',').map(Number)); } catch(e) {}
+
+          // チップボタン HTML 生成
+          cityChips += `<button onclick="toggleDrawerGeoChip('${campId}', '${areaName}')" id="geochip-${campId}-${areaName}" class="btn btn-secondary" style="font-size:9px; padding:2px 5px; border-color:${isSelected ? '#10b981' : 'rgba(255,255,255,0.12)'}; color:${isSelected ? '#34d399' : 'var(--text-3)'}; background:${isSelected ? 'rgba(16,185,129,0.2)' : 'transparent'};">📍 ${areaName}${isSelected ? ' ✅' : ''}</button>`;
+        });
+
+        if (cityChips) {
+          chipsHtml += `<div style="margin-bottom:4px;"><span style="font-size:9px; font-weight:700; color:${cityColor};">■ ${cityName}:</span><div style="display:inline-flex; flex-wrap:wrap; gap:3px; margin-top:1px;">${cityChips}</div></div>`;
+        }
       });
 
-      window.drawerGeoLayers[campId][area.name] = polygon;
-    });
+      // チップコンテナを更新
+      if (chipsContainer) {
+        chipsContainer.innerHTML = chipsHtml;
+      }
 
-    // 市ごとの凡例ラベルを追加
-    const legend = L.control({ position: 'bottomright' });
-    legend.onAdd = function() {
-      const div = L.DomUtil.create('div', '');
-      div.style.cssText = 'background:rgba(15,23,42,0.85); padding:6px 10px; border-radius:6px; font-size:10px; color:#e2e8f0; line-height:1.6;';
-      div.innerHTML = Object.entries(window.OAZA_AREAS).map(([city, data]) =>
-        `<span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${data.color}; margin-right:4px; vertical-align:middle;"></span>${city}`
-      ).join('<br>') + '<br><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#10b981; margin-right:4px; vertical-align:middle;"></span>選択中';
-      return div;
-    };
-    legend.addTo(map);
+      // 全ポリゴンが収まるようにマップをフィット
+      try {
+        const group = new L.featureGroup(Object.values(window.drawerGeoLayers[campId]).flatMap(l => l.getLayers ? l.getLayers() : [l]));
+        if (group.getBounds().isValid()) {
+          map.fitBounds(group.getBounds(), { padding: [20, 20] });
+        }
+      } catch(e) {}
 
-  } catch(e) {
-    console.warn("initDrawerMap error:", e);
-  }
+      // 凡例
+      const legend = L.control({ position: 'bottomright' });
+      legend.onAdd = function() {
+        const div = L.DomUtil.create('div', '');
+        div.style.cssText = 'background:rgba(15,23,42,0.85); padding:6px 10px; border-radius:6px; font-size:10px; color:#e2e8f0; line-height:1.6;';
+        div.innerHTML = geoCodes.map(gc =>
+          `<span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${gc.color}; margin-right:4px; vertical-align:middle;"></span>${gc.name}`
+        ).join('<br>') + '<br><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#10b981; margin-right:4px; vertical-align:middle;"></span>選択中';
+        return div;
+      };
+      legend.addTo(map);
+
+    } catch(e) {
+      console.warn("initDrawerMap error:", e);
+      mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ マップ描画エラー</div>';
+    }
+  });
 };
 
 // ドロワー内 地域Google広告適用（半径ターゲティング）
@@ -1679,18 +1686,17 @@ window.applyDrawerGeoLocation = async function(campId) {
     return;
   }
 
-  // 選択された大字の座標情報を構築
-  const allAreas = window._getAllOazaAreas();
+  // 選択された町丁字の座標情報を構築
   const selectedAreas = [];
   set.forEach(name => {
-    const area = allAreas.find(a => a.name === name);
-    if (area) {
+    const layer = window.drawerGeoLayers[campId] && window.drawerGeoLayers[campId][name];
+    if (layer) {
       selectedAreas.push({
-        name: area.name,
-        city: area.city,
-        lat: area.lat,
-        lng: area.lng,
-        radius_m: area.radius
+        name: name,
+        city: '',
+        lat: layer._areaLat || 0,
+        lng: layer._areaLng || 0,
+        radius_m: 500  // 町丁字境界ポリゴンの代表半径
       });
     }
   });
@@ -1712,8 +1718,6 @@ window.applyDrawerGeoLocation = async function(campId) {
     toast('地域設定エラー: ' + e.message, 'error');
   }
 };
-
-
 
 // ドロワー内 年齢・性別Google広告適用
 window.applyDrawerDemographics = async function(campId) {
@@ -2309,46 +2313,33 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
-  // ―― 🗺️ キャンペーン専用: 大字ブロック配信地域マップ設定 & ターゲット設定カード ――――――――――――
-  // 大字チップボタンを市ごとにセクション分けして動的生成
-  const _oazaChipsHtml = Object.entries(window.OAZA_AREAS || {}).map(([city, data]) => {
-    const defaultSelected = new Set(['田沼', '青木', '駅前', '高洲']);
-    const chips = data.areas.map(a => {
-      const isSel = defaultSelected.has(a.name);
-      return `<button onclick="toggleDrawerGeoChip('${d.id}', '${a.name}')" id="geochip-${d.id}-${a.name}" class="btn btn-secondary" style="font-size:10px; padding:3px 7px; border-color:${isSel ? '#10b981' : 'rgba(255,255,255,0.15)'}; color:${isSel ? '#34d399' : 'var(--text-3)'}; background:${isSel ? 'rgba(16,185,129,0.2)' : 'transparent'};">📍 ${a.name}${isSel ? ' ✅' : ''}</button>`;
-    }).join('');
-    return `<div style="margin-bottom:6px;">
-      <span style="font-size:10px; font-weight:700; color:${data.color}; margin-right:4px;">■ ${city}:</span>
-      <div style="display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:2px;">${chips}</div>
-    </div>`;
-  }).join('');
-
+  // ―― 🗺️ キャンペーン専用: 町丁字境界配信地域マップ（全国対応） & ターゲット設定カード ――
   const geoSettingsHtml = `
     <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <div style="font-size:13px; font-weight:800; color:#34d399; display:flex; align-items:center; gap:6px;">
-          <span>🗺️ 大字ブロック配信地域 (地図タップで直接選択)</span>
+          <span>🗺️ 町丁字境界 配信地域 (地図タップで直接選択)</span>
         </div>
-        <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">4地区選択中</span>
+        <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">0地区選択中</span>
       </div>
       <p style="font-size:11px; color:var(--text-3); margin:0 0 8px 0;">
-        地図上の大字ブロックをタップすると緑色に点灯します。選択した地区の中心座標から半径ターゲティングでGoogle広告に反映されます。
+        地図上の町丁字ブロックをタップすると緑色に点灯。選択した地区の中心座標から半径ターゲティングでGoogle広告に反映されます。
       </p>
 
-      <!-- 🗺️ 大字ポリゴンブロックマップ -->
-      <div id="drawerLeafletMap_${d.id}" style="height:320px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:10px; z-index:1;"></div>
+      <!-- 🗺️ 町丁字境界ポリゴンマップ（APIから動的ロード） -->
+      <div id="drawerLeafletMap_${d.id}" style="height:350px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:10px; z-index:1;"></div>
 
       <div style="font-size:11px; color:#a78bfa; font-weight:700; margin-bottom:4px;">地区クイックトグル（市区町村別）:</div>
-      <div style="margin-bottom:10px;">
-        ${_oazaChipsHtml}
+      <div id="geoChipsContainer_${d.id}" style="margin-bottom:10px; max-height:120px; overflow-y:auto;">
+        <div style="font-size:10px; color:var(--text-3);">📡 境界データを読み込み中...</div>
       </div>
 
       <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:8px;" id="drawerGeoSummary_${d.id}">
-        ✅ 選択中: 田沼 / 青木 / 駅前 / 高洲
+        未選択（地図をタップして配信地域を指定）
       </div>
 
       <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:7px;">
-        ⚡ 選択した大字エリアをGoogle広告へ即時反映（半径ターゲティング）
+        ⚡ 選択した町丁字エリアをGoogle広告へ即時反映（半径ターゲティング）
       </button>
     </div>
 
@@ -2384,7 +2375,6 @@ function renderCampDrawer(d) {
       </button>
     </div>
   `;
-
   // Google広告 同期・審査ステータスパネル (シンプルイズベスト版)
   let policyHtml = '';
   if (d.policy_statuses) {

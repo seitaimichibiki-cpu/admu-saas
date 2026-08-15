@@ -4174,6 +4174,34 @@ async def stripe_webhook(request: Request):
 # ---- フロントエンド配信 ----
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
+# ---- 町丁字境界データ API（全国対応） ----
+@app.get("/api/geo-boundaries/{pref_code}/{city_code}")
+def get_geo_boundaries(pref_code: str, city_code: str):
+    """市区町村コードに対応する町丁字境界 GeoJSON を返却"""
+    from fastapi.responses import JSONResponse
+    
+    # パス安全チェック
+    if not pref_code.isdigit() or not city_code.replace('.json', '').isdigit():
+        return JSONResponse({"error": "invalid code"}, status_code=400)
+    
+    city_code_clean = city_code.replace('.json', '')
+    geo_path = os.path.join(FRONTEND_DIR, "geo", pref_code, f"{city_code_clean}.json")
+    
+    if not os.path.exists(geo_path):
+        return JSONResponse({"error": f"boundary data not found for {pref_code}/{city_code_clean}"}, status_code=404)
+    
+    with open(geo_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    return JSONResponse(
+        content=data,
+        headers={
+            "Cache-Control": "public, max-age=86400",  # 24h キャッシュ
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
 @app.get("/legal", include_in_schema=False)
 @app.get("/legal.html", include_in_schema=False)
 def serve_legal():
@@ -9236,7 +9264,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-oaza-block-map', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-geo-boundary-api', html)
 
 
         return HTMLResponse(
