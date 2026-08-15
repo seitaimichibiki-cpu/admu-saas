@@ -4191,14 +4191,17 @@ def get_geo_boundaries(pref_code: str, city_code: str):
     if not os.path.exists(geo_path):
         return JSONResponse({"error": f"boundary data not found for {pref_code}/{city_code_clean}"}, status_code=404)
     
-    with open(geo_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    # ファイルをバイト列でそのまま返却（再シリアライズ不要で高速・安全）
+    from fastapi.responses import Response
+    with open(geo_path, 'rb') as f:
+        raw = f.read()
     
-    return JSONResponse(
-        content=data,
+    return Response(
+        content=raw,
+        media_type='application/json',
         headers={
-            "Cache-Control": "public, max-age=86400",  # 24h キャッシュ
-            "Access-Control-Allow-Origin": "*"
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*'
         }
     )
 
