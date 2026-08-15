@@ -4366,7 +4366,16 @@ def get_geo_boundaries(pref_code: str, city_code: str):
         with _geo_gen_locks[lock_key]:
             # ロック取得後に再チェック（別スレッドが先に生成済みの場合）
             if not os.path.exists(geo_path):
-                success = _generate_pref_geojson(pref_code)
+                try:
+                    success = _generate_pref_geojson(pref_code)
+                except Exception as e:
+                    import traceback
+                    tb = traceback.format_exc()
+                    print(f"[geo-gen] Exception: {tb}")
+                    return JSONResponse(
+                        {"error": f"generation error: {str(e)}", "traceback": tb},
+                        status_code=500
+                    )
                 if not success or not os.path.exists(geo_path):
                     return JSONResponse(
                         {"error": f"boundary data generation failed for {pref_code}/{city_code_clean}"},
