@@ -1270,7 +1270,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                    asset.policy_summary.policy_topic_entries,
                    asset.sitelink_asset.link_text,
                    asset.sitelink_asset.final_urls,
-                   asset.business_name_asset.business_name
+                   asset.text_asset.text
             FROM campaign_asset
             WHERE campaign_asset.campaign = 'customers/{CID}/campaigns/{g_id}'
               AND campaign_asset.status != REMOVED
@@ -1286,7 +1286,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             if a_type == "SITELINK":
                 val = asset.get("sitelinkAsset", {}).get("linkText", "")
             elif a_type == "BUSINESS_NAME":
-                val = asset.get("businessNameAsset", {}).get("businessName", "")
+                val = asset.get("textAsset", {}).get("text", "") or asset.get("businessNameAsset", {}).get("businessName", "")
             else:
                 val = asset.get("resourceName", "").split("/")[-1]
                 

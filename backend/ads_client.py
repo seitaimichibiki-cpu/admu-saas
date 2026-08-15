@@ -2081,7 +2081,7 @@ class AdsClient:
             query = (
                 "SELECT asset.resource_name, asset.type, "
                 "asset.policy_summary.approval_status, "
-                "asset.business_name_asset.business_name "
+                "asset.text_asset.text "
                 "FROM asset "
                 "WHERE asset.type IN ('BUSINESS_NAME', 'BUSINESS_LOGO')"
             )
@@ -2100,7 +2100,7 @@ class AdsClient:
                                 "resource_name": asset.get("resourceName"),
                                 "type": asset.get("type"),
                                 "approval_status": status,
-                                "business_name": asset.get("businessNameAsset", {}).get("businessName")
+                                "business_name": asset.get("textAsset", {}).get("text", "")
                             })
             else:
                 print(f"[AdsClient] アセットステータス取得エラー: {resp.text[:500]}")
