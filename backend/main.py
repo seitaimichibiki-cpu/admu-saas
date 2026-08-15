@@ -4186,6 +4186,8 @@ def _generate_pref_geojson(pref_code_str: str):
     import shapefile
     import zipfile
     import urllib.request
+    import json
+    import glob
     
     pref_int = int(pref_code_str)
     geo_base = os.path.join(FRONTEND_DIR, "geo", pref_code_str)
@@ -4228,7 +4230,6 @@ def _generate_pref_geojson(pref_code_str: str):
             os.remove(zip_path)
         return False
     
-    import glob
     shp_files = glob.glob(os.path.join(extract_dir, "**", "*.shp"), recursive=True)
     if not shp_files:
         print(f"[geo-gen] No .shp files found in {extract_dir}")
