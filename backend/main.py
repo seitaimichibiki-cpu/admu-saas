@@ -4392,7 +4392,7 @@ def get_geo_boundaries(pref_code: str, city_code: str):
         tb = tb_mod.format_exc()
         print(f"[geo-boundaries] ERROR: {tb}")
         return JSONResponse(
-            {"error": str(e), "detail": tb},
+            {"error": f"境界データの生成に失敗しました: {str(e)}"},
             status_code=500
         )
 
