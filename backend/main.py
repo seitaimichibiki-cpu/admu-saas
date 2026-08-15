@@ -4175,25 +4175,205 @@ async def stripe_webhook(request: Request):
 # ---- フロントエンド配信 ----
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
-# ---- 町丁字境界データ API（全国対応） ----
+# ---- 町丁字境界データ API（全国対応・オンデマンド生成） ----
+
+# e-Stat Shapefile → GeoJSON 変換（pyshp ベース、geopandas 不要）
+import threading
+_geo_gen_locks = {}  # 都道府県ごとのロック
+
+def _generate_pref_geojson(pref_code_str: str):
+    """都道府県の Shapefile を e-Stat からダウンロードし、市区町村別 GeoJSON に変換・キャッシュ"""
+    import shapefile
+    import zipfile
+    import urllib.request
+    
+    pref_int = int(pref_code_str)
+    geo_base = os.path.join(FRONTEND_DIR, "geo", pref_code_str)
+    tmp_dir = os.path.join(os.path.dirname(FRONTEND_DIR), "temp_shapefiles")
+    os.makedirs(tmp_dir, exist_ok=True)
+    os.makedirs(geo_base, exist_ok=True)
+    
+    zip_path = os.path.join(tmp_dir, f"r2ka{pref_int:02d}.zip")
+    
+    # 1) ダウンロード（キャッシュ済みならスキップ）
+    if not os.path.exists(zip_path):
+        url = f"https://www.e-stat.go.jp/gis/statmap-search/data?dlserveyId=A002005212020&code={pref_int:02d}&coordSys=1&format=shape&downloadType=5"
+        print(f"[geo-gen] Downloading shapefile: pref={pref_code_str} url={url}")
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+                if len(data) < 1000:
+                    print(f"[geo-gen] WARNING: Downloaded data too small ({len(data)} bytes), skipping")
+                    return False
+                with open(zip_path, 'wb') as f:
+                    f.write(data)
+                print(f"[geo-gen] Downloaded: {len(data)/1024:.0f} KB")
+        except Exception as e:
+            print(f"[geo-gen] Download error: {e}")
+            return False
+    
+    # 2) ZIP 解凍 → .shp を探す
+    extract_dir = os.path.join(tmp_dir, f"pref_{pref_int:02d}")
+    os.makedirs(extract_dir, exist_ok=True)
+    
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            z.extractall(extract_dir)
+    except Exception as e:
+        print(f"[geo-gen] Unzip error: {e}")
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+        return False
+    
+    import glob
+    shp_files = glob.glob(os.path.join(extract_dir, "**", "*.shp"), recursive=True)
+    if not shp_files:
+        print(f"[geo-gen] No .shp files found in {extract_dir}")
+        return False
+    
+    shp_path = shp_files[0]
+    print(f"[geo-gen] Reading shapefile: {shp_path}")
+    
+    # 3) pyshp で読み取り → 市区町村別 GeoJSON 生成
+    try:
+        sf = shapefile.Reader(shp_path, encoding='cp932')
+    except Exception:
+        try:
+            sf = shapefile.Reader(shp_path, encoding='utf-8')
+        except Exception as e:
+            print(f"[geo-gen] Shapefile read error: {e}")
+            return False
+    
+    fields = [f[0] for f in sf.fields[1:]]  # fields[0] は DeletionFlag
+    key_idx = None
+    name_idx = None
+    for i, fname in enumerate(fields):
+        fu = fname.upper()
+        if fu == 'KEY_CODE':
+            key_idx = i
+        if fu in ('S_NAME', 'MOJI') and name_idx is None:
+            name_idx = i
+    
+    if key_idx is None:
+        print(f"[geo-gen] KEY_CODE column not found. Fields: {fields}")
+        return False
+    
+    COORD_PRECISION = 6
+    
+    def _round_coords(coords):
+        if isinstance(coords, (list, tuple)):
+            if len(coords) > 0 and isinstance(coords[0], (int, float)):
+                return [round(c, COORD_PRECISION) for c in coords]
+            return [_round_coords(c) for c in coords]
+        return coords
+    
+    def _shape_to_geojson_geom(shape):
+        """pyshp Shape → GeoJSON geometry dict"""
+        stype = shape.shapeTypeName
+        parts = list(shape.parts) + [len(shape.points)]
+        rings = []
+        for i in range(len(parts) - 1):
+            ring = [[round(p[0], COORD_PRECISION), round(p[1], COORD_PRECISION)] for p in shape.points[parts[i]:parts[i+1]]]
+            rings.append(ring)
+        
+        if 'POLYGON' in stype.upper():
+            if len(rings) == 1:
+                return {"type": "Polygon", "coordinates": rings}
+            else:
+                return {"type": "Polygon", "coordinates": rings}
+        elif 'POINT' in stype.upper():
+            if shape.points:
+                p = shape.points[0]
+                return {"type": "Point", "coordinates": [round(p[0], COORD_PRECISION), round(p[1], COORD_PRECISION)]}
+        return None
+    
+    # 市区町村コードごとにグループ化
+    city_features = {}
+    for sr in sf.shapeRecords():
+        rec = sr.record
+        shp = sr.shape
+        
+        key_code = str(rec[key_idx])
+        city_code = key_code[:5]
+        area_name = str(rec[name_idx]) if name_idx is not None else ""
+        
+        if not area_name or area_name.strip() in ('', 'nan', 'None'):
+            continue
+        
+        geom = _shape_to_geojson_geom(shp)
+        if geom is None:
+            continue
+        
+        # 重心を計算（ポイント平均）
+        pts = shp.points
+        if pts:
+            avg_x = sum(p[0] for p in pts) / len(pts)
+            avg_y = sum(p[1] for p in pts) / len(pts)
+        else:
+            avg_x, avg_y = 0, 0
+        
+        if city_code not in city_features:
+            city_features[city_code] = []
+        
+        city_features[city_code].append({
+            "type": "Feature",
+            "properties": {
+                "name": area_name.strip(),
+                "lat": round(avg_y, 6),
+                "lng": round(avg_x, 6)
+            },
+            "geometry": geom
+        })
+    
+    # 4) 市区町村別 GeoJSON ファイルを書き出し
+    count = 0
+    for city_code, features in city_features.items():
+        if not features:
+            continue
+        geojson = {"type": "FeatureCollection", "features": features}
+        out_path = os.path.join(geo_base, f"{city_code}.json")
+        with open(out_path, 'w', encoding='utf-8') as f:
+            json.dump(geojson, f, ensure_ascii=False, separators=(',', ':'))
+        count += 1
+    
+    print(f"[geo-gen] Generated {count} city GeoJSON files for pref={pref_code_str}")
+    return True
+
+
 @app.get("/api/geo-boundaries/{pref_code}/{city_code}")
 def get_geo_boundaries(pref_code: str, city_code: str):
-    """市区町村コードに対応する町丁字境界 GeoJSON を返却"""
-    from fastapi.responses import JSONResponse
+    """市区町村コードに対応する町丁字境界 GeoJSON を返却（オンデマンド生成対応）"""
+    from fastapi.responses import JSONResponse, Response
     
     # パス安全チェック
     if not pref_code.isdigit() or not city_code.replace('.json', '').isdigit():
         return JSONResponse({"error": "invalid code"}, status_code=400)
     
+    pref_code = pref_code.zfill(2)  # '1' → '01'
     city_code_clean = city_code.replace('.json', '')
     geo_path = os.path.join(FRONTEND_DIR, "geo", pref_code, f"{city_code_clean}.json")
     
-    
+    # ファイルが無ければオンデマンド生成
     if not os.path.exists(geo_path):
-        return JSONResponse({"error": f"boundary data not found for {pref_code}/{city_code_clean}"}, status_code=404)
+        # 都道府県ごとにロックを取得（同時リクエストで重複DL防止）
+        lock_key = pref_code
+        if lock_key not in _geo_gen_locks:
+            _geo_gen_locks[lock_key] = threading.Lock()
+        
+        with _geo_gen_locks[lock_key]:
+            # ロック取得後に再チェック（別スレッドが先に生成済みの場合）
+            if not os.path.exists(geo_path):
+                success = _generate_pref_geojson(pref_code)
+                if not success or not os.path.exists(geo_path):
+                    return JSONResponse(
+                        {"error": f"boundary data generation failed for {pref_code}/{city_code_clean}"},
+                        status_code=404
+                    )
     
     # ファイルをバイト列でそのまま返却（再シリアライズ不要で高速・安全）
-    from fastapi.responses import Response
     with open(geo_path, 'rb') as f:
         raw = f.read()
     
@@ -4205,6 +4385,7 @@ def get_geo_boundaries(pref_code: str, city_code: str):
             'Access-Control-Allow-Origin': '*'
         }
     )
+
 
 
 @app.get("/legal", include_in_schema=False)
@@ -9269,7 +9450,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-add-shizuoka-all-geo', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-ondemand-geo-help', html)
 
 
         return HTMLResponse(

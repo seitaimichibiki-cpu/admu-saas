@@ -98,6 +98,7 @@
     <div class="nav-section">
       <div class="nav-title">広告管理</div>
       <a class="nav-item" href="#campaign">キャンペーン管理</a>
+      <a class="nav-item" href="#market-area">商圏設定（配信地域）</a>
       <a class="nav-item" href="#budget">予算・入札設定</a>
       <a class="nav-item" href="#neg-kw">除外キーワード</a>
     </div>
@@ -111,6 +112,7 @@
       <div class="nav-title">追加情報</div>
       <a class="nav-item" href="#google-link">Google広告連携手順</a>
       <a class="nav-item" href="#ga4-link">GA4連携と最適化の仕組み</a>
+      <a class="nav-item" href="#line-harness">LINE Harness連携</a>
       <a class="nav-item" href="#limits">機能の注意事項</a>
     </div>
     <div class="nav-section">
@@ -229,6 +231,47 @@
         <tr><td><span class="badge badge-green">ENABLED</span></td><td>配信中。AIが監視・最適化対象。</td></tr>
         <tr><td><span class="badge badge-orange">PAUSED</span></td><td>一時停止中。AIは監視するが入札調整は行わない。</td></tr>
         <tr><td><span class="badge" style="background:rgba(100,116,139,.2);color:var(--t3)">REMOVED</span></td><td>削除済み。AIの対象外。</td></tr>
+      </table>
+    </section>
+
+    <section id="market-area">
+      <h2>🗺️ 商圏設定（配信対象市区町村のブロック登録）</h2>
+      <p>クリニックの商圏（広告配信のターゲットとする市区町村）を設定することで、キャンペーンの配信地域マップ上に<strong style="color:var(--t1)">町丁字レベルのブロック</strong>が表示され、タップして細かくターゲティングを選択できます。</p>
+
+      <h3>📋 設定方法</h3>
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">設定ページの「🗺️ 商圏設定」カードを開く</div>
+        <div class="step-desc">サイドメニュー「⚙️ 設定」を開くと、上部に青い「🗺️ 商圏設定」カードがあります。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">都道府県 → 市区町村を選択して「＋ 商圏に追加」</div>
+        <div class="step-desc">全国47都道府県から都道府県を選び、次に市区町村を選択して「＋ 商圏に追加」ボタンを押します。リストにない市区町村は「✏️ コード直接入力」で5桁の市区町村コードを手入力できます。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">「設定を保存」ボタンを押して確定</div>
+        <div class="step-desc">画面下部の「設定を保存」ボタンを押すと、登録した商圏情報がデータベースに保存されます。</div>
+      </div>
+
+      <h3>🗺️ キャンペーンドロワーでのブロック選択</h3>
+      <p>キャンペーン一覧から「詳細・編集」ドロワーを開くと、商圏に登録した市区町村の<strong style="color:var(--t1)">町丁字境界ポリゴン</strong>がLeafletマップ上に色分け表示されます。ポリゴンをタップすることで、配信対象・除外地区を細かく選択できます。</p>
+
+      <div class="warn">
+        ⏱️ <strong>初回読み込み時の待ち時間について</strong><br>
+        新しい市区町村の境界データは、初回表示時にサーバーが政府統計（e-Stat）からデータをダウンロード＆変換するため、<strong>初回のみ5〜15秒ほどの待ち時間</strong>が発生します。2回目以降はサーバーにキャッシュされるため即座に表示されます。
+      </div>
+      <div class="tip">
+        💡 <strong>全国対応:</strong> 北海道から沖縄まで、日本全国すべての市区町村に対応しています。商圏は何件でも追加・削除が可能です。外販時にもクリニックごとに自由に商圏を設定できます。
+      </div>
+
+      <table>
+        <tr><th>項目</th><th>説明</th></tr>
+        <tr><td><strong>都道府県</strong></td><td>47都道府県から選択</td></tr>
+        <tr><td><strong>市区町村</strong></td><td>主要都市はプリセット済み。その他はコード直接入力</td></tr>
+        <tr><td><strong>色分け</strong></td><td>商圏の市区町村ごとに自動的に異なるカラーで表示</td></tr>
+        <tr><td><strong>初回読み込み</strong></td><td>新規都道府県は初回のみ5〜15秒（キャッシュ後は瞬時）</td></tr>
       </table>
     </section>
 
@@ -362,6 +405,32 @@
       <div class="tip">
         💡 <strong>測定結果の確認について</strong><br>
         現在、AdMuのダッシュボード自体にはGA4単体の解析データを表示する画面はありません。アクセス数やページビュー（PV）などの詳細な測定結果は、ご自身の<strong>Google Analytics (GA4) 管理画面</strong>に直接ログインしてご確認ください。
+      </div>
+    </section>
+
+    <section id="line-harness">
+      <h2>💬 LINE Harness連携</h2>
+      <p>LINE公式アカウント経由のコンバージョンを Google 広告に自動連携する「LINE Harness」との接続設定です。</p>
+
+      <h3>📋 設定方法</h3>
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">LINE Harness の URL・APIキー・アカウントID を取得</div>
+        <div class="step-desc">LINE Harness（Cloudflare Workers）のデプロイ時に発行された情報を準備します。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">設定画面の「外部システム・目標設定」に入力</div>
+        <div class="step-desc">AdMu 設定ページ（⚙️ 設定）の「💬 LINE Harness 連携設定」欄に URL、APIキー、アカウントID を入力して保存します。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">「連携CVを自動作成」ボタンで Google 広告 + LINE Harness 同時登録</div>
+        <div class="step-desc">Google 広告にオフラインコンバージョンアクション、LINE Harness にコンバージョンポイントをワンクリックで同時作成します。</div>
+      </div>
+      <div class="tip">
+        💡 <strong>LINE経由のCV計測の仕組み:</strong><br>
+        LINE Harness が「友だち追加」「予約完了」などのイベントを検知 → 自動的に Google 広告にオフラインコンバージョンとしてアップロード。広告のROI分析にLINE経由の成果が含まれるようになります。
       </div>
     </section>
 
