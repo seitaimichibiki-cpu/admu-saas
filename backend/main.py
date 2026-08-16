@@ -9463,13 +9463,14 @@ def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
                 customer_id = credentials.get("customer_id", "").replace("-", "")
                 campaign_service = client.get_service("CampaignCriterionService")
 
-                # 既存の Proximity 条件を削除
+                # 既存の LOCATION / PROXIMITY 条件を両方削除（排他制御）
                 ga_service = client.get_service("GoogleAdsService")
                 query = f"""
                     SELECT campaign_criterion.resource_name, campaign_criterion.type
                     FROM campaign_criterion
                     WHERE campaign.id = {google_campaign_id}
-                      AND campaign_criterion.type = 'PROXIMITY'
+                      AND campaign_criterion.type IN ('LOCATION', 'PROXIMITY')
+                      AND campaign_criterion.status != 'REMOVED'
                 """
                 try:
                     rows = ga_service.search(customer_id=customer_id, query=query)
@@ -9513,7 +9514,7 @@ def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
                     )
         except Exception as e:
             print(f"[set-geo-locations] Google Ads Proximity適用エラー: {e}")
-            # エラーでもUIには成功を返す（設定はローカルで保持）
+            raise HTTPException(500, f"Google広告への地域設定反映に失敗しました: {str(e)}")
 
     # ローカルDBへの選択済みブロック保存（ページ再表示時の復元用）
     try:

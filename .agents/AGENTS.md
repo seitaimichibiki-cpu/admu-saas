@@ -58,3 +58,14 @@
 * **Knowledge**: The LP at `michibiki-seitai.com` uses GTM (`GTM-NVWWGNQR`) with Contact Form 7 integration. The CV event is `inquiry_complete`, fired on `wpcf7mailsent` (CF7 mail sent event). This is the real "inquiry submission" conversion.
 * **Knowledge**: The LP currently has `<meta name="format-detection" content="telephone=no">` which disables phone tap on mobile — this should be removed by the web agency. There is no LINE button or sticky footer CTA on the LP — these should be added by the web agency.
 * **Knowledge**: The booking system URL is `logiction-system.onrender.com/public-booking.html` (Logiction予約システム).
+
+## 10. Campaign Location Targeting UI (Tab-based: Range vs Block)
+* **Architecture**: The campaign drawer's delivery area settings use a **tab-based UI** with two mutually exclusive modes:
+  * **📍 範囲設定 (Range)**: Radius-based targeting (km) with a Leaflet `L.circle` map using CartoDB Voyager tiles (Google Maps-style bright tiles). The circle updates in real-time as the user changes the radius input.
+  * **🗺️ ブロック設定 (Block)**: Town-block polygon targeting using e-Stat shapefiles converted to GeoJSON. Users tap blocks on a dark-themed Leaflet map to select specific areas.
+* **Exclusivity Rule**: Only one mode can be active on Google Ads at a time. Both tabs display a ⚠️ warning banner stating that the last-applied setting overwrites the other. This is by design — Google Ads proximity targeting and location targeting are mutually exclusive.
+* **Map Tile Providers**:
+  * Range tab: `CartoDB Voyager` (bright, Google Maps-like) — `rastertiles/voyager`
+  * Block tab: `CartoDB Dark` — `dark_all`
+* **Key DOM IDs** (per campaign): `locTab_range_{id}`, `locTab_block_{id}`, `locPanel_range_{id}`, `locPanel_block_{id}`, `drawerRadiusMap_{id}`, `drawerRadiusInput_{id}`, `drawerLeafletMap_{id}`
+* **Key Functions**: `switchDrawerLocTab(campId, tab)`, `initDrawerRadiusMap(campId, lat, lon, radiusKm)`, `updateDrawerRadiusCircle(campId)`, `initDrawerMap(campId)`
