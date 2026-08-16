@@ -2722,26 +2722,23 @@ function renderCampDrawer(d) {
         </button>
       </div>
 
-      <!-- ===== タブA: 範囲設定（半径 / 地域名） ===== -->
+      <!-- ===== タブA: 範囲設定（半径指定） ===== -->
       <div id="locPanel_range_${d.id}" style="display:${defaultTab === 'range' ? 'block' : 'none'}; padding:14px;">
         <div style="font-size:11px; color:var(--text-3); margin-bottom:10px;">
-          院を中心とした半径(km) または 市区町村名で広告配信エリアを設定します。設定はGoogle広告に即時反映されます。
+          院の所在地を中心とした半径(km)で広告配信エリアを設定します。設定はGoogle広告に即時反映されます。
         </div>
 
-        <!-- モード選択ラジオ -->
-        <div style="display:flex; gap:16px; margin-bottom:12px; font-size:11px; color:var(--text-1);">
-          <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
-            <input type="radio" name="drawerLocMode_${d.id}" value="proximity" onchange="switchDrawerLocMode('${d.id}', 'proximity')" ${currentLocType === 'proximity' || currentLocType !== 'geo_target' ? 'checked' : ''}>
-            🗺️ <strong>半径指定 (km)</strong>
-          </label>
-          <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
-            <input type="radio" name="drawerLocMode_${d.id}" value="geo_target" onchange="switchDrawerLocMode('${d.id}', 'geo_target')" ${currentLocType === 'geo_target' ? 'checked' : ''}>
-            📌 <strong>地域名指定</strong>
-          </label>
+        <!-- ⚠️ 排他注意事項 -->
+        <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:6px; padding:8px 10px; margin-bottom:12px; display:flex; align-items:flex-start; gap:6px;">
+          <span style="font-size:13px;">⚠️</span>
+          <div style="font-size:10px; color:#fbbf24; line-height:1.5;">
+            <strong>注意:</strong> 「範囲設定」と「ブロック設定」は<strong>どちらか一方のみ</strong>がGoogle広告に適用されます。
+            両方設定した場合、<strong>最後に反映した設定</strong>が有効になります。混在設定は競合の原因になるため、必ずどちらか一方だけを使用してください。
+          </div>
         </div>
 
-        <!-- A-1. 半径指定グループ -->
-        <div id="drawerProximityGroup_${d.id}" style="display:${currentLocType !== 'geo_target' ? 'block' : 'none'};">
+        <!-- 半径指定 -->
+        <div id="drawerProximityGroup_${d.id}">
           <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
             <span style="font-size:11px; color:var(--text-2);">院を中心とした半径:</span>
             <input type="number" id="drawerRadiusInput_${d.id}" value="${currentRadius}" min="1" max="100"
@@ -2756,35 +2753,20 @@ function renderCampDrawer(d) {
             🟢 緑の円 = 広告が配信される範囲　📍 中心 = 院の所在地
           </div>
         </div>
-
-        <!-- A-2. 地域名指定グループ -->
-        <div id="drawerGeoTargetGroup_${d.id}" style="display:${currentLocType === 'geo_target' ? 'block' : 'none'};">
-          <div style="display:flex; gap:6px; margin-bottom:6px;">
-            <select id="drawerGeoPref_${d.id}" style="width:90px; padding:4px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
-              <option value="静岡県" selected>静岡県</option>
-              <option value="愛知県">愛知県</option>
-              <option value="東京都">東京都</option>
-              <option value="神奈川県">神奈川県</option>
-              <option value="埼玉県">埼玉県</option>
-              <option value="千葉県">千葉県</option>
-              <option value="山梨県">山梨県</option>
-              <option value="長野県">長野県</option>
-              <option value="岐阜県">岐阜県</option>
-              <option value="三重県">三重県</option>
-              <option value="大阪府">大阪府</option>
-              <option value="京都府">京都府</option>
-              <option value="兵庫県">兵庫県</option>
-              <option value="北海道">北海道</option>
-              <option value="福岡県">福岡県</option>
-            </select>
-            <input type="text" id="drawerGeoInput_${d.id}" placeholder="例: 藤枝市, 焼津市, 島田市" value="${currentGeoTargets}" style="flex:1; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
-            <button onclick="applyDrawerGeoTargets('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px;">⚡ Google広告に即時反映</button>
-          </div>
-        </div>
       </div>
 
       <!-- ===== タブB: ブロック設定（町丁字ポリゴン） ===== -->
       <div id="locPanel_block_${d.id}" style="display:${defaultTab === 'block' ? 'block' : 'none'}; padding:14px;">
+
+        <!-- ⚠️ 排他注意事項 -->
+        <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:6px; padding:8px 10px; margin-bottom:10px; display:flex; align-items:flex-start; gap:6px;">
+          <span style="font-size:13px;">⚠️</span>
+          <div style="font-size:10px; color:#fbbf24; line-height:1.5;">
+            <strong>注意:</strong> 「範囲設定」と「ブロック設定」は<strong>どちらか一方のみ</strong>がGoogle広告に適用されます。
+            ブロック設定を反映すると、範囲設定は上書きされます。
+          </div>
+        </div>
+
         <div style="font-size:11px; color:var(--text-3); margin-bottom:8px;">
           地図上の町丁字ブロックをタップして配信エリアをピンポイントで指定します。選択した地区の中心座標からGoogle広告へ反映されます。
         </div>
