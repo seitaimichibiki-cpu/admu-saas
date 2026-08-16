@@ -1878,7 +1878,12 @@ window.initDrawerMap = function(campId) {
       };
       legend.addTo(map);
 
-// ドロワー内 配信エリア設定モード切替（半径指定 vs 地域名指定 vs 町丁字ブロック）
+    } catch(e) {
+      console.warn("initDrawerMap error:", e);
+      mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ マップ描画エラー</div>';
+    }
+  });
+};
 window.switchDrawerLocMode = function(campId, mode) {
   const proxGrp = document.getElementById(`drawerProximityGroup_${campId}`);
   const geoGrp = document.getElementById(`drawerGeoTargetGroup_${campId}`);
