@@ -458,10 +458,13 @@ async function api(path, options={}) {
         ...(options.headers || {})
       };
       const { headers, ...restOptions } = options;
+      // GET系はブラウザキャッシュ許可、ミュテーション系はno-store
+      const method = (options.method || 'GET').toUpperCase();
+      const cachePolicy = (method === 'GET') ? 'default' : 'no-store';
       const res = await fetch(API + path, {
         headers: mergedHeaders,
         credentials: 'include',
-        cache: 'no-store',
+        cache: cachePolicy,
         ...restOptions,
       });
       if (!res.ok) {
@@ -910,8 +913,11 @@ async function loadDashboard() {
     updateMonitorStatus(data.monitor_status);
     updateMockBadge(data.mock_mode);
     renderActionGuidance(data.action_guidance);
-    loadVideoRetentionDashboard(data.campaigns);
-    loadCvOptimizationSection(data.campaigns);
+    // 非クリティカルな追加読み込みは非同期で並列実行（ダッシュボード描画をブロックしない）
+    Promise.all([
+      loadVideoRetentionDashboard(data.campaigns).catch(()=>{}),
+      loadCvOptimizationSection(data.campaigns).catch(()=>{}),
+    ]);
     document.getElementById('lastUpdated').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
 
     // アラートバッジ
@@ -926,8 +932,8 @@ async function loadDashboard() {
       }
     }
 
-    // 成果予測カードを読み込み
-    loadForecast();
+    // 成果予測カードを読み込み（非ブロッキング）
+    loadForecast().catch(()=>{});
 
     // AIクオータ更新
     if (data.ai_quota) {
@@ -1884,11 +1890,173 @@ window.initDrawerMap = function(campId) {
     }
   });
 };
+
+// ========== タブ切り替え: 範囲設定 / ブロック設定 ==========
+window._drawerRadiusMaps = window._drawerRadiusMaps || {};
+window._drawerRadiusCircles = window._drawerRadiusCircles || {};
+window._drawerBlockMapInitialized = window._drawerBlockMapInitialized || {};
+
+window.switchDrawerLocTab = function(campId, tab) {
+  const rangePanel = document.getElementById(`locPanel_range_${campId}`);
+  const blockPanel = document.getElementById(`locPanel_block_${campId}`);
+  const rangeTab = document.getElementById(`locTab_range_${campId}`);
+  const blockTab = document.getElementById(`locTab_block_${campId}`);
+
+  if (rangePanel) rangePanel.style.display = tab === 'range' ? 'block' : 'none';
+  if (blockPanel) blockPanel.style.display = tab === 'block' ? 'block' : 'none';
+
+  // タブボタンのスタイル切替
+  if (rangeTab) {
+    rangeTab.style.background = tab === 'range' ? 'rgba(52,211,153,0.12)' : 'transparent';
+    rangeTab.style.color = tab === 'range' ? '#34d399' : '#64748b';
+    rangeTab.style.borderBottom = tab === 'range' ? '2px solid #34d399' : '2px solid transparent';
+  }
+  if (blockTab) {
+    blockTab.style.background = tab === 'block' ? 'rgba(52,211,153,0.12)' : 'transparent';
+    blockTab.style.color = tab === 'block' ? '#34d399' : '#64748b';
+    blockTab.style.borderBottom = tab === 'block' ? '2px solid #34d399' : '2px solid transparent';
+  }
+
+  // タブ切替時のマップ遅延初期化
+  if (tab === 'range') {
+    setTimeout(() => {
+      const mapEl = document.getElementById(`drawerRadiusMap_${campId}`);
+      if (mapEl && !window._drawerRadiusMaps[campId]) {
+        // 院座標をDBまたはデフォルトから取得
+        const lat = parseFloat(mapEl.dataset.lat || '34.868');
+        const lon = parseFloat(mapEl.dataset.lon || '138.257');
+        const rad = parseFloat(document.getElementById(`drawerRadiusInput_${campId}`)?.value || '8');
+        initDrawerRadiusMap(campId, lat, lon, rad);
+      } else if (window._drawerRadiusMaps[campId]) {
+        window._drawerRadiusMaps[campId].invalidateSize();
+      }
+    }, 200);
+  } else if (tab === 'block') {
+    setTimeout(() => {
+      if (!window._drawerBlockMapInitialized[campId]) {
+        window._drawerBlockMapInitialized[campId] = true;
+        initDrawerMap(campId);
+      } else {
+        // 既に初期化済みならリサイズのみ
+        if (window.drawerMapInstances && window.drawerMapInstances[campId]) {
+          window.drawerMapInstances[campId].invalidateSize();
+        }
+      }
+    }, 200);
+  }
+};
+
+// ========== 半径可視化マップ（Leaflet L.circle） ==========
+window.initDrawerRadiusMap = function(campId, lat, lon, radiusKm) {
+  const mapEl = document.getElementById(`drawerRadiusMap_${campId}`);
+  if (!mapEl) return;
+  if (typeof L === 'undefined') {
+    mapEl.innerHTML = '<div style="padding:30px; color:#fbbf24; font-size:11px; text-align:center;">⏳ 地図ライブラリを読込中...</div>';
+    setTimeout(() => { if (typeof L !== 'undefined') initDrawerRadiusMap(campId, lat, lon, radiusKm); }, 1500);
+    return;
+  }
+
+  // 既存マップがあれば破棄
+  if (window._drawerRadiusMaps[campId]) {
+    try { window._drawerRadiusMaps[campId].remove(); } catch(e) {}
+  }
+
+  // 座標をdata属性に保存（タブ切替時の再利用用）
+  mapEl.dataset.lat = lat;
+  mapEl.dataset.lon = lon;
+  mapEl.innerHTML = '';
+
+  const radiusMeters = radiusKm * 1000;
+  const map = L.map(mapEl, {
+    center: [lat, lon],
+    zoom: _calcZoomForRadius(radiusKm),
+    zoomControl: true,
+    attributionControl: false,
+    scrollWheelZoom: true,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 18,
+  }).addTo(map);
+
+  // 院の位置マーカー
+  L.marker([lat, lon], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="background:#ef4444; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px rgba(239,68,68,0.6);"></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    })
+  }).addTo(map).bindTooltip('📍 院の所在地', { permanent: false, direction: 'top' });
+
+  // 半径の円
+  const circle = L.circle([lat, lon], {
+    radius: radiusMeters,
+    color: '#34d399',
+    fillColor: '#34d399',
+    fillOpacity: 0.12,
+    weight: 2,
+    dashArray: '6, 4',
+  }).addTo(map);
+  circle.bindTooltip(`半径 ${radiusKm}km 圏内`, { permanent: true, direction: 'center', className: 'radius-tooltip' });
+
+  window._drawerRadiusMaps[campId] = map;
+  window._drawerRadiusCircles[campId] = circle;
+
+  // マップ表示サイズ調整
+  setTimeout(() => map.invalidateSize(), 100);
+};
+
+// 半径入力変更時にリアルタイムで円を更新
+window.updateDrawerRadiusCircle = function(campId) {
+  const input = document.getElementById(`drawerRadiusInput_${campId}`);
+  if (!input) return;
+  const km = parseFloat(input.value);
+  if (isNaN(km) || km <= 0 || km > 200) return;
+
+  const circle = window._drawerRadiusCircles[campId];
+  const map = window._drawerRadiusMaps[campId];
+  if (circle && map) {
+    circle.setRadius(km * 1000);
+    circle.unbindTooltip();
+    circle.bindTooltip(`半径 ${km}km 圏内`, { permanent: true, direction: 'center', className: 'radius-tooltip' });
+    map.setZoom(_calcZoomForRadius(km));
+  }
+};
+
+// 半径(km)に応じた適切なズームレベルを算出
+function _calcZoomForRadius(km) {
+  if (km <= 2) return 14;
+  if (km <= 5) return 13;
+  if (km <= 10) return 12;
+  if (km <= 20) return 11;
+  if (km <= 50) return 10;
+  if (km <= 100) return 9;
+  return 8;
+}
+
+// ドロワー内 配信エリア設定モード切替（半径指定 vs 地域名指定）
 window.switchDrawerLocMode = function(campId, mode) {
   const proxGrp = document.getElementById(`drawerProximityGroup_${campId}`);
   const geoGrp = document.getElementById(`drawerGeoTargetGroup_${campId}`);
   if (proxGrp) proxGrp.style.display = mode === 'proximity' ? 'block' : 'none';
   if (geoGrp) geoGrp.style.display = mode === 'geo_target' ? 'block' : 'none';
+
+  // 半径指定に切替時、半径マップを初期化
+  if (mode === 'proximity') {
+    setTimeout(() => {
+      const mapEl = document.getElementById(`drawerRadiusMap_${campId}`);
+      if (mapEl && !window._drawerRadiusMaps[campId]) {
+        const lat = parseFloat(mapEl.dataset.lat || '34.868');
+        const lon = parseFloat(mapEl.dataset.lon || '138.257');
+        const rad = parseFloat(document.getElementById(`drawerRadiusInput_${campId}`)?.value || '8');
+        initDrawerRadiusMap(campId, lat, lon, rad);
+      } else if (window._drawerRadiusMaps[campId]) {
+        window._drawerRadiusMaps[campId].invalidateSize();
+      }
+    }, 200);
+  }
 };
 
 // ドロワー内 半径ターゲット即時適用
@@ -2524,48 +2692,73 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
-  // ―― 🗺️ キャンペーン専用: 配信エリア統合設定カード（半径・地域名・町丁字マップ） ――
+  // ―― 🗺️ キャンペーン専用: 配信エリア統合設定カード（タブ: 範囲設定 / ブロック設定） ――
   const currentLocType = d.location?.type || 'proximity';
   const currentRadius = d.location?.radius_km || 8;
   const currentGeoTargets = d.location?.geo_targets ? d.location.geo_targets.join(', ') : (d.location?.region_name || '');
+  const clinicLat = d.location?.lat || 34.868;
+  const clinicLon = d.location?.lon || 138.257;
+  // デフォルトタブ: proximity/geo_target → range, polygon → block
+  const defaultTab = (currentLocType === 'proximity' || currentLocType === 'geo_target') ? 'range' : 'block';
 
   const geoSettingsHtml = `
-    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <div style="font-size:13px; font-weight:800; color:#34d399; display:flex; align-items:center; gap:6px;">
-          <span>📍 キャンペーン配信エリア設定 (Google広告連動)</span>
-        </div>
-        <span style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">
-          ${currentLocType === 'proximity' ? `半径 ${currentRadius}km` : (currentLocType === 'geo_target' ? '地域名指定' : '町丁字マップ')}
-        </span>
+    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; overflow:hidden; margin-bottom:16px;">
+
+      <!-- ===== タブヘッダー ===== -->
+      <div style="display:flex; border-bottom:1px solid rgba(52,211,153,0.2);">
+        <button id="locTab_range_${d.id}" onclick="switchDrawerLocTab('${d.id}', 'range')"
+          style="flex:1; padding:10px 0; font-size:12px; font-weight:800; cursor:pointer; border:none; transition:all 0.2s;
+                 background:${defaultTab === 'range' ? 'rgba(52,211,153,0.12)' : 'transparent'};
+                 color:${defaultTab === 'range' ? '#34d399' : '#64748b'};
+                 border-bottom:${defaultTab === 'range' ? '2px solid #34d399' : '2px solid transparent'};">
+          📍 範囲設定
+        </button>
+        <button id="locTab_block_${d.id}" onclick="switchDrawerLocTab('${d.id}', 'block')"
+          style="flex:1; padding:10px 0; font-size:12px; font-weight:800; cursor:pointer; border:none; transition:all 0.2s;
+                 background:${defaultTab === 'block' ? 'rgba(52,211,153,0.12)' : 'transparent'};
+                 color:${defaultTab === 'block' ? '#34d399' : '#64748b'};
+                 border-bottom:${defaultTab === 'block' ? '2px solid #34d399' : '2px solid transparent'};">
+          🗺️ ブロック設定
+        </button>
       </div>
 
-      <!-- 1. 設定モード切り替えラジオボタン -->
-      <div style="margin-bottom:12px; background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
-        <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:6px;">🎯 設定モードを選択:</label>
-        <div style="display:flex; flex-wrap:wrap; gap:12px; font-size:11px; color:var(--text-1);">
+      <!-- ===== タブA: 範囲設定（半径 / 地域名） ===== -->
+      <div id="locPanel_range_${d.id}" style="display:${defaultTab === 'range' ? 'block' : 'none'}; padding:14px;">
+        <div style="font-size:11px; color:var(--text-3); margin-bottom:10px;">
+          院を中心とした半径(km) または 市区町村名で広告配信エリアを設定します。設定はGoogle広告に即時反映されます。
+        </div>
+
+        <!-- モード選択ラジオ -->
+        <div style="display:flex; gap:16px; margin-bottom:12px; font-size:11px; color:var(--text-1);">
           <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
-            <input type="radio" name="drawerLocMode_${d.id}" value="proximity" onchange="switchDrawerLocMode('${d.id}', 'proximity')" ${currentLocType === 'proximity' ? 'checked' : ''}>
+            <input type="radio" name="drawerLocMode_${d.id}" value="proximity" onchange="switchDrawerLocMode('${d.id}', 'proximity')" ${currentLocType === 'proximity' || currentLocType !== 'geo_target' ? 'checked' : ''}>
             🗺️ <strong>半径指定 (km)</strong>
           </label>
           <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
             <input type="radio" name="drawerLocMode_${d.id}" value="geo_target" onchange="switchDrawerLocMode('${d.id}', 'geo_target')" ${currentLocType === 'geo_target' ? 'checked' : ''}>
-            📌 <strong>地域名指定 (市区町村)</strong>
+            📌 <strong>地域名指定</strong>
           </label>
         </div>
 
-        <!-- A. 半径指定グループ -->
-        <div id="drawerProximityGroup_${d.id}" style="display:${currentLocType === 'proximity' ? 'block' : 'none'}; margin-top:8px;">
-          <div style="display:flex; gap:8px; align-items:center;">
+        <!-- A-1. 半径指定グループ -->
+        <div id="drawerProximityGroup_${d.id}" style="display:${currentLocType !== 'geo_target' ? 'block' : 'none'};">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
             <span style="font-size:11px; color:var(--text-2);">院を中心とした半径:</span>
-            <input type="number" id="drawerRadiusInput_${d.id}" value="${currentRadius}" style="width:70px; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:12px; font-weight:700;">
+            <input type="number" id="drawerRadiusInput_${d.id}" value="${currentRadius}" min="1" max="100"
+              oninput="updateDrawerRadiusCircle('${d.id}')"
+              style="width:70px; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:12px; font-weight:700;">
             <span style="font-size:11px; color:var(--text-2);">km 圏内</span>
-            <button onclick="applyDrawerRadiusTarget('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px; margin-left:auto;">⚡ 半径設定を即時反映</button>
+            <button onclick="applyDrawerRadiusTarget('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px; margin-left:auto;">⚡ Google広告に即時反映</button>
+          </div>
+          <!-- 半径可視化マップ -->
+          <div id="drawerRadiusMap_${d.id}" style="height:280px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.3); z-index:1;"></div>
+          <div style="font-size:10px; color:var(--text-3); margin-top:6px; text-align:center;">
+            🟢 緑の円 = 広告が配信される範囲　📍 中心 = 院の所在地
           </div>
         </div>
 
-        <!-- B. 地域名指定グループ -->
-        <div id="drawerGeoTargetGroup_${d.id}" style="display:${currentLocType === 'geo_target' ? 'block' : 'none'}; margin-top:8px;">
+        <!-- A-2. 地域名指定グループ -->
+        <div id="drawerGeoTargetGroup_${d.id}" style="display:${currentLocType === 'geo_target' ? 'block' : 'none'};">
           <div style="display:flex; gap:6px; margin-bottom:6px;">
             <select id="drawerGeoPref_${d.id}" style="width:90px; padding:4px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
               <option value="静岡県" selected>静岡県</option>
@@ -2585,27 +2778,27 @@ function renderCampDrawer(d) {
               <option value="福岡県">福岡県</option>
             </select>
             <input type="text" id="drawerGeoInput_${d.id}" placeholder="例: 藤枝市, 焼津市, 島田市" value="${currentGeoTargets}" style="flex:1; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
-            <button onclick="applyDrawerGeoTargets('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px;">⚡ 地域名を即時反映</button>
+            <button onclick="applyDrawerGeoTargets('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px;">⚡ Google広告に即時反映</button>
           </div>
         </div>
       </div>
 
-      <!-- C. 町丁字ブロック ピンポイントマップ -->
-      <div id="drawerPolygonGroup_${d.id}" style="margin-top:10px;">
+      <!-- ===== タブB: ブロック設定（町丁字ポリゴン） ===== -->
+      <div id="locPanel_block_${d.id}" style="display:${defaultTab === 'block' ? 'block' : 'none'}; padding:14px;">
+        <div style="font-size:11px; color:var(--text-3); margin-bottom:8px;">
+          地図上の町丁字ブロックをタップして配信エリアをピンポイントで指定します。選択した地区の中心座標からGoogle広告へ反映されます。
+        </div>
+
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <div style="font-size:11px; font-weight:700; color:#34d399;">🗺️ 町丁字ブロック ピンポイントマップ</div>
           <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">0地区選択中</span>
         </div>
-        <p style="font-size:10px; color:var(--text-3); margin:0 0 6px 0;">
-          地図上の町丁字ブロックをタップして緑色に選択。選択した地区の中心座標からGoogle広告へピンポイント半径反映されます。
-        </p>
 
-        <!-- 🗺️ 町丁字境界ポリゴンマップ（APIから動的ロード） -->
         <div id="drawerLeafletMap_${d.id}" style="height:320px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:8px; z-index:1;"></div>
 
         <div style="font-size:10px; color:#a78bfa; font-weight:700; margin-bottom:4px;">地区クイックトグル:</div>
         <div id="geoChipsContainer_${d.id}" style="margin-bottom:8px; max-height:100px; overflow-y:auto;">
-          <div style="font-size:10px; color:var(--text-3);">📡 境界データを読み込み中...</div>
+          <div style="font-size:10px; color:var(--text-3);">📡 タブ選択時に境界データを読み込みます</div>
         </div>
 
         <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:8px;" id="drawerGeoSummary_${d.id}">
@@ -2993,10 +3186,17 @@ function renderCampDrawer(d) {
     body.innerHTML = policyHtml + '<div class="camp-drawer-loading">詳細情報がありません</div>' + aiActionsHtml;
   }
 
-  // ★ ドロワー内ビジュアルマップの描画初期化（アニメーション開口後） ★
+  // ★ ドロワー内マップの描画初期化（タブに応じて遅延描画） ★
   setTimeout(() => {
-    initDrawerMap(d.id);
-  }, 400);
+    // デフォルトタブに応じて適切なマップを初期化
+    const locType = d.location?.type || 'proximity';
+    const tab = (locType === 'proximity' || locType === 'geo_target') ? 'range' : 'block';
+    if (tab === 'range' && locType !== 'geo_target') {
+      initDrawerRadiusMap(d.id, d.location?.lat || 34.868, d.location?.lon || 138.257, d.location?.radius_km || 8);
+    } else if (tab === 'block') {
+      initDrawerMap(d.id);
+    }
+  }, 300);
 }
 
 async function loadYouTubeAdEditForm(googleCampaignId, campaignName, dateRange) {

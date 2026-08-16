@@ -967,6 +967,9 @@ def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "googl
 def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
     """Google Ads REST APIからキャンペーン詳細（キーワード・位置ターゲット・広告文）を取得する。"""
     import requests as rq
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+
     acc = _require_account(clinic_id)
     client = _get_ads_client(acc, platform)
 
@@ -975,6 +978,7 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
         campaign = _resolve_campaign(campaign_id, clinic_id)
         g_id = campaign.get("google_campaign_id") or campaign_id
     except Exception:
+        campaign = None
         g_id = campaign_id
 
     if client.mock_mode:
@@ -1027,6 +1031,12 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             "mock": True,
         }
 
+    # キャッシュ確認
+    cache_key = f"detail_{clinic_id}_{campaign_id}"
+    cached_data = ads_cache.get(cache_key)
+    if cached_data:
+        return cached_data
+
     # アクセストークン取得
     try:
         print(f"[get_campaign_detail] Token 取得開始 campaign_id={campaign_id}")
@@ -1063,17 +1073,95 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             print(f"[gads_query] 例外発生: {e_q}, time={time.time()-start_t:.2f}s")
             return []
 
+    # クエリ準備
+    q_budget = f"""
+        SELECT campaign_budget.amount_micros, campaign.advertising_channel_type
+        FROM campaign
+        WHERE campaign.id = {g_id}
+    """
+    q_keywords = f"""
+        SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status
+        FROM ad_group_criterion
+        WHERE campaign.id = {g_id}
+        AND ad_group_criterion.type = KEYWORD
+        AND ad_group_criterion.status != REMOVED
+    """
+    q_location = f"""
+        SELECT campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
+               campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
+               campaign_criterion.proximity.radius,
+               campaign_criterion.proximity.radius_units,
+               campaign_criterion.location.geo_target_constant
+        FROM campaign_criterion
+        WHERE campaign.id = {g_id}
+        AND campaign_criterion.status != REMOVED
+    """
+    q_ads = f"""
+        SELECT ad_group_ad.ad.responsive_search_ad.headlines,
+               ad_group_ad.ad.responsive_search_ad.descriptions,
+               ad_group_ad.ad.final_urls,
+               ad_group_ad.status,
+               ad_group_ad.ad.responsive_search_ad.ad_strength,
+               ad_group_ad.policy_summary.approval_status,
+               ad_group_ad.policy_summary.policy_topic_entries
+        FROM ad_group_ad
+        WHERE campaign.id = {g_id}
+        AND ad_group_ad.status != REMOVED
+    """
+    q_assets = f"""
+        SELECT campaign_asset.field_type,
+               campaign_asset.asset,
+               asset.type,
+               asset.policy_summary.approval_status,
+               asset.policy_summary.policy_topic_entries,
+               asset.sitelink_asset.link_text,
+               asset.sitelink_asset.final_urls,
+               asset.text_asset.text
+        FROM campaign_asset
+        WHERE campaign_asset.campaign = 'customers/{CID}/campaigns/{g_id}'
+          AND campaign_asset.status != REMOVED
+    """
+
+    q_dg = f"""
+        SELECT ad_group_ad.resource_name,
+               ad_group_ad.ad.id,
+               ad_group_ad.ad_group,
+               ad_group_ad.ad.final_urls,
+               ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
+               ad_group_ad.ad.demand_gen_video_responsive_ad.long_headlines,
+               ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
+               ad_group_ad.ad.demand_gen_video_responsive_ad.videos,
+               ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
+               ad_group_ad.status,
+               ad_group_ad.policy_summary.approval_status,
+               ad_group_ad.policy_summary.policy_topic_entries
+        FROM ad_group_ad
+        WHERE campaign.id = {g_id}
+        AND ad_group_ad.status != REMOVED
+        LIMIT 1
+    """
+
+    print("[get_campaign_detail] 並列クエリ実行開始")
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        f_budget = executor.submit(gads_query, q_budget)
+        f_keywords = executor.submit(gads_query, q_keywords)
+        f_location = executor.submit(gads_query, q_location)
+        f_ads = executor.submit(gads_query, q_ads)
+        f_assets = executor.submit(gads_query, q_assets)
+        f_dg = executor.submit(gads_query, q_dg)
+
+        camp_rows = f_budget.result()
+        kw_rows = f_keywords.result()
+        loc_rows = f_location.result()
+        ad_rows = f_ads.result()
+        asset_rows = f_assets.result()
+        dg_rows = f_dg.result()
+    print("[get_campaign_detail] 並列クエリ実行完了")
+
     # ① キャンペーン予算 + キャンペーンタイプ
     budget_yen = 0
     campaign_type = "SEARCH"
     try:
-        print("[get_campaign_detail] ①予算・タイプ取得開始")
-        camp_rows = gads_query(f"""
-            SELECT campaign_budget.amount_micros, campaign.advertising_channel_type
-            FROM campaign
-            WHERE campaign.id = {g_id}
-        """)
-        print(f"[get_campaign_detail] ①完了. rows={len(camp_rows)}")
         if camp_rows:
             budget_yen = int(camp_rows[0].get("campaignBudget", {}).get("amountMicros", 0)) // 1_000_000
             ch_type = camp_rows[0].get("campaign", {}).get("advertisingChannelType", "SEARCH")
@@ -1089,15 +1177,6 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     # ② キーワード
     keywords = []
     try:
-        print("[get_campaign_detail] ②キーワード取得開始")
-        kw_rows = gads_query(f"""
-            SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type, ad_group_criterion.status
-            FROM ad_group_criterion
-            WHERE campaign.id = {g_id}
-            AND ad_group_criterion.type = KEYWORD
-            AND ad_group_criterion.status != REMOVED
-        """)
-        print(f"[get_campaign_detail] ②完了. rows={len(kw_rows)}")
         for row in kw_rows:
             c = row.get("adGroupCriterion", {})
             kw = c.get("keyword", {})
@@ -1113,18 +1192,6 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     # ③ 位置ターゲティング
     location = None
     try:
-        print("[get_campaign_detail] ③位置ターゲット取得開始")
-        loc_rows = gads_query(f"""
-            SELECT campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
-                   campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
-                   campaign_criterion.proximity.radius,
-                   campaign_criterion.proximity.radius_units,
-                   campaign_criterion.location.geo_target_constant
-            FROM campaign_criterion
-            WHERE campaign.id = {g_id}
-            AND campaign_criterion.status != REMOVED
-        """)
-        print(f"[get_campaign_detail] ③完了. rows={len(loc_rows)}")
         for row in loc_rows:
             cc = row.get("campaignCriterion", {})
             prox = cc.get("proximity", {})
@@ -1174,26 +1241,11 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
 
     # ④ 広告文（RSA + DemandGen）と審査状況
     ads = []
-    demand_gen_ad = None  # YouTube/DemandGen広告の編集用データ
+    demand_gen_ad = None
     ad_strength_global = "UNKNOWN"
     ad_approval_global = "UNKNOWN"
     ad_policy_topics_global = []
     try:
-        print("[get_campaign_detail] ④RSA広告取得開始")
-        # RSA広告の取得
-        ad_rows = gads_query(f"""
-            SELECT ad_group_ad.ad.responsive_search_ad.headlines,
-                   ad_group_ad.ad.responsive_search_ad.descriptions,
-                   ad_group_ad.ad.final_urls,
-                   ad_group_ad.status,
-                   ad_group_ad.ad.responsive_search_ad.ad_strength,
-                   ad_group_ad.policy_summary.approval_status,
-                   ad_group_ad.policy_summary.policy_topic_entries
-            FROM ad_group_ad
-            WHERE campaign.id = {g_id}
-            AND ad_group_ad.status != REMOVED
-        """)
-        print(f"[get_campaign_detail] ④完了. rows={len(ad_rows)}")
         for row in ad_rows:
             aga = row.get("adGroupAd", {})
             ad = aga.get("ad", {})
@@ -1227,29 +1279,9 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     except Exception as e:
         print(f"[get_campaign_detail] ④で例外: {e}")
 
-    # ④-B DemandGen動画広告の取得（YouTube広告編集用）
+    # ④-B DemandGen動画広告の取得
     if campaign_type == "DEMAND_GEN":
         try:
-            print("[get_campaign_detail] ④-B DemandGen広告取得開始")
-            dg_rows = gads_query(f"""
-                SELECT ad_group_ad.resource_name,
-                       ad_group_ad.ad.id,
-                       ad_group_ad.ad_group,
-                       ad_group_ad.ad.final_urls,
-                       ad_group_ad.ad.demand_gen_video_responsive_ad.headlines,
-                       ad_group_ad.ad.demand_gen_video_responsive_ad.long_headlines,
-                       ad_group_ad.ad.demand_gen_video_responsive_ad.descriptions,
-                       ad_group_ad.ad.demand_gen_video_responsive_ad.videos,
-                       ad_group_ad.ad.demand_gen_video_responsive_ad.business_name,
-                       ad_group_ad.status,
-                       ad_group_ad.policy_summary.approval_status,
-                       ad_group_ad.policy_summary.policy_topic_entries
-                FROM ad_group_ad
-                WHERE campaign.id = {g_id}
-                AND ad_group_ad.status != REMOVED
-                LIMIT 1
-            """)
-            print(f"[get_campaign_detail] ④-B完了. rows={len(dg_rows)}")
             if dg_rows:
                 dg_row = dg_rows[0]
                 dg_aga = dg_row.get("adGroupAd", {})
@@ -1263,7 +1295,6 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
                 dg_final_urls = dg_ad.get("finalUrls", [])
                 dg_videos = dg_vid.get("videos", [])
                 
-                # 審査状況も取得
                 dg_p = dg_aga.get("policySummary", {})
                 dg_approval = dg_p.get("approvalStatus", "UNKNOWN")
                 dg_topics = [e.get("topic", "") for e in dg_p.get("policyTopicEntries", [])]
@@ -1291,21 +1322,6 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     # ⑤ キャンペーンアセットのステータス
     assets_status = []
     try:
-        print("[get_campaign_detail] ⑤アセット取得開始")
-        asset_rows = gads_query(f"""
-            SELECT campaign_asset.field_type,
-                   campaign_asset.asset,
-                   asset.type,
-                   asset.policy_summary.approval_status,
-                   asset.policy_summary.policy_topic_entries,
-                   asset.sitelink_asset.link_text,
-                   asset.sitelink_asset.final_urls,
-                   asset.text_asset.text
-            FROM campaign_asset
-            WHERE campaign_asset.campaign = 'customers/{CID}/campaigns/{g_id}'
-              AND campaign_asset.status != REMOVED
-        """)
-        print(f"[get_campaign_detail] ⑤完了. rows={len(asset_rows)}")
         for row in asset_rows:
             ca = row.get("campaignAsset", {})
             asset = row.get("asset", {})
@@ -1355,6 +1371,8 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     }
     if demand_gen_ad:
         result["demand_gen_ad"] = demand_gen_ad
+        
+    ads_cache.set(cache_key, result)
     return result
 
 
@@ -9631,7 +9649,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260816-fix-login-js-syntax', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-speed-boost-tab-ui', html)
 
 
         return HTMLResponse(
