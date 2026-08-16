@@ -912,7 +912,6 @@ async function loadDashboard() {
     renderActionGuidance(data.action_guidance);
     loadVideoRetentionDashboard(data.campaigns);
     loadCvOptimizationSection(data.campaigns);
-    loadInteractiveMapSection();
     document.getElementById('lastUpdated').textContent = '更新: ' + new Date().toLocaleTimeString('ja-JP');
 
     // アラートバッジ
@@ -2012,92 +2011,10 @@ window.runLpMatchDiagnose = async function() {
 // 🗺️ タップで一発指定！配信地域インタラクティブマップ機能
 window.selectedGeoLocations = new Set(["藤枝市全域", "藤枝駅周辺 5km"]);
 
+// 旧ホーム用マップ表示関数（現在は各キャンペーンの設定ドロワー内に完全集約済み）
 async function loadInteractiveMapSection() {
   const container = document.getElementById('interactiveMapContainer');
-  if (!container) return;
-
-  container.style.display = 'block';
-  container.innerHTML = `
-    <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 14px; padding: 18px; backdrop-filter: blur(12px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:20px;">🗺️</span>
-          <h3 style="font-size:16px; font-weight:800; color:var(--text-1); margin:0;">ワンタップ配信地域マップ設定（Google広告連動）</h3>
-        </div>
-        <span style="font-size:11px; color:#34d399; background:rgba(16,185,129,0.15); padding:4px 10px; border-radius:99px; border:1px solid rgba(16,185,129,0.3);">マップをタップして地域追加</span>
-      </div>
-
-      <p style="font-size:12px; color:var(--text-3); margin:0 0 12px 0;">
-        タップした地域（藤枝市全域・一部地域、吉田町全域・一部地域等）のみにピンポイントで広告を配信します。
-      </p>
-
-      <!-- エリアクイック選択ボタン群 -->
-      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-        <button class="geo-chip-btn active" id="geochip-藤枝市全域" onclick="toggleGeoLocation('藤枝市全域')" style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#34d399; padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          📍 藤枝市全域 ✅
-        </button>
-        <button class="geo-chip-btn active" id="geochip-藤枝駅周辺 5km" onclick="toggleGeoLocation('藤枝駅周辺 5km')" style="background:rgba(16,185,129,0.2); border:1px solid #10b981; color:#34d399; padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          🎯 藤枝駅周辺 5km ✅
-        </button>
-        <button class="geo-chip-btn" id="geochip-吉田町全域" onclick="toggleGeoLocation('吉田町全域')" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.2); color:var(--text-2); padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          📍 吉田町全域 ＋
-        </button>
-        <button class="geo-chip-btn" id="geochip-吉田町役場周辺 3km" onclick="toggleGeoLocation('吉田町役場周辺 3km')" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.2); color:var(--text-2); padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          🎯 吉田町役場周辺 3km ＋
-        </button>
-        <button class="geo-chip-btn" id="geochip-焼津市全域" onclick="toggleGeoLocation('焼津市全域')" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.2); color:var(--text-2); padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          📍 焼津市全域 ＋
-        </button>
-        <button class="geo-chip-btn" id="geochip-島田市全域" onclick="toggleGeoLocation('島田市全域')" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.2); color:var(--text-2); padding:5px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer;">
-          📍 島田市全域 ＋
-        </button>
-      </div>
-
-      <!-- マップ描画コンテナ -->
-      <div id="leafletMap" style="height: 220px; width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.1); margin-bottom:12px;"></div>
-
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div style="font-size:11px; color:#34d399; font-weight:700;" id="selectedGeoSummary">
-          選択中地域: 藤枝市全域・藤枝駅周辺 5km
-        </div>
-        <button onclick="applyGeoLocationsToGoogle()" class="btn btn-success" style="font-size:12px; padding:8px 16px;">
-          ⚡ 選択した地域をGoogle広告へ即時反映
-        </button>
-      </div>
-    </div>
-  `;
-
-  // Leaflet Mapの非同期初期化
-  setTimeout(() => {
-    try {
-      if (typeof L !== 'undefined' && document.getElementById('leafletMap')) {
-        if (window.admuMapInstance) window.admuMapInstance.remove();
-        // 藤枝市 (緯度: 34.8637, 経度: 138.2575) を中心に配置
-        const map = L.map('leafletMap').setView([34.8637, 138.2575], 11);
-        window.admuMapInstance = map;
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 18,
-          attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // 藤枝駅ピン
-        const fujiedaMarker = L.marker([34.8494, 138.2533]).addTo(map)
-          .bindPopup('<b>整体院 導 (藤枝駅徒歩3分)</b><br>配信対象中心エリア')
-          .openPopup();
-
-        // 5km半径サークル
-        L.circle([34.8494, 138.2533], {
-          color: '#10b981',
-          fillColor: '#10b981',
-          fillOpacity: 0.2,
-          radius: 5000
-        }).addTo(map);
-      }
-    } catch(e) {
-      console.warn("Leaflet Map init error:", e);
-    }
-  }, 300);
+  if (container) container.style.display = 'none';
 }
 window.loadInteractiveMapSection = loadInteractiveMapSection;
 
