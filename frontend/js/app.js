@@ -1878,11 +1878,82 @@ window.initDrawerMap = function(campId) {
       };
       legend.addTo(map);
 
-    } catch(e) {
-      console.warn("initDrawerMap error:", e);
-      mapEl.innerHTML = '<div style="padding:30px; color:#f87171; font-size:12px; text-align:center;">❌ マップ描画エラー</div>';
+// ドロワー内 配信エリア設定モード切替（半径指定 vs 地域名指定 vs 町丁字ブロック）
+window.switchDrawerLocMode = function(campId, mode) {
+  const proxGrp = document.getElementById(`drawerProximityGroup_${campId}`);
+  const geoGrp = document.getElementById(`drawerGeoTargetGroup_${campId}`);
+  if (proxGrp) proxGrp.style.display = mode === 'proximity' ? 'block' : 'none';
+  if (geoGrp) geoGrp.style.display = mode === 'geo_target' ? 'block' : 'none';
+};
+
+// ドロワー内 半径ターゲット即時適用
+window.applyDrawerRadiusTarget = async function(campId) {
+  const radInput = document.getElementById(`drawerRadiusInput_${campId}`);
+  const rad = radInput ? parseFloat(radInput.value) : 8;
+  if (isNaN(rad) || rad <= 0) { toast('有効な半径を入力してください', 'error'); return; }
+
+  const gId = _drawerGoogleCampaignId || campId;
+  try {
+    toast(`半径 ${rad}km ターゲットをGoogle広告へ同期中...`, 'info');
+    const res = await api('/campaigns/update-location', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId || 1,
+        platform: currentPlatform || 'google',
+        google_campaign_id: gId,
+        type: 'proximity',
+        radius_km: rad
+      })
+    });
+    if (res.success) {
+      toast('✅ 半径ターゲットをGoogle広告へ即時反映しました！', 'success');
+      setTimeout(() => {
+        api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+          .then(d => renderCampDrawer(d)).catch(()=>{});
+      }, 1000);
     }
-  });
+  } catch(e) {
+    toast('半径設定エラー: ' + e.message, 'error');
+  }
+};
+
+// ドロワー内 地域名ターゲット即時適用
+window.applyDrawerGeoTargets = async function(campId) {
+  const pref = document.getElementById(`drawerGeoPref_${campId}`)?.value || '静岡県';
+  const geosVal = document.getElementById(`drawerGeoInput_${campId}`)?.value?.trim() || '';
+  if (!geosVal) { toast('地域名を入力してください', 'error'); return; }
+
+  const normalizedGeos = geosVal.replace(/，/g, ',').replace(/、/g, ',').replace(/・/g, ',');
+  const geos = normalizedGeos.split(',').map(s => {
+    let name = s.trim();
+    if (!name) return '';
+    if (!name.startsWith(pref)) name = pref + name;
+    return name;
+  }).filter(Boolean);
+
+  const gId = _drawerGoogleCampaignId || campId;
+  try {
+    toast(`地域名 (${geos.join('・')}) をGoogle広告へ同期中...`, 'info');
+    const res = await api('/campaigns/update-location', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId || 1,
+        platform: currentPlatform || 'google',
+        google_campaign_id: gId,
+        type: 'geo_target',
+        geo_targets: geos
+      })
+    });
+    if (res.success) {
+      toast('✅ 地域名ターゲットをGoogle広告へ即時反映しました！', 'success');
+      setTimeout(() => {
+        api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
+          .then(d => renderCampDrawer(d)).catch(()=>{});
+      }, 1000);
+    }
+  } catch(e) {
+    toast('地域名設定エラー: ' + e.message, 'error');
+  }
 };
 
 // ドロワー内 地域Google広告適用（半径ターゲティング）
@@ -2448,34 +2519,98 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
-  // ―― 🗺️ キャンペーン専用: 町丁字境界配信地域マップ（全国対応） & ターゲット設定カード ――
+  // ―― 🗺️ キャンペーン専用: 配信エリア統合設定カード（半径・地域名・町丁字マップ） ――
+  const currentLocType = d.location?.type || 'proximity';
+  const currentRadius = d.location?.radius_km || 8;
+  const currentGeoTargets = d.location?.geo_targets ? d.location.geo_targets.join(', ') : (d.location?.region_name || '');
+
   const geoSettingsHtml = `
     <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <div style="font-size:13px; font-weight:800; color:#34d399; display:flex; align-items:center; gap:6px;">
-          <span>🗺️ 町丁字境界 配信地域 (地図タップで直接選択)</span>
+          <span>📍 キャンペーン配信エリア設定 (Google広告連動)</span>
         </div>
-        <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">0地区選択中</span>
-      </div>
-      <p style="font-size:11px; color:var(--text-3); margin:0 0 8px 0;">
-        地図上の町丁字ブロックをタップすると緑色に点灯。選択した地区の中心座標から半径ターゲティングでGoogle広告に反映されます。
-      </p>
-
-      <!-- 🗺️ 町丁字境界ポリゴンマップ（APIから動的ロード） -->
-      <div id="drawerLeafletMap_${d.id}" style="height:350px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:10px; z-index:1;"></div>
-
-      <div style="font-size:11px; color:#a78bfa; font-weight:700; margin-bottom:4px;">地区クイックトグル（市区町村別）:</div>
-      <div id="geoChipsContainer_${d.id}" style="margin-bottom:10px; max-height:120px; overflow-y:auto;">
-        <div style="font-size:10px; color:var(--text-3);">📡 境界データを読み込み中...</div>
+        <span style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">
+          ${currentLocType === 'proximity' ? `半径 ${currentRadius}km` : (currentLocType === 'geo_target' ? '地域名指定' : '町丁字マップ')}
+        </span>
       </div>
 
-      <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:8px;" id="drawerGeoSummary_${d.id}">
-        未選択（地図をタップして配信地域を指定）
+      <!-- 1. 設定モード切り替えラジオボタン -->
+      <div style="margin-bottom:12px; background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+        <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:6px;">🎯 設定モードを選択:</label>
+        <div style="display:flex; flex-wrap:wrap; gap:12px; font-size:11px; color:var(--text-1);">
+          <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
+            <input type="radio" name="drawerLocMode_${d.id}" value="proximity" onchange="switchDrawerLocMode('${d.id}', 'proximity')" ${currentLocType === 'proximity' ? 'checked' : ''}>
+            🗺️ <strong>半径指定 (km)</strong>
+          </label>
+          <label style="cursor:pointer; display:flex; align-items:center; gap:4px;">
+            <input type="radio" name="drawerLocMode_${d.id}" value="geo_target" onchange="switchDrawerLocMode('${d.id}', 'geo_target')" ${currentLocType === 'geo_target' ? 'checked' : ''}>
+            📌 <strong>地域名指定 (市区町村)</strong>
+          </label>
+        </div>
+
+        <!-- A. 半径指定グループ -->
+        <div id="drawerProximityGroup_${d.id}" style="display:${currentLocType === 'proximity' ? 'block' : 'none'}; margin-top:8px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-2);">院を中心とした半径:</span>
+            <input type="number" id="drawerRadiusInput_${d.id}" value="${currentRadius}" style="width:70px; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:12px; font-weight:700;">
+            <span style="font-size:11px; color:var(--text-2);">km 圏内</span>
+            <button onclick="applyDrawerRadiusTarget('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px; margin-left:auto;">⚡ 半径設定を即時反映</button>
+          </div>
+        </div>
+
+        <!-- B. 地域名指定グループ -->
+        <div id="drawerGeoTargetGroup_${d.id}" style="display:${currentLocType === 'geo_target' ? 'block' : 'none'}; margin-top:8px;">
+          <div style="display:flex; gap:6px; margin-bottom:6px;">
+            <select id="drawerGeoPref_${d.id}" style="width:90px; padding:4px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
+              <option value="静岡県" selected>静岡県</option>
+              <option value="愛知県">愛知県</option>
+              <option value="東京都">東京都</option>
+              <option value="神奈川県">神奈川県</option>
+              <option value="埼玉県">埼玉県</option>
+              <option value="千葉県">千葉県</option>
+              <option value="山梨県">山梨県</option>
+              <option value="長野県">長野県</option>
+              <option value="岐阜県">岐阜県</option>
+              <option value="三重県">三重県</option>
+              <option value="大阪府">大阪府</option>
+              <option value="京都府">京都府</option>
+              <option value="兵庫県">兵庫県</option>
+              <option value="北海道">北海道</option>
+              <option value="福岡県">福岡県</option>
+            </select>
+            <input type="text" id="drawerGeoInput_${d.id}" placeholder="例: 藤枝市, 焼津市, 島田市" value="${currentGeoTargets}" style="flex:1; padding:4px 8px; background:#1e293b; color:#fff; border:1px solid var(--border); border-radius:4px; font-size:11px;">
+            <button onclick="applyDrawerGeoTargets('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px;">⚡ 地域名を即時反映</button>
+          </div>
+        </div>
       </div>
 
-      <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:7px;">
-        ⚡ 選択した町丁字エリアをGoogle広告へ即時反映（半径ターゲティング）
-      </button>
+      <!-- C. 町丁字ブロック ピンポイントマップ -->
+      <div id="drawerPolygonGroup_${d.id}" style="margin-top:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div style="font-size:11px; font-weight:700; color:#34d399;">🗺️ 町丁字ブロック ピンポイントマップ</div>
+          <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">0地区選択中</span>
+        </div>
+        <p style="font-size:10px; color:var(--text-3); margin:0 0 6px 0;">
+          地図上の町丁字ブロックをタップして緑色に選択。選択した地区の中心座標からGoogle広告へピンポイント半径反映されます。
+        </p>
+
+        <!-- 🗺️ 町丁字境界ポリゴンマップ（APIから動的ロード） -->
+        <div id="drawerLeafletMap_${d.id}" style="height:320px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:8px; z-index:1;"></div>
+
+        <div style="font-size:10px; color:#a78bfa; font-weight:700; margin-bottom:4px;">地区クイックトグル:</div>
+        <div id="geoChipsContainer_${d.id}" style="margin-bottom:8px; max-height:100px; overflow-y:auto;">
+          <div style="font-size:10px; color:var(--text-3);">📡 境界データを読み込み中...</div>
+        </div>
+
+        <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:8px;" id="drawerGeoSummary_${d.id}">
+          未選択（地図をタップして配信地域を指定）
+        </div>
+
+        <button onclick="applyDrawerGeoLocation('${d.id}')" class="btn btn-success" style="width:100%; font-size:11px; padding:7px;">
+          ⚡ 選択した町丁字エリアをGoogle広告へ即時反映
+        </button>
+      </div>
     </div>
 
     <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
@@ -2701,106 +2836,8 @@ function renderCampDrawer(d) {
       </div>
     </div>`;
 
-  // ③ 位置ターゲティングセクション
+  // ③ 位置ターゲティングはドロワー最上部の統合配信エリアカード(geoSettingsHtml)に集約済み
   let locationHtml = '';
-  const locationContent = d.location ? (
-    d.location.type === 'proximity' ? `
-      <div class="drawer-location-box">
-        <div class="drawer-location-icon">🗺️</div>
-        <div>
-          <div class="drawer-location-text">半径 <strong>${d.location.radius_km}km</strong> 圏内</div>
-          <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4) || '-'} / 経度 ${d.location.lon?.toFixed(4) || '-'}</div>
-          <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">院の位置情報を中心とした${d.location.radius_km}km圏内</div>
-        </div>
-      </div>` : `
-      <div class="drawer-location-box">
-        <div class="drawer-location-icon">📌</div>
-        <div class="drawer-location-text">${d.location.geo_targets ? d.location.geo_targets.join('・') : '地域ターゲティング設定済み'}</div>
-      </div>`
-  ) : '<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">位置情報が設定されていません</div>';
-
-  locationHtml = `
-    <div class="drawer-section">
-      <div class="drawer-section-title">📍 配信エリア</div>
-      ${locationContent}
-      <div style="margin-top:8px">
-        <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.05)" onclick="toggleManualLocationForm()">✍️ エリアを手動設定</button>
-      </div>
-      <div id="manualLocationForm" style="display:none; margin-top:8px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px solid var(--border)">
-        <div style="margin-bottom:8px">
-          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">設定タイプ</label>
-          <select id="manualLocType" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px" onchange="onManualLocTypeChange()">
-            <option value="proximity">半径指定 (例: 8km)</option>
-            <option value="geo_target">地域名指定 (例: 藤枝市・焼津市)</option>
-          </select>
-        </div>
-        <div id="manualLocProximityGroup" style="margin-bottom:8px">
-          <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">半径 (km)</label>
-          <input type="number" id="manualLocRadius" value="8" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
-        </div>
-        <div id="manualLocGeoGroup" style="display:none; margin-bottom:8px">
-          <div style="display:flex; gap:6px; margin-bottom:6px">
-            <div style="flex:1">
-              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">都道府県</label>
-              <select id="manualLocPref" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
-                <option value="静岡県" selected>静岡県</option>
-                <option value="愛知県">愛知県</option>
-                <option value="東京都">東京都</option>
-                <option value="神奈川県">神奈川県</option>
-                <option value="埼玉県">埼玉県</option>
-                <option value="千葉県">千葉県</option>
-                <option value="山梨県">山梨県</option>
-                <option value="長野県">長野県</option>
-                <option value="岐阜県">岐阜県</option>
-                <option value="三重県">三重県</option>
-                <option value="大阪府">大阪府</option>
-                <option value="京都府">京都府</option>
-                <option value="兵庫県">兵庫県</option>
-                <option value="北海道">北海道</option>
-                <option value="青森県">青森県</option>
-                <option value="岩手県">岩手県</option>
-                <option value="宮城県">宮城県</option>
-                <option value="秋田県">秋田県</option>
-                <option value="山形県">山形県</option>
-                <option value="福島県">福島県</option>
-                <option value="茨城県">茨城県</option>
-                <option value="栃木県">栃木県</option>
-                <option value="群馬県">群馬県</option>
-                <option value="新潟県">新潟県</option>
-                <option value="富山県">富山県</option>
-                <option value="石川県">石川県</option>
-                <option value="福井県">福井県</option>
-                <option value="滋賀県">滋賀県</option>
-                <option value="奈良県">奈良県</option>
-                <option value="和歌山県">和歌山県</option>
-                <option value="鳥取県">鳥取県</option>
-                <option value="島根県">島根県</option>
-                <option value="岡山県">岡山県</option>
-                <option value="広島県">広島県</option>
-                <option value="山口県">山口県</option>
-                <option value="徳島県">徳島県</option>
-                <option value="香川県">香川県</option>
-                <option value="愛媛県">愛媛県</option>
-                <option value="高知県">高知県</option>
-                <option value="福岡県">福岡県</option>
-                <option value="佐賀県">佐賀県</option>
-                <option value="長崎県">長崎県</option>
-                <option value="熊本県">熊本県</option>
-                <option value="大分県">大分県</option>
-                <option value="宮崎県">宮崎県</option>
-                <option value="鹿児島県">鹿児島県</option>
-                <option value="沖縄県">沖縄県</option>
-              </select>
-            </div>
-            <div style="flex:2">
-              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:2px">市区町村名 (カンマ区切り)</label>
-              <input type="text" id="manualLocGeos" placeholder="藤枝市, 焼津市" style="width:100%;padding:4px;background:#1e293b;color:#fff;border:1px solid var(--border);border-radius:4px;font-size:12px">
-            </div>
-          </div>
-        </div>
-        <button class="btn btn-primary" style="width:100%;font-size:11px;padding:6px" onclick="applyManualLocation()">設定を適用</button>
-      </div>
-    </div>`;
 
   // ④ 広告文セクション
   const adsHtml = d.ads && d.ads.length ? `
