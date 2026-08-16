@@ -2702,7 +2702,7 @@ function renderCampDrawer(d) {
   const defaultTab = (currentLocType === 'proximity' || currentLocType === 'geo_target') ? 'range' : 'block';
 
   const geoSettingsHtml = `
-    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; overflow:hidden; margin-bottom:16px;">
+    <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; margin-bottom:16px;">
 
       <!-- ===== タブヘッダー ===== -->
       <div style="display:flex; border-bottom:1px solid rgba(52,211,153,0.2);">
@@ -2751,7 +2751,7 @@ function renderCampDrawer(d) {
             <button onclick="applyDrawerRadiusTarget('${d.id}')" class="btn btn-primary" style="font-size:10px; padding:4px 10px; margin-left:auto;">⚡ Google広告に即時反映</button>
           </div>
           <!-- 半径可視化マップ -->
-          <div id="drawerRadiusMap_${d.id}" style="height:280px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.3); z-index:1;"></div>
+          <div id="drawerRadiusMap_${d.id}" style="height:280px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.3); position:relative; z-index:10;"></div>
           <div style="font-size:10px; color:var(--text-3); margin-top:6px; text-align:center;">
             🟢 緑の円 = 広告が配信される範囲　📍 中心 = 院の所在地
           </div>
@@ -2794,7 +2794,7 @@ function renderCampDrawer(d) {
           <span id="drawerGeoCount_${d.id}" style="font-size:10px; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; font-weight:700;">0地区選択中</span>
         </div>
 
-        <div id="drawerLeafletMap_${d.id}" style="height:320px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:8px; z-index:1;"></div>
+        <div id="drawerLeafletMap_${d.id}" style="height:320px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.4); margin-bottom:8px; position:relative; z-index:10;"></div>
 
         <div style="font-size:10px; color:#a78bfa; font-weight:700; margin-bottom:4px;">地区クイックトグル:</div>
         <div id="geoChipsContainer_${d.id}" style="margin-bottom:8px; max-height:100px; overflow-y:auto;">
