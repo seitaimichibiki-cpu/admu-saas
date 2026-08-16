@@ -268,6 +268,11 @@ def init_db():
         f"""CREATE TABLE IF NOT EXISTS stripe_processed_events (
             event_id TEXT PRIMARY KEY,
             processed_at {TS})""",
+        # キャンペーン別選択済み町丁字ブロック永続化用
+        f"""CREATE TABLE IF NOT EXISTS campaign_geo_selections (
+            id {PK}, clinic_id INTEGER NOT NULL, campaign_id TEXT NOT NULL,
+            location_name TEXT NOT NULL, city_code TEXT, lat REAL, lng REAL,
+            created_at {TS}, UNIQUE(clinic_id, campaign_id, location_name))""",
         # オンボーディング離脱分析用
         f"""CREATE TABLE IF NOT EXISTS onboarding_progress (
             id {PK}, clinic_id INTEGER NOT NULL,
@@ -1865,4 +1870,38 @@ def get_patient_demographic_insights(clinic_id: int) -> dict:
             "gender_distribution": gender_dist,
             "age_distribution": age_dist,
         }
+
+
+# ---- キャンペーン別選択ブロック永続化 ----
+def get_campaign_geo_selections(campaign_id: str, clinic_id: int):
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT location_name, city_code, lat, lng FROM campaign_geo_selections
+            WHERE campaign_id=? AND clinic_id=?
+        """, (str(campaign_id), clinic_id)).fetchall()
+        return [dict(r) for r in rows]
+
+def save_campaign_geo_selections(campaign_id: str, clinic_id: int, locations: list):
+    """
+    locations: [{"name": "恵比寿一丁目", "city_code": "13113", "lat": 35.647, "lng": 139.713}, ...] または ["恵比寿一丁目", ...]
+    """
+    with get_conn() as conn:
+        conn.execute("DELETE FROM campaign_geo_selections WHERE campaign_id=? AND clinic_id=?", (str(campaign_id), clinic_id))
+        for loc in locations:
+            if isinstance(loc, dict):
+                name = loc.get("name")
+                city_code = loc.get("city_code", "")
+                lat = loc.get("lat", 0.0)
+                lng = loc.get("lng", 0.0)
+            else:
+                name = str(loc)
+                city_code = ""
+                lat, lng = 0.0, 0.0
+            if name:
+                conn.execute("""
+                    INSERT INTO campaign_geo_selections (clinic_id, campaign_id, location_name, city_code, lat, lng)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (clinic_id, str(campaign_id), name, city_code, lat, lng))
+        conn.commit()
+
 

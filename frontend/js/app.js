@@ -1407,7 +1407,7 @@ window.copyDeveloperPrompt = function() {
 };
 
 // キャンペーン切替タブ切り替え処理
-window.activeLpCampaignId = '24067002156';
+window.activeLpCampaignId = '';
 window.switchLpTab = function(campaignId) {
   window.activeLpCampaignId = campaignId;
   document.querySelectorAll('.lp-tab-btn').forEach(btn => {
@@ -1747,11 +1747,12 @@ window.initDrawerMap = function(campId) {
 
   mapEl.innerHTML = '<div style="padding:40px; color:#fbbf24; font-size:12px; text-align:center;">🗺️ 町丁字境界データを読み込み中...</div>';
 
-  // ★ API から境界データを非同期ロードしてマップ描画 ★
+  // ★ API から境界データと保存済み選択状態を非同期ロードしてマップ描画 ★
   const geoCodes = window.clinicGeoCodes || [];
   const loadPromises = geoCodes.map(gc => window._loadGeoBoundary(gc.pref, gc.city).then(data => ({ ...gc, data })));
+  const savedPromise = api(`/campaigns/${campId}/geo-selections?clinic_id=${currentClinicId || 1}`).catch(() => ({selections: []}));
 
-  Promise.all(loadPromises).then(results => {
+  Promise.all([Promise.all(loadPromises), savedPromise]).then(([results, savedData]) => {
     try {
       if (window.drawerMapInstances[campId]) {
         try { window.drawerMapInstances[campId].remove(); } catch(e) {}
@@ -1784,11 +1785,16 @@ window.initDrawerMap = function(campId) {
         setTimeout(() => { try { map.invalidateSize(); } catch(e) {} }, delay);
       });
 
-      // 選択状態の初期化
+      // 選択状態の初期化と保存済み選択状態の復元
       if (!window.drawerSelectedLocations[campId]) {
         window.drawerSelectedLocations[campId] = new Set();
       }
       const selectedSet = window.drawerSelectedLocations[campId];
+      if (savedData && savedData.selections && savedData.selections.length > 0) {
+        savedData.selections.forEach(s => {
+          if (s.location_name) selectedSet.add(s.location_name);
+        });
+      }
       window.drawerGeoLayers[campId] = {};
 
       // 全市区町村の全ポリゴンを一括ロード・描画
@@ -1953,7 +1959,8 @@ window.applyDrawerDemographics = async function(campId) {
 window.runLpMatchDiagnose = async function() {
   try {
     toast('選択中キャンペーンのLPテキストをAIプロ添削中...', 'info');
-    const targetCampId = window.activeLpCampaignId || '24067002156';
+    const targetCampId = window.activeLpCampaignId || (_campaignCache && _campaignCache[0] && _campaignCache[0].id) || '';
+    if (!targetCampId) { toast('キャンペーンが選択されていません', 'error'); return; }
 
     const res = await api('/ai/diagnose-lp-match', {
       method: 'POST',
@@ -2127,7 +2134,8 @@ window.applyGeoLocationsToGoogle = async function() {
   }
 
   const selectEl = document.getElementById('goldenCampaignSelect');
-  const selectedCampId = selectEl ? selectEl.value : '24067002156';
+  const selectedCampId = selectEl ? selectEl.value : (window.activeLpCampaignId || '');
+  if (!selectedCampId) { toast('キャンペーンを選択してください', 'error'); return; }
 
   try {
     toast(`配信地域 (${arr.join('・')}) をGoogle広告へ同期中...`, 'info');
@@ -2147,7 +2155,10 @@ window.applyGeoLocationsToGoogle = async function() {
 window.applyGoldenHoursBidding = async function() {
   try {
     toast('ゴールデンタイム入札倍率(+30%)を同期中...', 'info');
-    const res = await api('/campaigns/24067002156/apply-golden-hours', {
+    const goldenSelectEl = document.getElementById('goldenCampaignSelect');
+    const goldenCampId = goldenSelectEl ? goldenSelectEl.value : (window.activeLpCampaignId || '');
+    if (!goldenCampId) { toast('キャンペーンを選択してください', 'error'); return; }
+    const res = await api(`/campaigns/${goldenCampId}/apply-golden-hours`, {
       method: 'POST',
       body: JSON.stringify({ clinic_id: currentClinicId || 1, bid_modifier_pct: 30 })
     });
@@ -2445,6 +2456,11 @@ async function loadCampaigns() {
         </div>
       </div>
     `;}).join('');
+
+    // キャンペーン読み込み完了後、LP診断用のデフォルトキャンペーンIDを動的設定
+    if (!window.activeLpCampaignId && campaigns.length > 0) {
+      window.activeLpCampaignId = String(campaigns[0].id || campaigns[0].google_campaign_id || '');
+    }
 
     updateCampaignSelects();
     // CVトラッキング設定確認（バナー表示）
@@ -5214,6 +5230,12 @@ async function loadSettings() {
     }
     if (lhAccountIdEl) lhAccountIdEl.value = s.line_harness_account_id || '';
 
+    // 院の位置情報
+    const clinicLatEl = document.getElementById('settClinicLat');
+    const clinicLonEl = document.getElementById('settClinicLon');
+    if (clinicLatEl) clinicLatEl.value = s.clinic_lat || '';
+    if (clinicLonEl) clinicLonEl.value = s.clinic_lon || '';
+
   } catch(e) {
     toast('設定読み込み失敗: ' + e.message, 'error');
   }
@@ -5240,6 +5262,8 @@ document.getElementById('saveSettingsBtn').addEventListener('click', async () =>
     line_harness_url: document.getElementById('settLineHarnessUrl')?.value || null,
     line_harness_account_id: document.getElementById('settLineHarnessAccountId')?.value || null,
     target_geo_codes: JSON.stringify(window.clinicGeoCodes || []),
+    clinic_lat: document.getElementById('settClinicLat')?.value ? parseFloat(document.getElementById('settClinicLat').value) : null,
+    clinic_lon: document.getElementById('settClinicLon')?.value ? parseFloat(document.getElementById('settClinicLon').value) : null,
   };
   const devToken  = document.getElementById('settDevToken').value;
   const clientSecret = document.getElementById('settClientSecret')?.value;

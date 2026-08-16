@@ -100,12 +100,14 @@ class AdCopyGenerator:
 
     def _generate_with_gemini(self, context: dict) -> dict:
         persona_section = ""
-        if any([context.get("target_age_gender"), context.get("target_pain_point")]):
+        if any([context.get("target_age_gender"), context.get("target_pain_point"), context.get("persona_details")]):
             persona_section = "## ターゲットペルソナ（この人物に深く刺さる言葉を選んでください）\n"
             if context.get("target_age_gender"): persona_section += f"- 年齢・性別: {context.get('target_age_gender')}\n"
             if context.get("target_job_lifestyle"): persona_section += f"- 職業・ライフスタイル: {context.get('target_job_lifestyle')}\n"
             if context.get("target_pain_point"): persona_section += f"- 深い悩み: {context.get('target_pain_point')}\n"
             if context.get("target_desired_outcome"): persona_section += f"- 求める理想（ゴール）: {context.get('target_desired_outcome')}\n"
+            if context.get("persona_details"):
+                persona_section += f"\n### 登録済みペルソナ詳細（広告文はこのペルソナに最適化してください）\n{context['persona_details']}\n"
 
         keywords_list = context.get("keywords", [])
         keywords_str = ", ".join(keywords_list) if keywords_list else "なし"

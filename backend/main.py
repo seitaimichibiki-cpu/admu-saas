@@ -378,6 +378,8 @@ class SettingsReq(BaseModel):
     line_harness_api_key: Optional[str] = None
     line_harness_account_id: Optional[str] = None
     target_geo_codes: Optional[str] = None
+    clinic_lat: Optional[float] = None
+    clinic_lon: Optional[float] = None
 
 class LineTestReq(BaseModel):
     clinic_id: int = 1
@@ -1775,9 +1777,33 @@ def generate_ad_copy(req: AdCopyReq):
         "target_desired_outcome": acc.get("target_desired_outcome"),
     })
 
-    # キャンペーンのキーワードを取得して注入
+    # ペルソナテーブルから詳細データを取得してGeminiプロンプトに注入
     campaign = _resolve_campaign(str(req.campaign_id), req.clinic_id)
     g_id = campaign.get("google_campaign_id")
+    
+    # キャンペーン紐付きペルソナを優先、なければクリニック全体のペルソナ
+    personas = []
+    if g_id:
+        personas = db.get_campaign_personas(str(g_id), req.clinic_id)
+    if not personas:
+        personas = db.list_personas(req.clinic_id)
+    
+    if personas:
+        persona_texts = []
+        for p in personas:
+            parts = [f"【{p.get('name', '不明')}】"]
+            if p.get("age_gender"):
+                parts.append(f"属性: {p['age_gender']}")
+            if p.get("pain_point"):
+                parts.append(f"悩み: {p['pain_point']}")
+            if p.get("desired_outcome"):
+                parts.append(f"求める結果: {p['desired_outcome']}")
+            if p.get("job_lifestyle"):
+                parts.append(f"職業・生活: {p['job_lifestyle']}")
+            persona_texts.append(" / ".join(parts))
+        context["persona_details"] = "\n".join(persona_texts)
+
+    # キャンペーンのキーワードを取得して注入
     keywords = []
     if g_id:
         try:
@@ -5454,7 +5480,38 @@ def auto_score_ab(clinic_id: int = 1):
     """バリアントグループごとにCTRスコアを比較して廃案候補を自動フラグ"""
     if not db.check_ai_quota_available(clinic_id):
         raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
+    
+    # Google Ads APIからキャンペーン別CTRを取得（スコア自動更新用）
+    campaign_ctr = {}
+    try:
+        acc = db.get_ads_account(clinic_id)
+        if acc:
+            client = _get_ads_client(acc, "google")
+            perf = client.get_performance_series(days="30")
+            if perf:
+                total_clicks = sum(s.get("clicks", 0) for s in perf)
+                total_imps = sum(s.get("impressions", 0) for s in perf)
+                if total_imps > 0:
+                    campaign_ctr["_overall"] = round(total_clicks / total_imps * 100, 2)
+    except Exception as e:
+        print(f"[ab-score] Google Ads CTR取得スキップ: {e}")
+    
     copies = db.list_ad_copies(clinic_id)
+    
+    # activeな広告コピーのCTRスコアをGoogle Adsデータで自動更新
+    if campaign_ctr.get("_overall"):
+        overall_ctr = campaign_ctr["_overall"]
+        for c in copies:
+            if c.get("status") == "active" and c.get("applied_at"):
+                # 適用済み広告のCTRスコアをAPI値で更新
+                with db.get_conn() as conn:
+                    conn.execute(
+                        "UPDATE ad_copies SET ctr_score=? WHERE id=? AND clinic_id=?",
+                        (overall_ctr, c["id"], clinic_id)
+                    )
+                    conn.commit()
+                c["ctr_score"] = overall_ctr
+    
     grouped: dict = {}
     for c in copies:
         vg = c.get("variant_group")
@@ -5489,7 +5546,8 @@ def auto_score_ab(clinic_id: int = 1):
         "success": True,
         "groups_analyzed": len(grouped),
         "recommendations": recommendations,
-        "retired_candidates": retired_count
+        "retired_candidates": retired_count,
+        "auto_ctr_updated": bool(campaign_ctr.get("_overall"))
     }
 
 
@@ -7356,36 +7414,53 @@ async def performance_heatmap(clinic_id: int = 1):
     if not db.check_ai_quota_available(clinic_id):
         raise HTTPException(status_code=429, detail="今月のAI利用回数の上限に達しました。プランをアップグレードしてください。")
         
-    import random, math
-    random.seed(clinic_id * 42)
+    try:
+        acc = _require_account(clinic_id)
+        client = _get_ads_client(acc)
+        real_grid = client.get_hourly_performance(30)
+    except Exception as e:
+        print(f"[performance_heatmap] API error: {e}")
+        real_grid = None
 
-    # 整体院業界の時間帯×曜日パターン（業界調査ベース）
-    # 曜日: 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
-    _DOW_MULT  = [1.30, 1.20, 1.05, 1.00, 1.15, 0.75, 0.60]
+    import random, math
     _DOW_NAMES = ["月", "火", "水", "木", "金", "土", "日"]
 
-    # 時間帯パターン（整体院の典型的な検索ピーク）
-    def hour_mult(h):
-        if   6 <= h <  9: return 0.7   # 早朝（低）
-        elif 9 <= h < 12: return 1.3   # 午前ピーク（主婦・リモートワーク）
-        elif 12 <= h < 14: return 1.1  # 昼休み
-        elif 14 <= h < 17: return 0.9  # 午後（中）
-        elif 17 <= h < 20: return 1.2  # 夕方ピーク（帰宅後）
-        elif 20 <= h < 23: return 0.8  # 夜（中低）
-        else: return 0.3               # 深夜
+    if real_grid:
+        grid = real_grid
+        is_mock = False
+        max_ctr = max([grid[dow][h]["ctr"] for dow in range(7) for h in range(24)])
+    else:
+        is_mock = True
+        random.seed(clinic_id * 42)
 
-    grid = {}
-    max_ctr = 0
-    for dow in range(7):
-        grid[dow] = {}
-        for hour in range(24):
-            base_ctr = 3.5
-            ctr = round(base_ctr * _DOW_MULT[dow] * hour_mult(hour) * random.uniform(0.85, 1.15), 2)
-            cvr = round(ctr * random.uniform(0.4, 0.7), 2)
-            cost = round(random.randint(800, 3200) * _DOW_MULT[dow] * hour_mult(hour))
-            conv = round(cost / 4500 * random.uniform(0.7, 1.3), 1) if cost > 0 else 0
-            grid[dow][hour] = {"ctr": ctr, "cvr": cvr, "cost": cost, "conv": conv}
-            if ctr > max_ctr: max_ctr = ctr
+        # 整体院業界の時間帯×曜日パターン（業界調査ベース）
+        # 曜日: 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
+        _DOW_MULT  = [1.30, 1.20, 1.05, 1.00, 1.15, 0.75, 0.60]
+
+        # 時間帯パターン（整体院の典型的な検索ピーク）
+        def hour_mult(h):
+            if   6 <= h <  9: return 0.7   # 早朝（低）
+            elif 9 <= h < 12: return 1.3   # 午前ピーク（主婦・リモートワーク）
+            elif 12 <= h < 14: return 1.1  # 昼休み
+            elif 14 <= h < 17: return 0.9  # 午後（中）
+            elif 17 <= h < 20: return 1.2  # 夕方ピーク（帰宅後）
+            elif 20 <= h < 23: return 0.8  # 夜（中低）
+            else: return 0.3               # 深夜
+
+        grid = {}
+        max_ctr = 0
+        for dow in range(7):
+            grid[dow] = {}
+            for hour in range(24):
+                base_ctr = 3.5
+                ctr = round(base_ctr * _DOW_MULT[dow] * hour_mult(hour) * random.uniform(0.85, 1.15), 2)
+                cvr = round(ctr * random.uniform(0.4, 0.7), 2)
+                cost = round(random.randint(800, 3200) * _DOW_MULT[dow] * hour_mult(hour))
+                conv = round(cost / 4500 * random.uniform(0.7, 1.3), 1) if cost > 0 else 0
+                grid[dow][hour] = {"ctr": ctr, "cvr": cvr, "cost": cost, "conv": conv}
+                if ctr > max_ctr: max_ctr = ctr
+
+    if max_ctr == 0: max_ctr = 1.0
 
     # AI入札倍率推奨（上位20%の時間帯を特定）
     all_slots = [(dow, h, grid[dow][h]["ctr"]) for dow in range(7) for h in range(24)]
@@ -7419,13 +7494,14 @@ async def performance_heatmap(clinic_id: int = 1):
     db.increment_ai_quota(clinic_id, feature_name="heatmap")
     return {
         "success": True,
+        "is_mock": is_mock,
         "grid": grid,
         "dow_names": _DOW_NAMES,
         "max_ctr": max_ctr,
         "bid_schedule": bid_schedule,
         "ai_insight": ai_insight,
-        "data_source": "industry_model",
-        "data_note": "整体院業界の標準的な検索行動パターンモデルに基づく推定値です。実データが蓄積されると自動的に精度が向上します。",
+        "data_source": "industry_model" if is_mock else "google_ads_api",
+        "data_note": "整体院業界の標準的な検索行動パターンモデルに基づく推定値です。実データが蓄積されると自動的に精度が向上します。" if is_mock else "Google Adsの実際の過去30日間のパフォーマンスデータです。",
     }
 
 
@@ -7716,12 +7792,15 @@ def recommend_radius(clinic_id: int = 1):
     """
     患者の住所データをジオコーディングして院との距離分布を計算し、
     80%カバー半径・95%カバー半径を返す。
-    院の座標: 藤枝市田沼1-19-7 (lat=34.868, lon=138.257)
     """
     import json, math, re, requests as rq
 
-    CLINIC_LAT = 34.868
-    CLINIC_LON = 138.257
+    acc = db.get_ads_account(clinic_id)
+    if not acc or acc.get("clinic_lat") is None or acc.get("clinic_lon") is None:
+        raise HTTPException(400, "院の位置情報が未設定です。設定ページで緯度・経度を入力してください")
+        
+    CLINIC_LAT = float(acc["clinic_lat"])
+    CLINIC_LON = float(acc["clinic_lon"])
 
     def haversine_km(lat1, lon1, lat2, lon2):
         R = 6371
@@ -9018,7 +9097,7 @@ def set_ad_schedule(campaign_id: str, req: AdScheduleReq):
 
 class DiagnoseLpMatchReq(BaseModel):
     clinic_id: int = 1
-    campaign_id: str = "24067002156"
+    campaign_id: str
     lp_url: str = "https://seitai-katakori-lp.pages.dev"
 
 @app.post("/api/ai/diagnose-lp-match")
@@ -9185,7 +9264,7 @@ def inspect_age_targeting(clinic_id: int = 1):
 
 
 @app.get("/api/analytics/golden-hours")
-def get_golden_hours(clinic_id: int = 1, campaign_id: str = "24067002156"):
+def get_golden_hours(clinic_id: int = 1, campaign_id: str = ""):
     """キャンペーンごとのターゲット属性（性別・年齢層）に合わせた個別CVゴールデンタイムを全自動特定"""
     
     # 対象キャンペーンの取得とターゲット属性の自動判定
@@ -9385,6 +9464,23 @@ def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
             print(f"[set-geo-locations] Google Ads Proximity適用エラー: {e}")
             # エラーでもUIには成功を返す（設定はローカルで保持）
 
+    # ローカルDBへの選択済みブロック保存（ページ再表示時の復元用）
+    try:
+        geo_save_list = []
+        if req.proximity_targets:
+            for pt in req.proximity_targets:
+                geo_save_list.append({
+                    "name": pt.name,
+                    "city_code": pt.city,
+                    "lat": pt.lat,
+                    "lng": pt.lng
+                })
+        else:
+            geo_save_list = req.locations
+        db.save_campaign_geo_selections(campaign_id, req.clinic_id, geo_save_list)
+    except Exception as e_save:
+        print(f"[set-geo-locations] DB保存エラー: {e_save}")
+
     loc_str = "・".join(req.locations)
     if proximity_applied:
         msg = f"キャンペーン「{c_name}」の配信地域を{len(proximity_applied)}地区（{loc_str}）に半径ターゲティングで即時反映しました"
@@ -9402,6 +9498,25 @@ def set_geo_locations(campaign_id: str, req: SetGeoLocationsReq):
     }
 
 
+@app.get("/api/campaigns/{campaign_id}/geo-selections")
+def get_geo_selections(campaign_id: str, clinic_id: int = 1):
+    """キャンペーン別に保存された配信対象地域ブロック（町丁字）を取得"""
+    selections = db.get_campaign_geo_selections(campaign_id, clinic_id)
+    return {"success": True, "campaign_id": campaign_id, "selections": selections}
+
+
+class SaveGeoSelectionsReq(BaseModel):
+    clinic_id: int = 1
+    locations: list = []
+
+@app.post("/api/campaigns/{campaign_id}/geo-selections")
+def save_geo_selections(campaign_id: str, req: SaveGeoSelectionsReq):
+    """キャンペーン別の配信対象地域ブロック（町丁字）を保存"""
+    db.save_campaign_geo_selections(campaign_id, req.clinic_id, req.locations)
+    return {"success": True, "campaign_id": campaign_id, "saved_count": len(req.locations)}
+
+
+
 class SetDemographicsReq(BaseModel):
     clinic_id: int = 1
     genders: list[str] = ["FEMALE"]
@@ -9410,16 +9525,39 @@ class SetDemographicsReq(BaseModel):
 @app.post("/api/campaigns/{campaign_id}/set-demographics")
 def set_demographics(campaign_id: str, req: SetDemographicsReq):
     """キャンペーンごとのターゲット年齢・性別をGoogle Adsへ即時適用"""
+    acc = _require_account(req.clinic_id)
+    client = _get_ads_client(acc)
+
     try:
         campaign = _resolve_campaign(campaign_id, req.clinic_id)
         c_name = campaign.get("name", "対象キャンペーン")
+        google_campaign_id = campaign.get("google_campaign_id")
+        if not google_campaign_id:
+            raise HTTPException(400, "Google AdsのキャンペーンIDが見つかりません。")
+    except HTTPException:
+        raise
     except Exception:
-        c_name = "腰痛｜藤枝市 新規集患"
+        c_name = "対象キャンペーン"
+        google_campaign_id = campaign_id
+
+    ALL_GENDERS = ["MALE", "FEMALE", "UNDETERMINED"]
+    for g in ALL_GENDERS:
+        adj = 0 if g in req.genders else -90
+        res = client.set_demographic_bid_adjustment(google_campaign_id, "gender", g, adj)
+        if not res.get("success"):
+            raise HTTPException(500, f"性別の設定に失敗しました: {res.get('error')}")
+
+    ALL_AGES = ["AGE_RANGE_18_24", "AGE_RANGE_25_34", "AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
+    for a in ALL_AGES:
+        adj = 0 if a in req.age_ranges else -90
+        res = client.set_demographic_bid_adjustment(google_campaign_id, "age", a, adj)
+        if not res.get("success"):
+            raise HTTPException(500, f"年齢の設定に失敗しました: {res.get('error')}")
 
     gender_ja = "女性のみ" if "FEMALE" in req.genders and len(req.genders) == 1 else "全性別（男女）"
-    age_ja = f"{len(req.age_ranges)}年齢層（30代〜70代以上）"
+    age_ja = f"{len(req.age_ranges)}年齢層"
     
-    msg = f"キャンペーン「{c_name}」のターゲットターゲットを『{gender_ja}・{age_ja}』に最適化し、Google広告へ即時反映しました"
+    msg = f"キャンペーン「{c_name}」のターゲットを『{gender_ja}・{age_ja}』に最適化し、Google広告へ即時反映しました"
     db.create_alert(req.clinic_id, msg, level="SUCCESS")
     
     return {
@@ -9460,7 +9598,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260815-ondemand-geo-help', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260816-feature-audit-fixes', html)
 
 
         return HTMLResponse(

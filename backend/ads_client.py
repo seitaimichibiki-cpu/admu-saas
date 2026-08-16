@@ -847,6 +847,65 @@ class AdsClient:
             })
         return result
 
+    def get_hourly_performance(self, days: int = 30):
+        if self.mock_mode:
+            return None
+        ga_service = self._client.get_service("GoogleAdsService")
+        
+        query = f"""
+            SELECT segments.day_of_week, segments.hour,
+                   metrics.impressions, metrics.clicks,
+                   metrics.cost_micros, metrics.conversions
+            FROM campaign
+            WHERE segments.date DURING LAST_{days}_DAYS
+        """
+        try:
+            resp = ga_service.search(customer_id=self.customer_id, query=query)
+        except Exception as e:
+            print(f"[AdsClient] get_hourly_performance error: {e}")
+            return None
+
+        grid = {}
+        for dow in range(7):
+            grid[dow] = {}
+            for hour in range(24):
+                grid[dow][hour] = {"impressions": 0, "clicks": 0, "cost_micros": 0, "conv": 0.0}
+
+        has_data = False
+        for row in resp:
+            has_data = True
+            dow_val = row.segments.day_of_week.value if hasattr(row.segments.day_of_week, "value") else row.segments.day_of_week
+            if dow_val < 2 or dow_val > 8:
+                continue
+            dow = (dow_val - 2) % 7
+            hour = row.segments.hour
+
+            m = row.metrics
+            grid[dow][hour]["impressions"] += (m.impressions or 0)
+            grid[dow][hour]["clicks"] += (m.clicks or 0)
+            grid[dow][hour]["cost_micros"] += (m.cost_micros or 0)
+            grid[dow][hour]["conv"] += (m.conversions or 0.0)
+            
+        if not has_data:
+            return None
+
+        result_grid = {}
+        for dow in range(7):
+            result_grid[dow] = {}
+            for hour in range(24):
+                d = grid[dow][hour]
+                ctr = (d["clicks"] / d["impressions"] * 100) if d["impressions"] > 0 else 0.0
+                cvr = (d["conv"] / d["clicks"] * 100) if d["clicks"] > 0 else 0.0
+                result_grid[dow][hour] = {
+                    "impressions": d["impressions"],
+                    "clicks": d["clicks"],
+                    "ctr": round(ctr, 2),
+                    "cost": int(d["cost_micros"] / 1000000),
+                    "conv": round(d["conv"], 1),
+                    "cvr": round(cvr, 2)
+                }
+        return result_grid
+
     # ---- 検索語句レポート ② ----
     def get_search_term_report(self, days: int = 30, min_cost_yen: int = 500, max_conversions: float = 0) -> list:
         """
