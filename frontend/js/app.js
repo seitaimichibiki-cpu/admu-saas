@@ -1975,29 +1975,30 @@ window.initDrawerRadiusMap = function(campId, lat, lon, radiusKm) {
     scrollWheelZoom: true,
   });
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     maxZoom: 18,
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
   }).addTo(map);
 
   // 院の位置マーカー
   L.marker([lat, lon], {
     icon: L.divIcon({
       className: '',
-      html: '<div style="background:#ef4444; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px rgba(239,68,68,0.6);"></div>',
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
+      html: '<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 10px rgba(239,68,68,0.8);"></div>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
     })
   }).addTo(map).bindTooltip('📍 院の所在地', { permanent: false, direction: 'top' });
 
-  // 半径の円
+  // 半径の円（明るいマップ上で見やすい青系に）
   const circle = L.circle([lat, lon], {
     radius: radiusMeters,
-    color: '#34d399',
-    fillColor: '#34d399',
-    fillOpacity: 0.12,
-    weight: 2,
-    dashArray: '6, 4',
+    color: '#2563eb',
+    fillColor: '#3b82f6',
+    fillOpacity: 0.15,
+    weight: 2.5,
+    dashArray: '8, 5',
   }).addTo(map);
   circle.bindTooltip(`半径 ${radiusKm}km 圏内`, { permanent: true, direction: 'center', className: 'radius-tooltip' });
 
@@ -2750,7 +2751,7 @@ function renderCampDrawer(d) {
           <!-- 半径可視化マップ -->
           <div id="drawerRadiusMap_${d.id}" style="height:280px; width:100%; border-radius:8px; border:1px solid rgba(52,211,153,0.3); position:relative; z-index:10;"></div>
           <div style="font-size:10px; color:var(--text-3); margin-top:6px; text-align:center;">
-            🟢 緑の円 = 広告が配信される範囲　📍 中心 = 院の所在地
+            🔵 青い円 = 広告が配信される範囲　📍 赤マーカー = 院の所在地
           </div>
         </div>
       </div>
