@@ -190,6 +190,8 @@ def init_db():
             name TEXT NOT NULL, status TEXT DEFAULT 'ENABLED',
             budget_micros BIGINT DEFAULT 0, budget_locked INTEGER DEFAULT 0,
             campaign_type TEXT DEFAULT 'SEARCH', target_region TEXT,
+            location_type TEXT DEFAULT 'proximity', location_radius_km REAL DEFAULT 8.0,
+            location_geo_targets TEXT DEFAULT '',
             youtube_video_id TEXT DEFAULT '',
             created_at {TS}, updated_at {TS},
             FOREIGN KEY (clinic_id) REFERENCES clinics(id))""",
@@ -416,6 +418,10 @@ def init_db():
         # YouTube広告編集内容のDB永続化（GAQL取得失敗時の復元用）
         "ALTER TABLE campaigns ADD COLUMN youtube_video_id TEXT DEFAULT ''",
         "ALTER TABLE campaigns ADD COLUMN ad_content_json TEXT DEFAULT ''",
+        # キャンペーン個別の配信位置設定モード (proximity / geo_target)
+        "ALTER TABLE campaigns ADD COLUMN location_type TEXT DEFAULT 'proximity'",
+        "ALTER TABLE campaigns ADD COLUMN location_radius_km REAL DEFAULT 8.0",
+        "ALTER TABLE campaigns ADD COLUMN location_geo_targets TEXT DEFAULT ''",
     ]
     for sql in migrations:
         try:

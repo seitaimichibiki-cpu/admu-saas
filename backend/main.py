@@ -1141,9 +1141,36 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
             loc = cc.get("location", {})
             if loc.get("geoTargetConstant"):
                 location = {"type": "geo_target", "resource": loc["geoTargetConstant"]}
-                break
     except Exception as e:
         print(f"[get_campaign_detail] ③で例外: {e}")
+
+    # DBレコードに基づく位置情報フォールバック
+    if not location and campaign:
+        loc_type = campaign.get("location_type") or "proximity"
+        rad_km = campaign.get("location_radius_km") or 8.0
+        c_lat = acc.get("clinic_lat") or 34.868
+        c_lon = acc.get("clinic_lon") or 138.257
+        geo_tg_raw = campaign.get("location_geo_targets") or ""
+        geo_tgs = []
+        if geo_tg_raw:
+            try:
+                geo_tgs = json.loads(geo_tg_raw)
+            except Exception:
+                pass
+        
+        if loc_type == "proximity":
+            location = {
+                "type": "proximity",
+                "lat": c_lat,
+                "lon": c_lon,
+                "radius_km": rad_km
+            }
+        else:
+            location = {
+                "type": "geo_target",
+                "geo_targets": geo_tgs,
+                "region_name": campaign.get("target_region", "")
+            }
 
     # ④ 広告文（RSA + DemandGen）と審査状況
     ads = []
@@ -7983,12 +8010,15 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     acc = _require_account(req.clinic_id)
     client = _get_ads_client(acc, req.platform)
     
+    lat = req.lat if req.lat is not None else acc.get("clinic_lat")
+    lon = req.lon if req.lon is not None else acc.get("clinic_lon")
+    
     loc_config = {
         "type": req.type,
-        "lat": req.lat,
-        "lon": req.lon,
-        "radius_km": req.radius_km,
-        "geo_targets": req.geo_targets,
+        "lat": lat,
+        "lon": lon,
+        "radius_km": req.radius_km or 8,
+        "geo_targets": req.geo_targets or [],
     }
     
     res = client.update_campaign_location(req.google_campaign_id, loc_config)
@@ -7998,18 +8028,21 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     # ローカルDB上のキャンペーンデータも更新する
     region_str = ""
     if req.type == "proximity":
-        region_str = f"半径{req.radius_km}km"
+        region_str = f"半径{req.radius_km or 8}km"
     elif req.type == "geo_target" and req.geo_targets:
         region_str = "・".join(req.geo_targets)
 
-    if region_str:
-        from datetime import datetime
-        with db.get_conn() as conn:
-            conn.execute(
-                "UPDATE campaigns SET target_region=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
-                (region_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), req.google_campaign_id, req.clinic_id)
-            )
-            conn.commit()
+    geo_targets_str = json.dumps(req.geo_targets or [], ensure_ascii=False)
+
+    from datetime import datetime
+    with db.get_conn() as conn:
+        conn.execute(
+            """UPDATE campaigns 
+               SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
+               WHERE (google_campaign_id=? OR id=?) AND clinic_id=?""",
+            (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(req.google_campaign_id), str(req.google_campaign_id), req.clinic_id)
+        )
+        conn.commit()
 
     return res
 
@@ -9598,7 +9631,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260816-feature-audit-fixes', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260816-location-mode-selection', html)
 
 
         return HTMLResponse(

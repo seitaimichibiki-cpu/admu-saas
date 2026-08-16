@@ -2792,8 +2792,8 @@ function renderCampDrawer(d) {
         <div class="drawer-location-icon">🗺️</div>
         <div>
           <div class="drawer-location-text">半径 <strong>${d.location.radius_km}km</strong> 圏内</div>
-          <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4)} / 経度 ${d.location.lon?.toFixed(4)}</div>
-          <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">藤枝市田沼1-19-7を中心とした${d.location.radius_km}km圏</div>
+          <div class="drawer-location-sub">緯度 ${d.location.lat?.toFixed(4) || '-'} / 経度 ${d.location.lon?.toFixed(4) || '-'}</div>
+          <div class="drawer-location-sub" style="margin-top:4px;color:#60a5fa">院の位置情報を中心とした${d.location.radius_km}km圏内</div>
         </div>
       </div>` : `
       <div class="drawer-location-box">
@@ -8449,8 +8449,6 @@ async function applyManualLocation() {
     const rad = parseInt(document.getElementById('manualLocRadius').value);
     if (isNaN(rad) || rad <= 0) { toast('有効な半径を入力してください', 'error'); return; }
     bodyData.radius_km = rad;
-    bodyData.lat = 34.868;
-    bodyData.lon = 138.257;
   } else {
     const pref = document.getElementById('manualLocPref').value;
     const geosVal = document.getElementById('manualLocGeos').value.trim();
