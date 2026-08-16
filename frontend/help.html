@@ -98,7 +98,7 @@
     <div class="nav-section">
       <div class="nav-title">広告管理</div>
       <a class="nav-item" href="#campaign">キャンペーン管理</a>
-      <a class="nav-item" href="#market-area">商圏設定（配信地域）</a>
+      <a class="nav-item" href="#market-area">配信エリア設定</a>
       <a class="nav-item" href="#budget">予算・入札設定</a>
       <a class="nav-item" href="#neg-kw">除外キーワード</a>
     </div>
@@ -107,6 +107,14 @@
       <a class="nav-item" href="#report">成果レポート</a>
       <a class="nav-item" href="#alert">アラート設定</a>
       <a class="nav-item" href="#scheduler">自動実行の仕組み</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-title">AIツール</div>
+      <a class="nav-item" href="#yt-ads">YouTube広告の作成</a>
+      <a class="nav-item" href="#kw-suggest">キーワード提案AI</a>
+      <a class="nav-item" href="#lp-diagnose">LP診断AI</a>
+      <a class="nav-item" href="#heatmap">パフォーマンスヒートマップ</a>
+      <a class="nav-item" href="#csv-pdf">CSV/PDFエクスポート</a>
     </div>
     <div class="nav-section">
       <div class="nav-title">追加情報</div>
@@ -235,43 +243,71 @@
     </section>
 
     <section id="market-area">
-      <h2>🗺️ 商圏設定（配信対象市区町村のブロック登録）</h2>
-      <p>クリニックの商圏（広告配信のターゲットとする市区町村）を設定することで、キャンペーンの配信地域マップ上に<strong style="color:var(--t1)">町丁字レベルのブロック</strong>が表示され、タップして細かくターゲティングを選択できます。</p>
+      <h2>🗺️ 配信エリア設定（キャンペーンごとの配信地域）</h2>
+      <p>各キャンペーンの広告配信エリアを設定します。キャンペーン詳細ドロワーを開くと、上部に<strong style="color:var(--t1)">「📍 範囲設定」と「🗺️ ブロック設定」の2つのタブ</strong>が表示されます。</p>
 
-      <h3>📋 設定方法</h3>
+      <div class="warn">
+        ⚠️ <strong>重要: どちらか一方のみ有効</strong><br>
+        「範囲設定」と「ブロック設定」は<strong>排他的</strong>です。<strong>最後に反映した設定だけ</strong>がGoogle広告に適用されます。両方を設定すると競合の原因になるため、必ずどちらか一方だけを使用してください。
+      </div>
+
+      <h3>📍 範囲設定（半径ターゲティング）</h3>
+      <p>院の所在地を中心とした<strong style="color:var(--t1)">半径（km）</strong>で配信エリアを指定します。Googleマップ風の明るい地図上に青い円が描画され、配信範囲が視覚的にわかります。</p>
       <div class="step-card">
         <div class="step-num">1</div>
-        <div class="step-title">設定ページの「🗺️ 商圏設定」カードを開く</div>
-        <div class="step-desc">サイドメニュー「⚙️ 設定」を開くと、上部に青い「🗺️ 商圏設定」カードがあります。</div>
+        <div class="step-title">キャンペーン一覧から対象キャンペーンの「詳細・編集」ドロワーを開く</div>
+        <div class="step-desc">キャンペーン別成果テーブルのキャンペーン名をクリックします。</div>
       </div>
       <div class="step-card">
         <div class="step-num">2</div>
-        <div class="step-title">都道府県 → 市区町村を選択して「＋ 商圏に追加」</div>
-        <div class="step-desc">全国47都道府県から都道府県を選び、次に市区町村を選択して「＋ 商圏に追加」ボタンを押します。リストにない市区町村は「✏️ コード直接入力」で5桁の市区町村コードを手入力できます。</div>
+        <div class="step-title">「📍 範囲設定」タブを選択</div>
+        <div class="step-desc">ドロワー上部の配信エリアカードで「📍 範囲設定」タブをクリックします。</div>
       </div>
       <div class="step-card">
         <div class="step-num">3</div>
-        <div class="step-title">「設定を保存」ボタンを押して確定</div>
-        <div class="step-desc">画面下部の「設定を保存」ボタンを押すと、登録した商圏情報がデータベースに保存されます。</div>
+        <div class="step-title">半径（km）を入力</div>
+        <div class="step-desc">数値を入力すると地図上の青い円がリアルタイムで拡縮します。どこまで配信されるかを視覚的に確認できます。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-title">「⚡ Google広告に即時反映」ボタンを押す</div>
+        <div class="step-desc">設定したい半径が決まったらボタンを押すと、Google広告に即座に反映されます。</div>
       </div>
 
-      <h3>🗺️ キャンペーンドロワーでのブロック選択</h3>
-      <p>キャンペーン一覧から「詳細・編集」ドロワーを開くと、商圏に登録した市区町村の<strong style="color:var(--t1)">町丁字境界ポリゴン</strong>がLeafletマップ上に色分け表示されます。ポリゴンをタップすることで、配信対象・除外地区を細かく選択できます。</p>
+      <h3>🗺️ ブロック設定（町丁字ポリゴン指定）</h3>
+      <p>地図上の<strong style="color:var(--t1)">町丁字ブロック</strong>をタップして配信エリアをピンポイントで指定します。事前に「⚙️ 設定」→「🗺️ 商圏設定」で市区町村を登録しておく必要があります。</p>
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">事前準備: 商圏に市区町村を登録</div>
+        <div class="step-desc">サイドメニュー「⚙️ 設定」→「🗺️ 商圏設定」カードで、都道府県と市区町村を選択して「＋ 商圏に追加」ボタンを押します。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">「🗺️ ブロック設定」タブを選択</div>
+        <div class="step-desc">キャンペーンドロワーの配信エリアカードで「🗺️ ブロック設定」タブをクリックします。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">地図上のブロックをタップして選択</div>
+        <div class="step-desc">ダークマップ上に表示された町丁字ポリゴンをタップして配信対象エリアを選択します（再タップで解除）。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-title">「⚡ 選択した町丁字エリアをGoogle広告へ即時反映」ボタンを押す</div>
+        <div class="step-desc">選択済みの地区がGoogle広告に半径ターゲティングとして一括反映されます。</div>
+      </div>
 
       <div class="warn">
         ⏱️ <strong>初回読み込み時の待ち時間について</strong><br>
-        新しい市区町村の境界データは、初回表示時にサーバーが政府統計（e-Stat）からデータをダウンロード＆変換するため、<strong>初回のみ5〜15秒ほどの待ち時間</strong>が発生します。2回目以降はサーバーにキャッシュされるため即座に表示されます。
-      </div>
-      <div class="tip">
-        💡 <strong>全国対応:</strong> 北海道から沖縄まで、日本全国すべての市区町村に対応しています。商圏は何件でも追加・削除が可能です。外販時にもクリニックごとに自由に商圏を設定できます。
+        新しい市区町村の境界データは、初回表示時にサーバーが政府統計（e-Stat）からデータをダウンロード＆変換するため、<strong>初回のみ5〜15秒ほどの待ち時間</strong>が発生します。2回目以降はキャッシュされるため即座に表示されます。
       </div>
 
       <table>
-        <tr><th>項目</th><th>説明</th></tr>
-        <tr><td><strong>都道府県</strong></td><td>47都道府県から選択</td></tr>
-        <tr><td><strong>市区町村</strong></td><td>主要都市はプリセット済み。その他はコード直接入力</td></tr>
-        <tr><td><strong>色分け</strong></td><td>商圏の市区町村ごとに自動的に異なるカラーで表示</td></tr>
-        <tr><td><strong>初回読み込み</strong></td><td>新規都道府県は初回のみ5〜15秒（キャッシュ後は瞬時）</td></tr>
+        <tr><th>項目</th><th>範囲設定</th><th>ブロック設定</th></tr>
+        <tr><td><strong>地図タイル</strong></td><td>CartoDB Voyager（明るい/Googleマップ風）</td><td>CartoDB Dark（ダーク）</td></tr>
+        <tr><td><strong>指定単位</strong></td><td>半径 ○km 圏内</td><td>町丁字ポリゴン単位</td></tr>
+        <tr><td><strong>Google広告への反映</strong></td><td>Proximity（半径）ターゲティング</td><td>複数Proximity（各ブロック中心半径0.5km）</td></tr>
+        <tr><td><strong>適したシーン</strong></td><td>院の周辺に均等に配信したい場合</td><td>特定の住宅地や商業地域にピンポイント配信したい場合</td></tr>
       </table>
     </section>
 
@@ -574,6 +610,83 @@
         <div class="faq-a">
           <p>「入札ルール」で設定した条件（例: CTR &lt; 2% のとき入札を-10%）に基づき、1時間ごとに自動実行されます。ダッシュボードの「入札ルール」からルールの追加・変更・無効化ができます。デモモード中は実際の広告には一切変更が加わりません。</p>
         </div>
+      </div>
+    </section>
+
+    <section id="yt-ads">
+      <h2>🎬 YouTube広告（Demand Gen）の作成</h2>
+      <p>AdMuではYouTube動画広告（Demand Gen レスポンシブ広告）をダッシュボードから直接作成できます。</p>
+
+      <h3>📋 作成に必要なもの</h3>
+      <table>
+        <tr><th>項目</th><th>説明</th><th>制限</th></tr>
+        <tr><td><strong>YouTube動画URL</strong></td><td>広告に使用するYouTube動画のURL</td><td>公開 or 限定公開</td></tr>
+        <tr><td><strong>ロゴ画像</strong></td><td>広告に表示されるロゴ（1:1推奨）</td><td>最低1枚必須</td></tr>
+        <tr><td><strong>ビジネス名</strong></td><td>広告主名として表示</td><td>最大25文字（半角）</td></tr>
+        <tr><td><strong>見出し</strong></td><td>広告のメイン見出し</td><td>最大40文字（日本語20文字）</td></tr>
+        <tr><td><strong>長い見出し</strong></td><td>詳細見出し</td><td>最大90文字（日本語45文字）</td></tr>
+        <tr><td><strong>説明文</strong></td><td>広告の説明</td><td>最大90文字（日本語45文字）</td></tr>
+      </table>
+
+      <div class="warn">
+        ⚠️ <strong>Google広告ポリシー注意:</strong> 見出し・説明文にカッコ()、【】、感嘆符!は使用不可。ポリシー違反で広告が不承認になります。
+      </div>
+    </section>
+
+    <section id="kw-suggest">
+      <h2>🔍 キーワード提案AI</h2>
+      <p>AIが院の特徴・ペルソナ・競合分析に基づいて、新しい検索キーワードを自動提案します。提案されたキーワードはワンクリックでGoogle広告キャンペーンに追加できます。</p>
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">サイドメニュー「🔍 キーワード提案AI」を開く</div>
+        <div class="step-desc">AIツールメニューからキーワード提案AIを選択します。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">AIが自動分析してキーワード候補を生成</div>
+        <div class="step-desc">ペルソナ設定・既存キーワード・競合情報に基づいて提案されます。</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">追加したいキーワードを選択して「⚡ Google広告に追加」</div>
+        <div class="step-desc">選択したキーワードが指定キャンペーンの広告グループに即時追加されます。</div>
+      </div>
+    </section>
+
+    <section id="lp-diagnose">
+      <h2>🏥 LP診断AI</h2>
+      <p>ホームページ（ランディングページ）のURLを入力すると、AIがCVR（コンバージョン率）改善のための具体的な提案を行います。</p>
+      <div class="tip">
+        💡 <strong>活用方法:</strong> AIチャット画面で「ホームページのURL診断をお願いします」と入力し、URLを貼り付けてください。ページの構成・CTA配置・ファーストビュー・信頼性要素などを総合的に診断します。
+      </div>
+    </section>
+
+    <section id="heatmap">
+      <h2>📊 パフォーマンスヒートマップ</h2>
+      <p>時間帯×曜日のヒートマップで、広告パフォーマンスが高い時間帯を視覚的に特定できます。</p>
+      <h3>使い方</h3>
+      <ol>
+        <li>サイドメニュー「📊 ヒートマップ」を開く</li>
+        <li>対象キャンペーンと指標（クリック率/コンバージョン率等）を選択</li>
+        <li>ヒートマップが表示され、<strong style="color:var(--t1)">赤い（高スコア）時間帯</strong>が一目でわかる</li>
+        <li>分析結果に基づき「⚡ ゴールデンタイム入札適用」ボタンで高パフォーマンス時間帯の入札を自動で+30%に設定</li>
+      </ol>
+      <div class="tip">
+        💡 <strong>ゴールデンタイム入札:</strong> ヒートマップで特定された高パフォーマンス時間帯に自動で入札倍率+30%が適用されます。Google広告のAdScheduleとして即時反映されます。
+      </div>
+    </section>
+
+    <section id="csv-pdf">
+      <h2>📥 CSV/PDFエクスポート</h2>
+      <p>ダッシュボードの成果データをCSVまたはPDF形式でダウンロードできます。</p>
+      <h3>エクスポート方法</h3>
+      <ol>
+        <li>ダッシュボード画面右上の日付範囲を選択</li>
+        <li>「📥 CSV」ボタンをクリックするとCSVファイルがダウンロードされます</li>
+        <li>「📄 PDF」ボタンをクリックするとPDFレポートが生成されます</li>
+      </ol>
+      <div class="tip">
+        💡 CSVにはインプレッション・クリック・費用・コンバージョンなどの日別データが含まれます。Excelで開いてグラフ作成やクライアント報告に活用できます。
       </div>
     </section>
 

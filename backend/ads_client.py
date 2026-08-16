@@ -1081,7 +1081,8 @@ class AdsClient:
                     )
                     print(f"[AdsClient] 既存のスケジュールクライテリア {len(remove_operations)} 件を削除しました (Campaign: {campaign_id})")
             except Exception as ex_del:
-                print(f"[AdsClient] 既存スケジュール削除中にエラーが発生しました（無視して続行）: {ex_del}")
+                print(f"[AdsClient] 既存スケジュール削除中にエラー: {ex_del}")
+                raise  # 削除失敗時は新規追加せずエラーを返す)
 
             operations = []
             for slot in schedule_modifiers:
@@ -1408,7 +1409,8 @@ class AdsClient:
                     )
                     print(f"[AdsClient] 既存の位置ターゲティング {len(remove_operations)} 件を削除しました (Campaign: {campaign_id})")
             except Exception as ex_del:
-                print(f"[AdsClient] 既存位置ターゲット削除中にエラー（無視して続行）: {ex_del}")
+                print(f"[AdsClient] 既存位置ターゲット削除中にエラー: {ex_del}")
+                raise  # 削除失敗時は新規追加せずエラーを返す)
 
             # 2. 新しい位置ターゲットを追加
             create_operations = []
