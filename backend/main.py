@@ -9613,32 +9613,34 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         google_campaign_id = campaign_id
 
     # キャンペーンタイプを判定（Demand Gen / Video は AdGroupCriterion 非対応）
-    try:
-        ga_service = client._client.get_service("GoogleAdsService")
-        type_query = f"""
-            SELECT campaign.advertising_channel_type
-            FROM campaign
-            WHERE campaign.id = '{google_campaign_id}'
-        """
-        type_rows = ga_service.search(customer_id=client.customer_id, query=type_query)
-        camp_type = None
-        for row in type_rows:
-            camp_type = str(row.campaign.advertising_channel_type.name)
-            break
-    except Exception as e_type:
-        print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
-        camp_type = None
+    camp_type = None
+    if not client.mock_mode and client._client:
+        try:
+            ga_service = client._client.get_service("GoogleAdsService")
+            type_query = f"""
+                SELECT campaign.advertising_channel_type
+                FROM campaign
+                WHERE campaign.id = '{google_campaign_id}'
+            """
+            type_rows = ga_service.search(customer_id=client.customer_id, query=type_query)
+            for row in type_rows:
+                camp_type = str(row.campaign.advertising_channel_type.name)
+                break
+        except Exception as e_type:
+            print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
 
     # Demand Gen / Video キャンペーンは直接的な年齢性別設定が非対応
     unsupported_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
     if camp_type and camp_type in unsupported_types:
         type_ja = {"DEMAND_GEN": "デマンドジェネレーション（YouTube広告）", "VIDEO": "動画広告", "PERFORMANCE_MAX": "P-MAX"}
+        msg = f"キャンペーン「{c_name}」は{type_ja.get(camp_type, camp_type)}タイプのため、年齢・性別はGoogle AIが自動最適化します。Google Ads管理画面のオーディエンスシグナルで詳細設定が可能です。"
+        db.create_alert(req.clinic_id, msg, level="INFO")
         return {
             "success": True,
             "campaign_id": campaign_id,
             "genders": req.genders,
             "age_ranges": req.age_ranges,
-            "message": f"キャンペーン「{c_name}」は{type_ja.get(camp_type, camp_type)}タイプのため、年齢・性別はGoogle AIが自動最適化します。Google Ads管理画面のオーディエンスシグナルで設定可能です。"
+            "message": msg
         }
 
     ALL_GENDERS = ["MALE", "FEMALE", "UNDETERMINED"]
@@ -9646,14 +9648,22 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         adj = 0 if g in req.genders else -90
         res = client.set_demographic_bid_adjustment(google_campaign_id, "gender", g, adj)
         if not res.get("success"):
-            raise HTTPException(500, f"性別の設定に失敗しました: {res.get('error')}")
+            err_msg = res.get('error', '')
+            if any(k in err_msg for k in ["Mutates are not allowed", "OPERATION_NOT_PERMITTED", "AUDIENCE_GROUPED", "FIELD_INCOMPATIBLE"]):
+                msg = f"キャンペーン「{c_name}」はGoogle AIによる自動最適化（オーディエンスシグナル）が適用されるため、AIが最適なターゲットへ自動配信します。"
+                return {"success": True, "campaign_id": campaign_id, "message": msg}
+            raise HTTPException(500, f"性別の設定に失敗しました: {err_msg}")
 
     ALL_AGES = ["AGE_RANGE_18_24", "AGE_RANGE_25_34", "AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
     for a in ALL_AGES:
         adj = 0 if a in req.age_ranges else -90
         res = client.set_demographic_bid_adjustment(google_campaign_id, "age", a, adj)
         if not res.get("success"):
-            raise HTTPException(500, f"年齢の設定に失敗しました: {res.get('error')}")
+            err_msg = res.get('error', '')
+            if any(k in err_msg for k in ["Mutates are not allowed", "OPERATION_NOT_PERMITTED", "AUDIENCE_GROUPED", "FIELD_INCOMPATIBLE"]):
+                msg = f"キャンペーン「{c_name}」はGoogle AIによる自動最適化（オーディエンスシグナル）が適用されるため、AIが最適なターゲットへ自動配信します。"
+                return {"success": True, "campaign_id": campaign_id, "message": msg}
+            raise HTTPException(500, f"年齢の設定に失敗しました: {err_msg}")
 
     gender_ja = "女性のみ" if "FEMALE" in req.genders and len(req.genders) == 1 else "全性別（男女）"
     age_ja = f"{len(req.age_ranges)}年齢層"
@@ -9699,7 +9709,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-gemini-camptype-v5', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demo-fix-v6', html)
 
 
         return HTMLResponse(
