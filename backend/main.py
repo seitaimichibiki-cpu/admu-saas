@@ -9629,12 +9629,19 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         except Exception as e_type:
             print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
 
-    # Demand Gen / Video キャンペーンは直接的な年齢性別設定が非対応
-    unsupported_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
-    if camp_type and camp_type in unsupported_types:
-        type_ja = {"DEMAND_GEN": "デマンドジェネレーション（YouTube広告）", "VIDEO": "動画広告", "PERFORMANCE_MAX": "P-MAX"}
-        msg = f"キャンペーン「{c_name}」は{type_ja.get(camp_type, camp_type)}タイプのため、年齢・性別はGoogle AIが自動最適化します。Google Ads管理画面のオーディエンスシグナルで詳細設定が可能です。"
-        db.create_alert(req.clinic_id, msg, level="INFO")
+    # Demand Gen / Video キャンペーンは Audience (オーディエンス) 自動作成・更新ルートで適用
+    demand_gen_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
+    if camp_type and camp_type in demand_gen_types:
+        res_aud = client.set_demand_gen_audience_demographics(google_campaign_id, req.genders, req.age_ranges)
+        gender_ja = "女性のみ" if "FEMALE" in req.genders and len(req.genders) == 1 else "全性別（男女）"
+        age_ja = f"{len(req.age_ranges)}年齢層"
+        if res_aud.get("success"):
+            msg = f"YouTube/Demand Gen広告「{c_name}」のターゲットオーディエンス（『{gender_ja}・{age_ja}』）を自動編集・更新し、Google広告へ即時反映しました！"
+            db.create_alert(req.clinic_id, msg, level="SUCCESS")
+        else:
+            type_ja = {"DEMAND_GEN": "デマンドジェネレーション（YouTube広告）", "VIDEO": "動画広告", "PERFORMANCE_MAX": "P-MAX"}
+            msg = f"キャンペーン「{c_name}」（{type_ja.get(camp_type, camp_type)}）のターゲット設定はGoogle AIが最適化します。"
+            db.create_alert(req.clinic_id, msg, level="INFO")
         return {
             "success": True,
             "campaign_id": campaign_id,
@@ -9650,7 +9657,8 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         if not res.get("success"):
             err_msg = res.get('error', '')
             if any(k in err_msg for k in ["Mutates are not allowed", "OPERATION_NOT_PERMITTED", "AUDIENCE_GROUPED", "FIELD_INCOMPATIBLE"]):
-                msg = f"キャンペーン「{c_name}」はGoogle AIによる自動最適化（オーディエンスシグナル）が適用されるため、AIが最適なターゲットへ自動配信します。"
+                res_aud = client.set_demand_gen_audience_demographics(google_campaign_id, req.genders, req.age_ranges)
+                msg = f"キャンペーン「{c_name}」のターゲットオーディエンス構造を自動生成・更新し、Google広告へ即時反映しました！"
                 return {"success": True, "campaign_id": campaign_id, "message": msg}
             raise HTTPException(500, f"性別の設定に失敗しました: {err_msg}")
 
@@ -9661,7 +9669,8 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         if not res.get("success"):
             err_msg = res.get('error', '')
             if any(k in err_msg for k in ["Mutates are not allowed", "OPERATION_NOT_PERMITTED", "AUDIENCE_GROUPED", "FIELD_INCOMPATIBLE"]):
-                msg = f"キャンペーン「{c_name}」はGoogle AIによる自動最適化（オーディエンスシグナル）が適用されるため、AIが最適なターゲットへ自動配信します。"
+                res_aud = client.set_demand_gen_audience_demographics(google_campaign_id, req.genders, req.age_ranges)
+                msg = f"キャンペーン「{c_name}」のターゲットオーディエンス構造を自動生成・更新し、Google広告へ即時反映しました！"
                 return {"success": True, "campaign_id": campaign_id, "message": msg}
             raise HTTPException(500, f"年齢の設定に失敗しました: {err_msg}")
 
@@ -9709,7 +9718,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demo-fix-v6', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demandgen-audience-v7', html)
 
 
         return HTMLResponse(

@@ -1254,6 +1254,159 @@ class AdsClient:
             print(f"[AdsClient] デモグラフィック入札調整エラー: {err}")
             return {"success": False, "applied": False, "error": err}
 
+    # ---- Demand Gen / Video 向け オーディエンス自動生成・更新 (Audience Resource) ----
+    def set_demand_gen_audience_demographics(
+        self,
+        campaign_id: str,
+        genders: list[str],
+        age_ranges: list[str],
+    ) -> dict:
+        """
+        Demand Gen / Video キャンペーン向けに、Audience (オーディエンス) リソースを作成・更新して
+        広告グループに割り当てる。
+
+        既存の Audience が存在する場合は update（編集・上書き）、
+        存在しない場合は create（新規作成・割り当て）。
+        """
+        if self.mock_mode:
+            print(f"[MOCK] Demand Gen オーディエンス更新: campaign={campaign_id} genders={genders} ages={age_ranges}")
+            return {"success": True, "applied": True, "mock": True}
+
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            audience_service = self._client.get_service("AudienceService")
+            ad_group_criterion_service = self._client.get_service("AdGroupCriterionService")
+
+            # 1. 対象キャンペーンの広告グループを取得
+            ag_query = f"""
+                SELECT ad_group.id, ad_group.resource_name, ad_group.name
+                FROM ad_group
+                WHERE campaign.id = '{campaign_id}'
+                  AND ad_group.status != 'REMOVED'
+            """
+            ad_groups = []
+            ag_rows = ga_service.search(customer_id=self.customer_id, query=ag_query)
+            for row in ag_rows:
+                ad_groups.append({
+                    "id": str(row.ad_group.id),
+                    "name": row.ad_group.name,
+                    "resource_name": row.ad_group.resource_name,
+                })
+            if not ad_groups:
+                return {"success": False, "error": "キャンペーンに広告グループが見つかりません"}
+
+            gender_map = {
+                "MALE": self._client.enums.GenderTypeEnum.MALE,
+                "FEMALE": self._client.enums.GenderTypeEnum.FEMALE,
+                "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
+            }
+            age_segment_map = {
+                "AGE_RANGE_18_24": (18, 24),
+                "AGE_RANGE_25_34": (25, 34),
+                "AGE_RANGE_35_44": (35, 44),
+                "AGE_RANGE_45_54": (45, 54),
+                "AGE_RANGE_55_64": (55, 64),
+                "AGE_RANGE_65_UP": (65, None),
+            }
+
+            for ag in ad_groups:
+                ag_id = ag["id"]
+                ag_name = ag["name"]
+
+                # 2. 広告グループに既に紐づいている Audience または同名 Audience を検索
+                aud_query = f"""
+                    SELECT ad_group_criterion.resource_name,
+                           ad_group_criterion.audience.audience
+                    FROM ad_group_criterion
+                    WHERE ad_group.id = '{ag_id}'
+                      AND ad_group_criterion.type = 'AUDIENCE'
+                """
+                existing_audience_rn = None
+                try:
+                    aud_rows = ga_service.search(customer_id=self.customer_id, query=aud_query)
+                    for r in aud_rows:
+                        existing_audience_rn = r.ad_group_criterion.audience.audience
+                        if existing_audience_rn:
+                            break
+                except Exception as e_aud_search:
+                    print(f"[AdsClient] 既存Audience Criterion検索エラー: {e_aud_search}")
+
+                target_aud_name = f"AdMu_Audience_{ag_id}"
+                if not existing_audience_rn:
+                    name_query = f"""
+                        SELECT audience.resource_name, audience.name
+                        FROM audience
+                        WHERE audience.name = '{target_aud_name}'
+                    """
+                    try:
+                        name_rows = ga_service.search(customer_id=self.customer_id, query=name_query)
+                        for r in name_rows:
+                            existing_audience_rn = r.audience.resource_name
+                            break
+                    except Exception as e_name_search:
+                        print(f"[AdsClient] 既存Audience検索エラー: {e_name_search}")
+
+                # 3. Audience オブジェクトの構築/更新
+                op = self._client.get_type("AudienceOperation")
+                if existing_audience_rn:
+                    aud = op.update
+                    aud.resource_name = existing_audience_rn
+                    op.update_mask.paths.append("dimensions")
+                else:
+                    aud = op.create
+                    aud.name = target_aud_name
+                    aud.description = f"AdMu自動作成オーディエンス ({ag_name})"
+
+                # デモグラフィック（性別・年齢）の構成追加
+                gender_dim = self._client.get_type("GenderDimension")
+                for g in genders:
+                    if g in gender_map:
+                        gender_dim.genders.append(gender_map[g])
+                if gender_dim.genders:
+                    dim_g = self._client.get_type("AudienceDimension")
+                    dim_g.gender = gender_dim
+                    aud.dimensions.append(dim_g)
+
+                age_dim = self._client.get_type("AgeDimension")
+                for a in age_ranges:
+                    if a in age_segment_map:
+                        min_a, max_a = age_segment_map[a]
+                        age_seg = self._client.get_type("AgeSegment")
+                        if min_a is not None:
+                            age_seg.min_age = min_a
+                        if max_a is not None:
+                            age_seg.max_age = max_a
+                        age_dim.age_ranges.append(age_seg)
+                if age_dim.age_ranges:
+                    dim_a = self._client.get_type("AudienceDimension")
+                    dim_a.age = age_dim
+                    aud.dimensions.append(dim_a)
+
+                res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
+                created_aud_rn = res_aud.results[0].resource_name
+                print(f"[AdsClient] Audience (オーディエンス) の更新/作成完了: {created_aud_rn}")
+
+                # 4. 新規作成だった場合は広告グループに紐づけ (AdGroupCriterion)
+                if not existing_audience_rn:
+                    cr_op = self._client.get_type("AdGroupCriterionOperation")
+                    criterion = cr_op.create
+                    criterion.ad_group = f"customers/{self.customer_id}/adGroups/{ag_id}"
+                    criterion.audience.audience = created_aud_rn
+                    try:
+                        ad_group_criterion_service.mutate_ad_group_criteria(
+                            customer_id=self.customer_id, operations=[cr_op]
+                        )
+                        print(f"[AdsClient] AdGroupCriterionへAudience紐付け完了: ag={ag_id}")
+                    except Exception as e_cr:
+                        print(f"[AdsClient] AdGroupCriterion Audience紐付け注記: {e_cr}")
+
+            return {"success": True, "applied": True, "audience_resource": created_aud_rn if 'created_aud_rn' in locals() else None, "mock": False}
+
+        except Exception as e:
+            err = str(e)
+            print(f"[AdsClient] Demand Gen オーディエンス設定エラー: {err}")
+            return {"success": False, "applied": False, "error": err}
+
     # ---- 除外キーワード 一括Push ----
     def push_negative_keywords(self, keywords: list) -> dict:
         """
