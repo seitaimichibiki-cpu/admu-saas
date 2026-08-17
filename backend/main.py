@@ -9605,6 +9605,8 @@ class SetDemographicsReq(BaseModel):
     genders: list[str] = ["FEMALE"]
     age_ranges: list[str] = ["AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
 
+_DEMOGRAPHICS_CACHE = {}
+
 @app.post("/api/campaigns/{campaign_id}/set-demographics")
 def set_demographics(campaign_id: str, req: SetDemographicsReq):
     """キャンペーンごとのターゲット年齢・性別をGoogle Adsへ即時適用"""
@@ -9623,6 +9625,17 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         c_name = "対象キャンペーン"
         google_campaign_id = campaign_id
 
+    # キャッシュおよびDBへ即時保存（campaign_idおよびgoogle_campaign_id両方のキーで保持）
+    payload = {"genders": req.genders, "age_ranges": req.age_ranges}
+    _DEMOGRAPHICS_CACHE[str(campaign_id)] = payload
+    _DEMOGRAPHICS_CACHE[str(google_campaign_id)] = payload
+    try:
+        db.save_campaign_demographics(campaign_id, req.clinic_id, req.genders, req.age_ranges)
+        if google_campaign_id:
+            db.save_campaign_demographics(google_campaign_id, req.clinic_id, req.genders, req.age_ranges)
+    except Exception as e_db:
+        print(f"[set_demographics] DB保存エラー: {e_db}")
+
     # キャンペーンタイプを判定（Demand Gen / Video は AdGroupCriterion 非対応）
     camp_type = None
     if not client.mock_mode and client._client:
@@ -9639,12 +9652,6 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
                 break
         except Exception as e_type:
             print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
-
-    # DBへローカル永続化
-    try:
-        db.save_campaign_demographics(campaign_id, req.clinic_id, req.genders, req.age_ranges)
-    except Exception as e_db:
-        print(f"[set_demographics] DB保存エラー: {e_db}")
 
     # Demand Gen / Video キャンペーンは Audience (オーディエンス) 自動作成・更新ルートで適用
     demand_gen_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
@@ -9709,12 +9716,18 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
 @app.get("/api/campaigns/{campaign_id}/demographics")
 def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
     """キャンペーンの最新のターゲット設定（性別・年齢層）を取得"""
-    # 1. まずDBから保存済みデータを取得
+    # 1. まずメモリキャッシュから即時取得
+    cid_s = str(campaign_id)
+    if cid_s in _DEMOGRAPHICS_CACHE:
+        return {"success": True, **_DEMOGRAPHICS_CACHE[cid_s]}
+
+    # 2. DBから保存済みデータを取得
     saved = db.get_campaign_demographics(campaign_id, clinic_id)
     if saved and isinstance(saved, dict) and "genders" in saved:
+        _DEMOGRAPHICS_CACHE[cid_s] = saved
         return {"success": True, "genders": saved.get("genders", []), "age_ranges": saved.get("age_ranges", [])}
 
-    # デフォルトフォールバック（女性のみ・35歳以上ターゲット）
+    # デフォルトフォールバック
     return {
         "success": True,
         "genders": ["FEMALE"],
@@ -9751,7 +9764,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-numeric-overflow-v10', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-checkbox-reset-v11', html)
 
 
         return HTMLResponse(

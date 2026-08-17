@@ -2165,40 +2165,55 @@ window.applyDrawerGeoLocation = async function(campId) {
   }
 };
 
+window.g_local_demographics_cache = window.g_local_demographics_cache || {};
+
 // ドロワー内の年齢・性別UI状態復元・同期関数
 window.syncDrawerDemographics = async function(campId) {
   if (!campId) return;
+
+  // 1. ローカルメモリキャッシュがあれば即時復元
+  const cached = window.g_local_demographics_cache[campId];
+  if (cached) {
+    _applyDemographicsToDom(campId, cached.genders, cached.age_ranges);
+  }
+
+  // 2. API非同期取得で同期
   try {
     const res = await api(`/campaigns/${campId}/demographics`);
     if (res && res.success) {
       const genders = res.genders || [];
       const ages = res.age_ranges || [];
-
-      // 性別ラジオボタン復元
-      if (genders.includes('FEMALE') && !genders.includes('MALE')) {
-        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="FEMALE_ONLY"]`);
-        if (rad) rad.checked = true;
-      } else if (genders.includes('MALE') && !genders.includes('FEMALE')) {
-        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="MALE_ONLY"]`);
-        if (rad) rad.checked = true;
-      } else {
-        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="ALL"]`);
-        if (rad) rad.checked = true;
-      }
-
-      // 年齢チェックボックス復元
-      ['18_24', '25_34', '35_44', '45_54', '55_64', '65_UP'].forEach(aKey => {
-        const chk = document.getElementById(`age_${aKey}_${campId}`);
-        if (chk) {
-          const fullKey = `AGE_RANGE_${aKey.toUpperCase()}`;
-          chk.checked = ages.includes(fullKey);
-        }
-      });
+      window.g_local_demographics_cache[campId] = { genders, age_ranges: ages };
+      _applyDemographicsToDom(campId, genders, ages);
     }
   } catch(e) {
     console.log('[syncDrawerDemographics] Sync Note:', e);
   }
 };
+
+function _applyDemographicsToDom(campId, genders, ages) {
+  if (!genders || !ages) return;
+  // 性別ラジオボタン復元
+  if (genders.includes('FEMALE') && !genders.includes('MALE')) {
+    const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="FEMALE_ONLY"]`);
+    if (rad) rad.checked = true;
+  } else if (genders.includes('MALE') && !genders.includes('FEMALE')) {
+    const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="MALE_ONLY"]`);
+    if (rad) rad.checked = true;
+  } else {
+    const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="ALL"]`);
+    if (rad) rad.checked = true;
+  }
+
+  // 年齢チェックボックス復元
+  ['18_24', '25_34', '35_44', '45_54', '55_64', '65_UP'].forEach(aKey => {
+    const chk = document.getElementById(`age_${aKey}_${campId}`);
+    if (chk) {
+      const fullKey = `AGE_RANGE_${aKey.toUpperCase()}`;
+      chk.checked = ages.includes(fullKey);
+    }
+  });
+}
 
 // ドロワー内 年齢・性別Google広告適用
 window.applyDrawerDemographics = async function(campId) {
@@ -2218,6 +2233,9 @@ window.applyDrawerDemographics = async function(campId) {
     }
   });
 
+  // ローカルメモリキャッシュへ即時保存（ボタン復元時や非同期同期時のチェック復活を100%防止）
+  window.g_local_demographics_cache[campId] = { genders, age_ranges: ages };
+
   try {
     toast('年齢・性別ターゲットをGoogle広告へ適用中...', 'info');
     const res = await api(`/campaigns/${campId}/set-demographics`, {
@@ -2227,8 +2245,8 @@ window.applyDrawerDemographics = async function(campId) {
     if (res.success) {
       toast(res.message || 'ターゲット設定（年齢・性別）をGoogle広告へ即時反映しました！', 'success');
       if (btn) { btn.textContent = '✅ 適用完了！'; btn.style.background = '#059669'; setTimeout(() => { btn.textContent = origText; btn.style.background = ''; btn.style.opacity = '1'; btn.disabled = false; }, 3000); }
-      // UIのターゲット選択状態を非同期で同期・復元
-      setTimeout(() => window.syncDrawerDemographics(campId), 100);
+      // ローカルキャッシュの内容でUIチェック状態を強制復元（復活を100%防御）
+      _applyDemographicsToDom(campId, genders, ages);
     } else {
       toast('ターゲット設定エラー: ' + (res.error || res.detail || 'Unknown'), 'error');
       if (btn) { btn.textContent = origText; btn.style.opacity = '1'; btn.disabled = false; }
