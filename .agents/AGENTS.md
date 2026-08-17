@@ -102,3 +102,13 @@
   * 11-digit Google Campaign IDs (e.g., `'23991077413'`) exceed 32-bit signed INTEGER limits (2,147,483,647).
   * Queries with `WHERE (id = ? OR google_campaign_id = ?)` will fail in PostgreSQL with `NumericValueOutOfRange` if passed an 11-digit string for `id`.
   * Always check `if campaign_id.isdigit() and int(campaign_id) <= 2147483647` before querying `id = ?` in SQL.
+
+## 14. Location Targeting (Range Proximity vs. Block GeoTarget Constants)
+* **Search / Display Campaigns (`SEARCH`, `DISPLAY`)**:
+  * Fully support both **Range / Proximity** (latitude, longitude, radius_km) and **Block / Location** (`geoTargetConstants` e.g. `City` / `Prefecture`).
+  * When updating via API, existing `LOCATION` and `PROXIMITY` criteria are safely removed first, then new criteria are added.
+* **Demand Gen / Video Campaigns (`DEMAND_GEN`, `VIDEO`)**:
+  * Google Ads API (v23) restricts `CampaignCriterion` for `LOCATION` / `PROXIMITY` with error `OWNED_AND_OPERATED`. Demand Gen location targeting is managed automatically by Google AI or UI-level signals.
+* **GeoTargetConstant Suggestion Filtering**:
+  * Always filter suggestions by `TargetType` (`City`, `Prefecture`, `State`, `Region`) and pick only the single primary match per input name. Passing raw Postal Code or Neighborhood suggestions will throw API errors.
+

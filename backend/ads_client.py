@@ -1646,10 +1646,18 @@ class AdsClient:
         try:
             response = gtc_service.suggest_geo_target_constants(request=request)
             resource_names = []
+            seen_names = set()
             for suggestion in response.geo_target_constant_suggestions:
                 constant = suggestion.geo_target_constant
-                print(f"[AdsClient] GeoTarget解決: {constant.canonical_name} ({constant.resource_name})")
-                resource_names.append(constant.resource_name)
+                # 主要な行政区分 (City, State, Prefecture, Region, Country) を優先
+                target_type = str(constant.target_type)
+                if any(t in target_type for t in ["City", "State", "Prefecture", "Region", "Country"]) or not resource_names:
+                    # 入力名ごとに最良の最初の1個だけを抽出
+                    c_name = constant.name
+                    if c_name not in seen_names:
+                        seen_names.add(c_name)
+                        print(f"[AdsClient] GeoTarget解決: {constant.canonical_name} ({constant.resource_name}) Type={target_type}")
+                        resource_names.append(constant.resource_name)
             return resource_names
         except Exception as e:
             print(f"[AdsClient] GeoTarget解決エラー: {e}")
