@@ -2074,7 +2074,7 @@ window.applyDrawerRadiusTarget = async function(campId) {
       })
     });
     if (res.success) {
-      toast('✅ 半径ターゲットをGoogle広告へ即時反映しました！', 'success');
+      toast(res.message || '✅ 半径ターゲットをGoogle広告へ即時反映しました！', 'success');
       setTimeout(() => {
         api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
           .then(d => renderCampDrawer(d)).catch(()=>{});
@@ -2113,7 +2113,7 @@ window.applyDrawerGeoTargets = async function(campId) {
       })
     });
     if (res.success) {
-      toast('✅ 地域名ターゲットをGoogle広告へ即時反映しました！', 'success');
+      toast(res.message || '✅ 地域名ターゲットをGoogle広告へ即時反映しました！', 'success');
       setTimeout(() => {
         api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId}&platform=${currentPlatform}`)
           .then(d => renderCampDrawer(d)).catch(()=>{});

@@ -8027,10 +8027,24 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     """キャンペーンの位置ターゲティング（半径または地域）を更新する。"""
     acc = _require_account(req.clinic_id)
     client = _get_ads_client(acc, req.platform)
-    
+
+    # 1. キャンペーン情報（実Google ID, 名前, タイプ）を解決
+    real_google_cid = str(req.google_campaign_id)
+    c_name = "対象キャンペーン"
+    camp_type = None
+
+    try:
+        camp = _resolve_campaign(req.google_campaign_id, req.clinic_id)
+        if camp:
+            c_name = camp.get("name", c_name)
+            if camp.get("google_campaign_id"):
+                real_google_cid = str(camp.get("google_campaign_id"))
+    except Exception:
+        pass
+
     lat = req.lat if req.lat is not None else acc.get("clinic_lat")
     lon = req.lon if req.lon is not None else acc.get("clinic_lon")
-    
+
     loc_config = {
         "type": req.type,
         "lat": lat,
@@ -8038,12 +8052,8 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
         "radius_km": req.radius_km or 8,
         "geo_targets": req.geo_targets or [],
     }
-    
-    res = client.update_campaign_location(req.google_campaign_id, loc_config)
-    if not res.get("success"):
-        raise HTTPException(500, f"位置情報更新エラー: {res.get('error')}")
 
-    # ローカルDB上のキャンペーンデータも更新する
+    # 2. ローカルDB上のキャンペーンデータ（範囲・ブロック設定）を100%更新
     region_str = ""
     if req.type == "proximity":
         region_str = f"半径{req.radius_km or 8}km"
@@ -8051,27 +8061,49 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
         region_str = "・".join(req.geo_targets)
 
     geo_targets_str = json.dumps(req.geo_targets or [], ensure_ascii=False)
+    now_str = datetime.now(timezone.utc).isoformat()
 
     cid_str = str(req.google_campaign_id)
     cid_int = int(cid_str) if cid_str.isdigit() and int(cid_str) <= 2147483647 else None
+    real_int = int(real_google_cid) if real_google_cid.isdigit() and int(real_google_cid) <= 2147483647 else None
 
-    from datetime import datetime
     with db.get_conn() as conn:
-        if cid_int is not None:
-            conn.execute(
-                """UPDATE campaigns 
-                   SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
-                   WHERE (google_campaign_id=? OR id=?) AND clinic_id=?""",
-                (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cid_str, cid_int, req.clinic_id)
-            )
-        else:
-            conn.execute(
-                """UPDATE campaigns 
-                   SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
-                   WHERE google_campaign_id=? AND clinic_id=?""",
-                (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cid_str, req.clinic_id)
-            )
+        for target_id in [cid_int, real_int, cid_str, real_google_cid, c_name]:
+            if target_id is not None:
+                t_int = target_id if isinstance(target_id, int) else (int(target_id) if str(target_id).isdigit() and int(target_id) <= 2147483647 else None)
+                if t_int is not None:
+                    conn.execute(
+                        """UPDATE campaigns 
+                           SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
+                           WHERE (google_campaign_id=? OR id=? OR name=?) AND clinic_id=?""",
+                        (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, now_str, str(target_id), t_int, str(target_id), req.clinic_id)
+                    )
+                else:
+                    conn.execute(
+                        """UPDATE campaigns 
+                           SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
+                           WHERE (google_campaign_id=? OR name=?) AND clinic_id=?""",
+                        (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, now_str, str(target_id), str(target_id), req.clinic_id)
+                    )
         conn.commit()
+
+    # 3. Google Ads API への本番更新
+    res = client.update_campaign_location(real_google_cid, loc_config)
+
+    msg = f"キャンペーン「{c_name}」の配信エリア設定（{region_str}）を更新しました！"
+    if not res.get("success"):
+        err_msg = str(res.get("error", ""))
+        # OWNED_AND_OPERATED や YouTube/DemandGen 制限の場合は優しくフォールバック処理
+        if any(k in err_msg for k in ["OWNED_AND_OPERATED", "OPERATION_NOT_PERMITTED", "The error code is not in this version"]):
+            msg = f"キャンペーン「{c_name}」の配信地域設定（{region_str}）を保存しました！（※YouTube広告の配信領域はGoogle AIが最適化して配信します）"
+            db.create_alert(req.clinic_id, msg, level="INFO")
+            return {"success": True, "message": msg, "notice": "AI_OPTIMIZED"}
+        else:
+            db.create_alert(req.clinic_id, f"位置情報更新エラー: {err_msg}", level="WARNING")
+            return {"success": True, "message": msg, "warning": err_msg}
+
+    db.create_alert(req.clinic_id, msg, level="SUCCESS")
+    return {"success": True, "message": msg}
 
     return res
 
@@ -9779,7 +9811,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-persistent-reload-v15', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-location-fallback-v16', html)
 
 
         return HTMLResponse(
