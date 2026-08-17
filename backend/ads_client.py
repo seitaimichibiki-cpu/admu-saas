@@ -1340,17 +1340,28 @@ class AdsClient:
                     dim_g.gender = gender_dim
                     aud.dimensions.append(dim_g)
 
-                age_dim = self._client.get_type("AgeDimension")
+                # 年齢次元：選択された年齢層から全体最小年齢(overall_min)と最大年齢(overall_max)を抽出・統合
+                selected_mins = []
+                selected_maxs = []
                 for a in age_ranges:
                     if a in age_segment_map:
-                        min_a, max_a = age_segment_map[a]
-                        age_seg = self._client.get_type("AgeSegment")
-                        if min_a is not None:
-                            age_seg.min_age = min_a
-                        if max_a is not None:
-                            age_seg.max_age = max_a
-                        age_dim.age_ranges.append(age_seg)
-                if age_dim.age_ranges:
+                        mn, mx = age_segment_map[a]
+                        if mn is not None: selected_mins.append(mn)
+                        if mx is not None: selected_maxs.append(mx)
+
+                overall_min = min(selected_mins) if selected_mins else None
+                overall_max = max(selected_maxs) if (selected_maxs and len(selected_maxs) == len(selected_mins)) else None
+                if "AGE_RANGE_65_UP" in age_ranges:
+                    overall_max = None
+
+                if overall_min is not None or overall_max is not None:
+                    age_dim = self._client.get_type("AgeDimension")
+                    age_seg = self._client.get_type("AgeSegment")
+                    if overall_min is not None:
+                        age_seg.min_age = overall_min
+                    if overall_max is not None:
+                        age_seg.max_age = overall_max
+                    age_dim.age_ranges.append(age_seg)
                     dim_a = self._client.get_type("AudienceDimension")
                     dim_a.age = age_dim
                     aud.dimensions.append(dim_a)
@@ -1358,7 +1369,7 @@ class AdsClient:
                 try:
                     res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
                     last_rn = res_aud.results[0].resource_name
-                    print(f"[AdsClient] Audience (オーディエンス: {aud_rn}) の一括更新完了")
+                    print(f"[AdsClient] Audience (オーディエンス: {aud_rn}) の一括更新完了 (min={overall_min}, max={overall_max})")
                 except Exception as e_mutate:
                     print(f"[AdsClient] Audience ({aud_rn}) 更新スキップ: {e_mutate}")
 
@@ -1382,17 +1393,14 @@ class AdsClient:
                         dim_g.gender = gender_dim
                         aud.dimensions.append(dim_g)
 
-                    age_dim = self._client.get_type("AgeDimension")
-                    for a in age_ranges:
-                        if a in age_segment_map:
-                            min_a, max_a = age_segment_map[a]
-                            age_seg = self._client.get_type("AgeSegment")
-                            if min_a is not None:
-                                age_seg.min_age = min_a
-                            if max_a is not None:
-                                age_seg.max_age = max_a
-                            age_dim.age_ranges.append(age_seg)
-                    if age_dim.age_ranges:
+                    if overall_min is not None or overall_max is not None:
+                        age_dim = self._client.get_type("AgeDimension")
+                        age_seg = self._client.get_type("AgeSegment")
+                        if overall_min is not None:
+                            age_seg.min_age = overall_min
+                        if overall_max is not None:
+                            age_seg.max_age = overall_max
+                        age_dim.age_ranges.append(age_seg)
                         dim_a = self._client.get_type("AudienceDimension")
                         dim_a.age = age_dim
                         aud.dimensions.append(dim_a)
