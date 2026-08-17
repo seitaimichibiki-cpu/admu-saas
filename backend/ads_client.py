@@ -1308,19 +1308,36 @@ class AdsClient:
                 "AGE_RANGE_65_UP": (65, None),
             }
 
+            # 対象キャンペーンの広告グループに紐づく Audience のみをピンポイント特定（他キャンペーンへの巻き添え更新を完全防御）
+            target_audiences = set()
             for ag in ad_groups:
                 ag_id = ag["id"]
                 ag_name = ag["name"]
 
-            # アカウント内のすべての Audience リソースを検索・一括更新（「女性専門肩こり」「若年層・中年層」等を漏れなく100%更新）
-            all_aud_query = "SELECT audience.resource_name, audience.name FROM audience"
-            target_audiences = []
-            try:
-                aud_rows = ga_service.search(customer_id=self.customer_id, query=all_aud_query)
-                for r in aud_rows:
-                    target_audiences.append(r.audience.resource_name)
-            except Exception as e_aud_all:
-                print(f"[AdsClient] 全Audience検索エラー: {e_aud_all}")
+                # 1. 広告グループに紐づく Audience Criterion を検索
+                aud_query = f"""
+                    SELECT ad_group_criterion.audience.audience
+                    FROM ad_group_criterion
+                    WHERE ad_group.id = '{ag_id}'
+                      AND ad_group_criterion.type = 'AUDIENCE'
+                """
+                try:
+                    aud_rows = ga_service.search(customer_id=self.customer_id, query=aud_query)
+                    for r in aud_rows:
+                        arn = r.ad_group_criterion.audience.audience
+                        if arn:
+                            target_audiences.add(arn)
+                except Exception as e_ag_aud:
+                    print(f"[AdsClient] 広告グループAudience検索注記: {e_ag_aud}")
+
+                # 2. 広告グループ専用命名の Audience を検索
+                name_query = f"SELECT audience.resource_name FROM audience WHERE audience.name = 'AdMu_Audience_{ag_id}'"
+                try:
+                    n_rows = ga_service.search(customer_id=self.customer_id, query=name_query)
+                    for r in n_rows:
+                        target_audiences.add(r.audience.resource_name)
+                except Exception:
+                    pass
 
             last_rn = None
             for aud_rn in target_audiences:
@@ -1376,11 +1393,11 @@ class AdsClient:
                 try:
                     res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
                     last_rn = res_aud.results[0].resource_name
-                    print(f"[AdsClient] Audience (オーディエンス: {aud_rn}) の一括更新完了 (min={overall_min}, max={overall_max})")
+                    print(f"[AdsClient] 対象キャンペーンAudience ({aud_rn}) のピンポイント更新完了")
                 except Exception as e_mutate:
                     print(f"[AdsClient] Audience ({aud_rn}) 更新スキップ: {e_mutate}")
 
-            # 既存 Audience が一つも無かった場合のみ新規作成
+            # 対象キャンペーンの広告グループにAudienceが未設定だった場合のみ新規作成して紐付け
             if not target_audiences:
                 for ag in ad_groups:
                     ag_id = ag["id"]
@@ -1418,7 +1435,20 @@ class AdsClient:
                         aud.dimensions.append(dim_a)
 
                     res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
-                    last_rn = res_aud.results[0].resource_name
+                    created_aud_rn = res_aud.results[0].resource_name
+                    last_rn = created_aud_rn
+
+                    # 広告グループに紐づけ
+                    cr_op = self._client.get_type("AdGroupCriterionOperation")
+                    criterion = cr_op.create
+                    criterion.ad_group = f"customers/{self.customer_id}/adGroups/{ag_id}"
+                    criterion.audience.audience = created_aud_rn
+                    try:
+                        ad_group_criterion_service.mutate_ad_group_criteria(
+                            customer_id=self.customer_id, operations=[cr_op]
+                        )
+                    except Exception:
+                        pass
 
             return {"success": True, "applied": True, "audience_resource": last_rn, "mock": False}
 
