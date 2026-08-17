@@ -87,3 +87,17 @@
 * **Unsupported**: `DEMAND_GEN`, `VIDEO`, `PERFORMANCE_MAX` → These campaign types do NOT allow `AdGroupCriterion` for demographics. Demographics are managed via **Audience Signals** (UI-only or `AssetGroupSignal` API).
 * **CampaignCriterion**: Do NOT use `CampaignCriterionService` for demographics at all — `bid_modifier` and `negative` both fail with `FIELD_INCOMPATIBLE_WITH_NEGATIVE_TARGETING`.
 
+## 13. Demand Gen / YouTube Ads Audience Demographic Targeting (Age & Gender)
+* **Rule**: For `DEMAND_GEN` / `VIDEO` / `PERFORMANCE_MAX` campaigns, age and gender targeting must be managed via `AudienceService` using `Audience` resources.
+* **AgeDimension (Age Ranges)**:
+  * Consolidate selected age ranges into a **single `AgeSegment`** with `overall_min` and `overall_max` (`min_age`, `max_age`).
+  * Do NOT append multiple disjoint `AgeSegment` objects in an `AgeDimension`, as Google Ads UI will fail to update the minimal age bound and keep older bounds (e.g. 35) in UI dropdowns.
+* **GenderDimension (Gender Types)**:
+  * Do NOT append `UNDETERMINED` enum to `GenderDimension.genders` — doing so throws `INVALID_ENUM_VALUE: Enum value 'UNDETERMINED' cannot be used` API error.
+  * For "All Genders", set `genders = [MALE, FEMALE]` and explicitly set `include_undetermined = True`.
+* **PostgreSQL INT Cast Safety in Queries**:
+  * 11-digit Google Campaign IDs (e.g., `'23991077413'`) exceed 32-bit signed INTEGER limits (2,147,483,647).
+  * Queries with `WHERE (id = ? OR google_campaign_id = ?)` will fail in PostgreSQL with `NumericValueOutOfRange` if passed an 11-digit string for `id`.
+  * Always check `if campaign_id.isdigit() and int(campaign_id) <= 2147483647` before querying `id = ?` in SQL.
+
+
