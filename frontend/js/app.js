@@ -1428,8 +1428,15 @@ window.switchLpTab = function(campaignId) {
     activeBtn.style.borderColor = '#3b82f6';
     activeBtn.style.color = '#93c5fd';
   }
-  // 自動診断を再実行
-  runLpMatchDiagnose();
+  // タブ切替時はUIリセットのみ（診断はボタン押下時のみ実行）
+  const badge = document.getElementById('lpMatchScoreBadge');
+  if (badge) badge.textContent = '— 未診断';
+  const analysis = document.getElementById('lpMatchAnalysis');
+  if (analysis) analysis.textContent = '🔍 「LP動的取得＆プロ添削実行」ボタンを押してください';
+  const adviceList = document.getElementById('lpWritingAdviceList');
+  if (adviceList) adviceList.innerHTML = '';
+  const headlines = document.getElementById('recommendedHeadlineList');
+  if (headlines) headlines.innerHTML = '';
 };
 
 // ドロワー内 地域チップ＆マップ直接タップ トグル処理
@@ -2689,6 +2696,9 @@ function closeCampDrawer() {
 window.closeCampDrawer = closeCampDrawer;
 
 function renderCampDrawer(d) {
+  // detail APIレスポンスにidが含まれないため、google_campaign_idをフォールバック
+  if (!d.id) d.id = d.google_campaign_id || _drawerCampaignId;
+
   const body = document.getElementById('campDrawerBody');
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
