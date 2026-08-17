@@ -2165,6 +2165,41 @@ window.applyDrawerGeoLocation = async function(campId) {
   }
 };
 
+// ドロワー内の年齢・性別UI状態復元・同期関数
+window.syncDrawerDemographics = async function(campId) {
+  if (!campId) return;
+  try {
+    const res = await api(`/campaigns/${campId}/demographics`);
+    if (res && res.success) {
+      const genders = res.genders || [];
+      const ages = res.age_ranges || [];
+
+      // 性別ラジオボタン復元
+      if (genders.includes('FEMALE') && !genders.includes('MALE')) {
+        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="FEMALE_ONLY"]`);
+        if (rad) rad.checked = true;
+      } else if (genders.includes('MALE') && !genders.includes('FEMALE')) {
+        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="MALE_ONLY"]`);
+        if (rad) rad.checked = true;
+      } else {
+        const rad = document.querySelector(`input[name="drawerGender_${campId}"][value="ALL"]`);
+        if (rad) rad.checked = true;
+      }
+
+      // 年齢チェックボックス復元
+      ['18_24', '25_34', '35_44', '45_54', '55_64', '65_UP'].forEach(aKey => {
+        const chk = document.getElementById(`age_${aKey}_${campId}`);
+        if (chk) {
+          const fullKey = `AGE_RANGE_${aKey.toUpperCase()}`;
+          chk.checked = ages.includes(fullKey);
+        }
+      });
+    }
+  } catch(e) {
+    console.log('[syncDrawerDemographics] Sync Note:', e);
+  }
+};
+
 // ドロワー内 年齢・性別Google広告適用
 window.applyDrawerDemographics = async function(campId) {
   const btn = event && event.target ? event.target : null;
@@ -2192,6 +2227,8 @@ window.applyDrawerDemographics = async function(campId) {
     if (res.success) {
       toast(res.message || 'ターゲット設定（年齢・性別）をGoogle広告へ即時反映しました！', 'success');
       if (btn) { btn.textContent = '✅ 適用完了！'; btn.style.background = '#059669'; setTimeout(() => { btn.textContent = origText; btn.style.background = ''; btn.style.opacity = '1'; btn.disabled = false; }, 3000); }
+      // UIのターゲット選択状態を非同期で同期・復元
+      setTimeout(() => window.syncDrawerDemographics(campId), 100);
     } else {
       toast('ターゲット設定エラー: ' + (res.error || res.detail || 'Unknown'), 'error');
       if (btn) { btn.textContent = origText; btn.style.opacity = '1'; btn.disabled = false; }
@@ -2832,6 +2869,11 @@ function renderCampDrawer(d) {
       </button>
     </div>
   `;
+
+  // 描画後に非同期で最新のターゲット設定状態（チェックボックス・ラジオボタン）を復元・同期
+  setTimeout(() => {
+    if (window.syncDrawerDemographics) window.syncDrawerDemographics(d.id);
+  }, 50);
   // Google広告 同期・審査ステータスパネル (シンプルイズベスト版)
   let policyHtml = '';
   if (d.policy_statuses) {

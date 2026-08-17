@@ -422,6 +422,8 @@ def init_db():
         "ALTER TABLE campaigns ADD COLUMN location_type TEXT DEFAULT 'proximity'",
         "ALTER TABLE campaigns ADD COLUMN location_radius_km REAL DEFAULT 8.0",
         "ALTER TABLE campaigns ADD COLUMN location_geo_targets TEXT DEFAULT ''",
+        # キャンペーン個別のデモグラフィック（年齢・性別設定）のDB永続化
+        "ALTER TABLE campaigns ADD COLUMN demographics_json TEXT DEFAULT ''",
     ]
     for sql in migrations:
         try:
@@ -1909,5 +1911,36 @@ def save_campaign_geo_selections(campaign_id: str, clinic_id: int, locations: li
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (clinic_id, str(campaign_id), name, city_code, lat, lng))
         conn.commit()
+
+
+def save_campaign_demographics(campaign_id: str, clinic_id: int, genders: list, age_ranges: list):
+    """キャンペーンごとのターゲットデモグラフィック（年齢・性別設定）をDBへ保存"""
+    import json
+    data = json.dumps({"genders": genders, "age_ranges": age_ranges}, ensure_ascii=False)
+    with get_conn() as conn:
+        conn.execute("""
+            UPDATE campaigns SET demographics_json=?, updated_at=?
+            WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
+        """, (data, datetime.now(timezone.utc).isoformat(), str(campaign_id), str(campaign_id), clinic_id))
+        conn.commit()
+
+
+def get_campaign_demographics(campaign_id: str, clinic_id: int) -> dict:
+    """DBから保存済みのデモグラフィック情報を取得"""
+    import json
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT demographics_json FROM campaigns
+            WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
+        """, (str(campaign_id), str(campaign_id), clinic_id)).fetchone()
+        if row:
+            d = dict(row)
+            raw = d.get("demographics_json")
+            if raw:
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    pass
+    return None
 
 

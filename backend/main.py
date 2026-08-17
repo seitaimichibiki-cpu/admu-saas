@@ -9629,6 +9629,12 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         except Exception as e_type:
             print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
 
+    # DBへローカル永続化
+    try:
+        db.save_campaign_demographics(campaign_id, req.clinic_id, req.genders, req.age_ranges)
+    except Exception as e_db:
+        print(f"[set_demographics] DB保存エラー: {e_db}")
+
     # Demand Gen / Video キャンペーンは Audience (オーディエンス) 自動作成・更新ルートで適用
     demand_gen_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
     if camp_type and camp_type in demand_gen_types:
@@ -9689,6 +9695,22 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
     }
 
 
+@app.get("/api/campaigns/{campaign_id}/demographics")
+def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
+    """キャンペーンの最新のターゲット設定（性別・年齢層）を取得"""
+    # 1. まずDBから保存済みデータを取得
+    saved = db.get_campaign_demographics(campaign_id, clinic_id)
+    if saved and isinstance(saved, dict) and "genders" in saved:
+        return {"success": True, "genders": saved.get("genders", []), "age_ranges": saved.get("age_ranges", [])}
+
+    # デフォルトフォールバック（女性のみ・35歳以上ターゲット）
+    return {
+        "success": True,
+        "genders": ["FEMALE"],
+        "age_ranges": ["AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
+    }
+
+
 @app.get("/{path:path}", include_in_schema=False)
 def serve_spa(path: str = ""):
     # admin.html・onboarding.htmlは専用ルートで処理済み
@@ -9718,7 +9740,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demandgen-audience-v7', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-sync-checkbox-v8', html)
 
 
         return HTMLResponse(
