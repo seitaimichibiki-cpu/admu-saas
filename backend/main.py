@@ -9149,7 +9149,7 @@ def set_ad_schedule(campaign_id: str, req: AdScheduleReq):
 class DiagnoseLpMatchReq(BaseModel):
     clinic_id: int = 1
     campaign_id: str
-    lp_url: str = "https://seitai-katakori-lp.pages.dev"
+    lp_url: str = ""
 
 @app.post("/api/ai/diagnose-lp-match")
 def diagnose_lp_match(req: DiagnoseLpMatchReq):
@@ -9161,12 +9161,12 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
     ad_headlines = []
     campaign_name = ""
     
-    # Google Ads APIからキャンペーンの広告情報を直接取得
+    # Google Ads API（AdsClient経由）からキャンペーンの広告情報を直接取得
     try:
         acc = _require_account(req.clinic_id)
-        client_info = _get_ads_client(acc, "google")
-        token = client_info["token"]
-        c_id = client_info["customer_id"]
+        ads_client = _get_ads_client(acc)  # AdsClientオブジェクトを取得
+        ga_service = ads_client._client.get_service("GoogleAdsService")
+        customer_id = ads_client.customer_id
         
         # キャンペーンの広告情報を取得（RSA / Demand Gen両対応）
         query = f"""
@@ -9180,24 +9180,20 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
               AND ad_group_ad.status != 'REMOVED'
             LIMIT 5
         """
-        rows = _gaql_query(c_id, query, token)
-        for r in rows:
-            camp = r.get("campaign", {})
+        rows = ga_service.search(customer_id=customer_id, query=query)
+        for row in rows:
             if not campaign_name:
-                campaign_name = camp.get("name", "")
+                campaign_name = row.campaign.name
             
-            ad = r.get("adGroupAd", {}).get("ad", {})
+            ad = row.ad_group_ad.ad
             # final_urls取得
-            if not target_url:
-                fu = ad.get("finalUrls", [])
-                if fu:
-                    target_url = fu[0]
+            if not target_url and ad.final_urls:
+                target_url = ad.final_urls[0]
             
             # RSAのヘッドライン取得
-            rsa = ad.get("responsiveSearchAd", {})
-            if rsa and rsa.get("headlines"):
-                for h in rsa["headlines"]:
-                    txt = h.get("text", "")
+            if ad.responsive_search_ad and ad.responsive_search_ad.headlines:
+                for h in ad.responsive_search_ad.headlines:
+                    txt = h.text
                     if txt and txt not in ad_headlines:
                         ad_headlines.append(txt)
     except Exception as e_ads:
@@ -9228,33 +9224,34 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel('gemini-2.5-flash')
             
+            headlines_str = ", ".join(ad_headlines[:10])
             prompt = f"""
 あなたは年商数億円クラスの整体院マーケティングおよびセールスライティングの最高専門家です。
 以下の広告文とLP（ランディングページ: {target_url}）全体のテキストを比較・熟読し、ファーストビューの一致度とLP全体のライティング添削結果をJSONで出力してください。
 
-【広告の訴求文言】: {", ".join(ad_headlines)}
-【実際のLPテキスト】: {lp_text}
-【院の強み・オファー】: 静岡県藤枝市、女性専門整体院「整体院 導」、頭痛・めまいを伴う肩こり専門、施術＋運動＋靴インソール、専任女性整体師、初回1,980円
+【キャンペーン名】: {campaign_name}
+【広告の訴求文言】: {headlines_str}
+【実際のLPテキスト】: {lp_text[:2000]}
 
 以下の厳密なJSON形式のみで出力してください（コードブロック装飾は含めないでください）:
 {{
-  "match_score": 96,
-  "status": "EXCELLENT",
-  "mismatch_analysis": "【一致度96%の非常に高いメッセージマッチ】広告の『女性専門・頭痛めまいを伴う肩こり・初回1,980円・藤枝駅徒歩3分・専任女性整体師』という主要訴求が、LPのファーストビューテキスト・バッジ・オファー枠とほぼ100%完全一致しています。ターゲット女性が迷わず安心できる優れた導線設計です。",
+  "match_score": (0-100の整数。広告の訴求とLPの内容がどの程度一致しているかを客観的に評価),
+  "status": "(EXCELLENT: 85以上 / GOOD: 60-84 / NEEDS_IMPROVEMENT: 59以下)",
+  "mismatch_analysis": "(広告とLPの一致度分析の詳細。具体的にどの訴求が一致/不一致かを記載)",
   "recommended_lp_headlines": [
-    "【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）",
-    "もう一生付き合っていくしかないと諦めていませんか？ ｜ 施術・運動・インソールの3アプローチ（初回1,980円）",
-    "女性整体師がマンツーマン対応 ｜ 頑固な肩こりと頭痛を根本から解放（完全個室・完全予約制）"
+    "(改善案の見出し1)",
+    "(改善案の見出し2)",
+    "(改善案の見出し3)"
   ],
   "full_lp_analysis": {{
-    "strengths": "「頭痛・めまいを伴うつらい肩こり」という具体的なお悩み訴求と、「施術・トレーニング・靴インソール」という他院にない独自の3つのアプローチが明確に打ち出されており、強い差別化ができています。",
+    "strengths": "(LPの良い点を記載)",
     "writing_advice_list": [
-      "💡 【ファーストビュー】『専任女性整体師がマンツーマン対応』のバッジを、メイン見出し（H1）のすぐ上または隣に大きく配置すると、女性患者の即時信頼度がさらに高まります。",
-      "💡 【本文アプローチ】『なぜ靴インソールが必要なのか？』の解説部分に『足元の歪みが首骨・骨格を歪ませ、頭痛やめまいを引き起こす』という短文のメカニズム説明を追加すると説得力が倍増します。",
-      "💡 【予約オファー枠】オレンジ色の予約ボタンの直下に『※LINEなら24時間30秒でカンタン予約完了』というマイクロコピーを追記することで、Webフォーム入力の心理的ハードルを下げる効果が期待できます。"
+      "(改善提案1: 具体的な改善案を💡付きで記載)",
+      "(改善提案2)",
+      "(改善提案3)"
     ]
   }},
-  "ai_prompt_for_developer": "【Web制作担当者・AIへのLP修正指示プロンプト】\\n以下の修正を行い、LPの成約率(CVR)を最大化させてください。\\n1. ファーストビュー見出し: 『【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）』に更新。\\n2. H1付近に『専任女性整体師がマンツーマン対応』バッジを太字で配置。\\n3. 予約ボタン直下に『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピーを追加。"
+  "ai_prompt_for_developer": "(Web制作担当者向けの具体的なLP修正指示プロンプト)"
 }}
 """
             res = model.generate_content(prompt)
@@ -9267,23 +9264,15 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
 
     if not result_data:
         result_data = {
-            "match_score": 96,
-            "status": "EXCELLENT",
-            "mismatch_analysis": "【一致度96%の超高水準マッチ】広告の『女性専門・頭痛めまいを伴う肩こり・初回1,980円・藤枝駅3分・専任女性整体師』という主要訴求が、LPのファーストビューの見出し・赤バッジ・価格枠・下部アイコンと完全に100%一致しています！広告クリック後のユーザー離脱が最小限に抑えられています。",
-            "recommended_lp_headlines": [
-                "【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）",
-                "もう一生付き合っていくしかないと諦めていませんか？ ｜ 施術・運動・インソールの3アプローチ（初回1,980円）",
-                "女性整体師がマンツーマン対応 ｜ 頑固な肩こりと頭痛を根本から解放（完全個室・完全予約制）"
-            ],
+            "match_score": 0,
+            "status": "UNKNOWN",
+            "mismatch_analysis": f"AI解析が利用できません。キャンペーン「{campaign_name or req.campaign_id}」の広告見出し: {', '.join(ad_headlines[:3])} / LP: {target_url}",
+            "recommended_lp_headlines": [],
             "full_lp_analysis": {
-                "strengths": "「頭痛・めまいを伴うつらい肩こり」という具体的なお悩み訴求と、「施術・トレーニング・靴インソール」という他院にない独自の3つのアプローチが明確に打ち出されており、強い差別化ができています。",
-                "writing_advice_list": [
-                    "💡 【ファーストビュー】『専任女性整体師がマンツーマン対応』のバッジを、メイン見出し（H1）のすぐ上または隣に大きく配置すると、女性患者の即時信頼度がさらに高まります。",
-                    "💡 【本文アプローチ】『なぜ靴インソールが必要なのか？』の解説部分に『足元の歪みが首骨・骨格を歪ませ、頭痛やめまいを引き起こす』という短文のメカニズム説明を追加すると説得力が倍増します。",
-                    "💡 【予約オファー枠】オレンジ色の予約ボタンの直下に『※LINEなら24時間30秒でカンタン予約完了』というマイクロコピーを追記することで、Webフォーム入力の心理的ハードルを下げる効果が期待できます。"
-                ]
+                "strengths": "AI解析未実行",
+                "writing_advice_list": ["💡 Gemini APIキーを設定するとAI解析が利用可能になります"]
             },
-            "ai_prompt_for_developer": "【Web制作担当者・AIへのLP修正指示プロンプト】\n以下の修正を行い、LPの成約率(CVR)を最大化させてください。\n1. ファーストビュー見出し: 『【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）』に更新。\n2. H1付近に『専任女性整体師がマンツーマン対応』バッジを太字で配置。\n3. 予約ボタン直下に『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピーを追加。"
+            "ai_prompt_for_developer": ""
         }
 
     return {
@@ -9297,9 +9286,9 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
 def inspect_age_targeting(clinic_id: int = 1):
     """Google Adsのキャンペーンごとに設定されている実際のAge / Gender Criterionを検索調査"""
     acc = _require_account(clinic_id)
-    client = _get_ads_client(acc, "google")
-    token = client["token"]
-    c_id = client["customer_id"]
+    ads_client = _get_ads_client(acc)
+    ga_service = ads_client._client.get_service("GoogleAdsService")
+    customer_id = ads_client.customer_id
 
     # 1. 各キャンペーンのAdGroupCriterion（Age, Gender）設定を取得
     query = """
@@ -9308,29 +9297,33 @@ def inspect_age_targeting(clinic_id: int = 1):
             campaign.name,
             ad_group_criterion.gender.type,
             ad_group_criterion.age_range.type,
+            ad_group_criterion.negative,
             ad_group_criterion.status
         FROM ad_group_criterion
         WHERE ad_group_criterion.type IN ('GENDER', 'AGE_RANGE')
     """
-    rows = _gaql_query(c_id, query, token)
-    
     results = {}
-    for r in rows:
-        camp_name = r.get("campaign", {}).get("name", "Unknown")
-        camp_id = r.get("campaign", {}).get("id", "Unknown")
-        key = f"{camp_name} ({camp_id})"
-        if key not in results:
-            results[key] = {"genders": [], "age_ranges": []}
-        
-        agc = r.get("adGroupCriterion", {})
-        gtype = agc.get("gender", {}).get("type")
-        atype = agc.get("ageRange", {}).get("type")
-        status = agc.get("status")
+    try:
+        rows = ga_service.search(customer_id=customer_id, query=query)
+        for row in rows:
+            camp_name = row.campaign.name
+            camp_id = str(row.campaign.id)
+            key = f"{camp_name} ({camp_id})"
+            if key not in results:
+                results[key] = {"genders": [], "age_ranges": []}
+            
+            cc = row.ad_group_criterion
+            gtype = str(cc.gender.type_.name) if cc.gender.type_ else None
+            atype = str(cc.age_range.type_.name) if cc.age_range.type_ else None
+            status = str(cc.status.name) if cc.status else "UNKNOWN"
+            is_negative = cc.negative
 
-        if gtype:
-            results[key]["genders"].append({"type": gtype, "status": status})
-        if atype:
-            results[key]["age_ranges"].append({"type": atype, "status": status})
+            if gtype and gtype != "UNSPECIFIED":
+                results[key]["genders"].append({"type": gtype, "status": status, "negative": is_negative})
+            if atype and atype != "UNSPECIFIED":
+                results[key]["age_ranges"].append({"type": atype, "status": status, "negative": is_negative})
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
     return {
         "success": True,
@@ -9674,7 +9667,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-demographics-lp2', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-lp-demographics-v3', html)
 
 
         return HTMLResponse(
