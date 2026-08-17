@@ -95,9 +95,10 @@
 * **GenderDimension (Gender Types)**:
   * Do NOT append `UNDETERMINED` enum to `GenderDimension.genders` — doing so throws `INVALID_ENUM_VALUE: Enum value 'UNDETERMINED' cannot be used` API error.
   * For "All Genders", set `genders = [MALE, FEMALE]` and explicitly set `include_undetermined = True`.
+* **Audience Campaign Isolation**:
+  * NEVER query `SELECT audience.resource_name FROM audience` without scoping to specific ad groups. Updating all account audiences causes cross-campaign pollution (e.g. overwriting "秋山広告" audience when updating "腰痛YT").
+  * Always query `ad_group_criterion` for the campaign's specific `ad_group_id`s, or search specifically for `AdMu_Audience_{ag_id}` to isolate updates strictly to the active campaign.
 * **PostgreSQL INT Cast Safety in Queries**:
   * 11-digit Google Campaign IDs (e.g., `'23991077413'`) exceed 32-bit signed INTEGER limits (2,147,483,647).
   * Queries with `WHERE (id = ? OR google_campaign_id = ?)` will fail in PostgreSQL with `NumericValueOutOfRange` if passed an 11-digit string for `id`.
   * Always check `if campaign_id.isdigit() and int(campaign_id) <= 2147483647` before querying `id = ?` in SQL.
-
-
