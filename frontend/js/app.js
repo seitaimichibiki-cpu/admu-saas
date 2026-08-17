@@ -2754,6 +2754,21 @@ function renderCampDrawer(d) {
   const matchTypeLabel = { BROAD: 'インテント', PHRASE: 'フレーズ', EXACT: '完全一致' };
   const matchTypeClass = { BROAD: 'broad', PHRASE: 'phrase', EXACT: 'exact' };
 
+  // ★ demographics（年齢・性別）の checked 状態を決定
+  // 優先順位: ローカルキャッシュ > detail API レスポンス > デフォルト
+  const _localDemo = window.g_local_demographics_cache && window.g_local_demographics_cache[d.id];
+  const _apiDemo = d.demographics;
+  const _demo = _localDemo || _apiDemo || null;
+  const _demoGenders = _demo ? (_demo.genders || []) : [];
+  const _demoAges = _demo ? (_demo.age_ranges || []) : ['AGE_RANGE_35_44', 'AGE_RANGE_45_54', 'AGE_RANGE_55_64', 'AGE_RANGE_65_UP'];
+  const _demoGender = _demoGenders.includes('FEMALE') && !_demoGenders.includes('MALE') ? 'FEMALE_ONLY'
+    : _demoGenders.includes('MALE') && !_demoGenders.includes('FEMALE') ? 'MALE_ONLY'
+    : 'ALL';
+  // ローカルキャッシュにも保存（applyDrawerDemographics との一貫性確保）
+  if (_demo && window.g_local_demographics_cache) {
+    window.g_local_demographics_cache[d.id] = { genders: _demoGenders, age_ranges: _demoAges };
+  }
+
   // ―― 🗺️ キャンペーン専用: 配信エリア統合設定カード（タブ: 範囲設定 / ブロック設定） ――
   const currentLocType = d.location?.type || 'proximity';
   const currentRadius = d.location?.radius_km || 8;
@@ -2864,21 +2879,21 @@ function renderCampDrawer(d) {
       <div style="margin-bottom:10px;">
         <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">性別ターゲット:</label>
         <div style="display:flex; gap:12px; font-size:11px; color:var(--text-1);">
-          <label><input type="radio" name="drawerGender_${d.id}" value="ALL" checked> 全性別（男女）</label>
-          <label><input type="radio" name="drawerGender_${d.id}" value="FEMALE_ONLY"> 女性のみ</label>
-          <label><input type="radio" name="drawerGender_${d.id}" value="MALE_ONLY"> 男性のみ</label>
+          <label><input type="radio" name="drawerGender_${d.id}" value="ALL" ${_demoGender === 'ALL' ? 'checked' : ''}> 全性別（男女）</label>
+          <label><input type="radio" name="drawerGender_${d.id}" value="FEMALE_ONLY" ${_demoGender === 'FEMALE_ONLY' ? 'checked' : ''}> 女性のみ</label>
+          <label><input type="radio" name="drawerGender_${d.id}" value="MALE_ONLY" ${_demoGender === 'MALE_ONLY' ? 'checked' : ''}> 男性のみ</label>
         </div>
       </div>
 
       <div style="margin-bottom:10px;">
         <label style="font-size:11px; color:#a78bfa; font-weight:700; display:block; margin-bottom:4px;">年齢ターゲット（若年層除外可能）:</label>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; font-size:11px; color:var(--text-1);">
-          <label><input type="checkbox" id="age_18_24_${d.id}"> 18〜24歳</label>
-          <label><input type="checkbox" id="age_25_34_${d.id}"> 25〜34歳</label>
-          <label><input type="checkbox" id="age_35_44_${d.id}" checked> 35〜44歳</label>
-          <label><input type="checkbox" id="age_45_54_${d.id}" checked> 45〜54歳</label>
-          <label><input type="checkbox" id="age_55_64_${d.id}" checked> 55〜64歳</label>
-          <label><input type="checkbox" id="age_65_UP_${d.id}" checked> 65歳以上</label>
+          <label><input type="checkbox" id="age_18_24_${d.id}" ${_demoAges.includes('AGE_RANGE_18_24') ? 'checked' : ''}> 18〜24歳</label>
+          <label><input type="checkbox" id="age_25_34_${d.id}" ${_demoAges.includes('AGE_RANGE_25_34') ? 'checked' : ''}> 25〜34歳</label>
+          <label><input type="checkbox" id="age_35_44_${d.id}" ${_demoAges.includes('AGE_RANGE_35_44') ? 'checked' : ''}> 35〜44歳</label>
+          <label><input type="checkbox" id="age_45_54_${d.id}" ${_demoAges.includes('AGE_RANGE_45_54') ? 'checked' : ''}> 45〜54歳</label>
+          <label><input type="checkbox" id="age_55_64_${d.id}" ${_demoAges.includes('AGE_RANGE_55_64') ? 'checked' : ''}> 55〜64歳</label>
+          <label><input type="checkbox" id="age_65_UP_${d.id}" ${_demoAges.includes('AGE_RANGE_65_UP') ? 'checked' : ''}> 65歳以上</label>
         </div>
       </div>
 
@@ -2888,10 +2903,8 @@ function renderCampDrawer(d) {
     </div>
   `;
 
-  // 描画後に非同期で最新のターゲット設定状態（チェックボックス・ラジオボタン）を復元・同期
-  setTimeout(() => {
-    if (window.syncDrawerDemographics) window.syncDrawerDemographics(d.id);
-  }, 50);
+  // ★ syncDrawerDemographics 非同期呼出しを完全廃止
+  // detail API レスポンスに demographics を含めているので、上記テンプレートで最初から正しい checked 状態が描画される
   // Google広告 同期・審査ステータスパネル (シンプルイズベスト版)
   let policyHtml = '';
   if (d.policy_statuses) {

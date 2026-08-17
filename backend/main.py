@@ -1372,9 +1372,31 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     }
     if demand_gen_ad:
         result["demand_gen_ad"] = demand_gen_ad
-        
+
+    # ★ demographics（年齢・性別ターゲット）を detail レスポンスに直接含める
+    # これにより renderCampDrawer で最初から正しい checked 状態を描画できる
+    try:
+        demo_data = None
+        cid_s = str(g_id)
+        if cid_s in _DEMOGRAPHICS_CACHE:
+            demo_data = _DEMOGRAPHICS_CACHE[cid_s]
+        if not demo_data:
+            demo_data = db.get_campaign_demographics(cid_s, clinic_id)
+        if not demo_data and campaign:
+            c_name_d = str(campaign.get("name") or "")
+            if c_name_d:
+                demo_data = db.get_campaign_demographics(c_name_d, clinic_id)
+        if demo_data and isinstance(demo_data, dict) and "genders" in demo_data:
+            result["demographics"] = {
+                "genders": demo_data.get("genders", []),
+                "age_ranges": demo_data.get("age_ranges", [])
+            }
+    except Exception as e:
+        print(f"[DetailAPI] demographics取得エラー（無視して続行）: {e}")
+
     ads_cache.set(cache_key, result)
     return result
+
 
 
 # ---- API: 月間予算ターゲット設定（具体パスを先に定義）----
@@ -9666,6 +9688,9 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
             except Exception as e_db:
                 print(f"[set_demographics] DB保存エラー ({k}): {e_db}")
 
+    # detail API のキャッシュをクリア（次の detail 取得で最新の demographics が含まれるように）
+    ads_cache.clear()
+
     # キャンペーンタイプを判定（Demand Gen / Video は AdGroupCriterion 非対応）
     camp_type = None
     if not client.mock_mode and client._client:
@@ -9820,7 +9845,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-resolve-int-overflow-v18', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demographics-ssr-v19', html)
 
 
         return HTMLResponse(
