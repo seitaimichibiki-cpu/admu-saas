@@ -349,6 +349,11 @@ def init_db():
             status TEXT DEFAULT 'UPLOADED',
             error_message TEXT,
             uploaded_at {TS})""",
+        f"""CREATE TABLE IF NOT EXISTS campaign_demographics (
+            campaign_key TEXT PRIMARY KEY,
+            genders_json TEXT,
+            age_ranges_json TEXT,
+            updated_at {TS})""",
     ]
     for ddl in tables:
         conn.execute(ddl)
@@ -1917,18 +1922,36 @@ def save_campaign_demographics(campaign_id: str, clinic_id: int, genders: list, 
     """キャンペーンごとのターゲットデモグラフィック（年齢・性別設定）をDBへ保存"""
     import json
     data = json.dumps({"genders": genders, "age_ranges": age_ranges}, ensure_ascii=False)
+    g_json = json.dumps(genders, ensure_ascii=False)
+    a_json = json.dumps(age_ranges, ensure_ascii=False)
+    now_str = datetime.now(timezone.utc).isoformat()
+
     with get_conn() as conn:
+        # 1. 独立テーブル campaign_demographics にキー文字列そのまま保存（キー形式差異を100%吸収）
+        r_exist = conn.execute("SELECT campaign_key FROM campaign_demographics WHERE campaign_key=?", (str(campaign_id),)).fetchone()
+        if r_exist:
+            conn.execute("""
+                UPDATE campaign_demographics SET genders_json=?, age_ranges_json=?, updated_at=?
+                WHERE campaign_key=?
+            """, (g_json, a_json, now_str, str(campaign_id)))
+        else:
+            conn.execute("""
+                INSERT INTO campaign_demographics (campaign_key, genders_json, age_ranges_json, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (str(campaign_id), g_json, a_json, now_str))
+
+        # 2. campaigns テーブルの demographics_json カラムも更新 (id, google_campaign_id, name すべてにマッチさせる)
         cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
         if cid_int is not None:
             conn.execute("""
                 UPDATE campaigns SET demographics_json=?, updated_at=?
-                WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
-            """, (data, datetime.now(timezone.utc).isoformat(), cid_int, str(campaign_id), clinic_id))
+                WHERE (id=? OR google_campaign_id=? OR name=?) AND clinic_id=?
+            """, (data, now_str, cid_int, str(campaign_id), str(campaign_id), clinic_id))
         else:
             conn.execute("""
                 UPDATE campaigns SET demographics_json=?, updated_at=?
-                WHERE google_campaign_id=? AND clinic_id=?
-            """, (data, datetime.now(timezone.utc).isoformat(), str(campaign_id), clinic_id))
+                WHERE (google_campaign_id=? OR name=?) AND clinic_id=?
+            """, (data, now_str, str(campaign_id), str(campaign_id), clinic_id))
         conn.commit()
 
 
@@ -1936,20 +1959,36 @@ def get_campaign_demographics(campaign_id: str, clinic_id: int) -> dict:
     """DBから保存済みのデモグラフィック情報を取得"""
     import json
     with get_conn() as conn:
-        cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
-        if cid_int is not None:
-            row = conn.execute("""
-                SELECT demographics_json FROM campaigns
-                WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
-            """, (cid_int, str(campaign_id), clinic_id)).fetchone()
-        else:
-            row = conn.execute("""
-                SELECT demographics_json FROM campaigns
-                WHERE google_campaign_id=? AND clinic_id=?
-            """, (str(campaign_id), clinic_id)).fetchone()
-
+        # 1. まず独立テーブル campaign_demographics からキー直接検索
+        row = conn.execute("""
+            SELECT genders_json, age_ranges_json FROM campaign_demographics
+            WHERE campaign_key=?
+        """, (str(campaign_id),)).fetchone()
         if row:
             d = dict(row)
+            try:
+                g = json.loads(d.get("genders_json") or "[]")
+                a = json.loads(d.get("age_ranges_json") or "[]")
+                if g or a:
+                    return {"genders": g, "age_ranges": a}
+            except Exception:
+                pass
+
+        # 2. campaigns テーブルの demographics_json から検索 (id, google_campaign_id, name すべてでマッチング)
+        cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
+        if cid_int is not None:
+            row_c = conn.execute("""
+                SELECT demographics_json FROM campaigns
+                WHERE (id=? OR google_campaign_id=? OR name=?) AND clinic_id=?
+            """, (cid_int, str(campaign_id), str(campaign_id), clinic_id)).fetchone()
+        else:
+            row_c = conn.execute("""
+                SELECT demographics_json FROM campaigns
+                WHERE (google_campaign_id=? OR name=?) AND clinic_id=?
+            """, (str(campaign_id), str(campaign_id), clinic_id)).fetchone()
+
+        if row_c:
+            d = dict(row_c)
             raw = d.get("demographics_json")
             if raw:
                 try:

@@ -9625,16 +9625,15 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         c_name = "対象キャンペーン"
         google_campaign_id = campaign_id
 
-    # キャッシュおよびDBへ即時保存（campaign_idおよびgoogle_campaign_id両方のキーで保持）
+    # キャッシュおよびDBへ即時保存（campaign_id, google_campaign_id, c_name すべてのキー形式で100%保持）
     payload = {"genders": req.genders, "age_ranges": req.age_ranges}
-    _DEMOGRAPHICS_CACHE[str(campaign_id)] = payload
-    _DEMOGRAPHICS_CACHE[str(google_campaign_id)] = payload
-    try:
-        db.save_campaign_demographics(campaign_id, req.clinic_id, req.genders, req.age_ranges)
-        if google_campaign_id:
-            db.save_campaign_demographics(google_campaign_id, req.clinic_id, req.genders, req.age_ranges)
-    except Exception as e_db:
-        print(f"[set_demographics] DB保存エラー: {e_db}")
+    for k in [str(campaign_id), str(google_campaign_id), str(c_name)]:
+        if k:
+            _DEMOGRAPHICS_CACHE[k] = payload
+            try:
+                db.save_campaign_demographics(k, req.clinic_id, req.genders, req.age_ranges)
+            except Exception as e_db:
+                print(f"[set_demographics] DB保存エラー ({k}): {e_db}")
 
     # キャンペーンタイプを判定（Demand Gen / Video は AdGroupCriterion 非対応）
     camp_type = None
@@ -9716,16 +9715,32 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
 @app.get("/api/campaigns/{campaign_id}/demographics")
 def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
     """キャンペーンの最新のターゲット設定（性別・年齢層）を取得"""
-    # 1. まずメモリキャッシュから即時取得
     cid_s = str(campaign_id)
     if cid_s in _DEMOGRAPHICS_CACHE:
         return {"success": True, **_DEMOGRAPHICS_CACHE[cid_s]}
 
-    # 2. DBから保存済みデータを取得
+    # DBから保存済みデータを取得 (campaign_id で直接引く)
     saved = db.get_campaign_demographics(campaign_id, clinic_id)
     if saved and isinstance(saved, dict) and "genders" in saved:
         _DEMOGRAPHICS_CACHE[cid_s] = saved
         return {"success": True, "genders": saved.get("genders", []), "age_ranges": saved.get("age_ranges", [])}
+
+    # キャンペーン情報解決を試みる (google_campaign_id 経由で再検索)
+    try:
+        camp = _resolve_campaign(campaign_id, clinic_id)
+        if camp:
+            gc_id = str(camp.get("google_campaign_id") or "")
+            c_name = str(camp.get("name") or "")
+            for alt_key in [gc_id, c_name]:
+                if alt_key and alt_key in _DEMOGRAPHICS_CACHE:
+                    return {"success": True, **_DEMOGRAPHICS_CACHE[alt_key]}
+                if alt_key:
+                    saved_alt = db.get_campaign_demographics(alt_key, clinic_id)
+                    if saved_alt and isinstance(saved_alt, dict) and "genders" in saved_alt:
+                        _DEMOGRAPHICS_CACHE[cid_s] = saved_alt
+                        return {"success": True, "genders": saved_alt.get("genders", []), "age_ranges": saved_alt.get("age_ranges", [])}
+    except Exception:
+        pass
 
     # デフォルトフォールバック
     return {
@@ -9764,7 +9779,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-isolate-campaign-audience-v14', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-persistent-reload-v15', html)
 
 
         return HTMLResponse(
