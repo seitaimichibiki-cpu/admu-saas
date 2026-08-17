@@ -1399,7 +1399,7 @@ window.copyDeveloperPrompt = function() {
 };
 
 // キャンペーン切替タブ切り替え処理
-window.activeLpCampaignId = '';
+window.activeLpCampaignId = '24067002156';  // デフォルトactiveタブ（秋山広告）のID
 window.switchLpTab = function(campaignId) {
   window.activeLpCampaignId = campaignId;
   document.querySelectorAll('.lp-tab-btn').forEach(btn => {
@@ -2167,9 +2167,13 @@ window.applyDrawerGeoLocation = async function(campId) {
 
 // ドロワー内 年齢・性別Google広告適用
 window.applyDrawerDemographics = async function(campId) {
+  const btn = event && event.target ? event.target : null;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Google広告へ適用中...'; btn.style.opacity = '0.6'; }
+
   const genderEl = document.querySelector(`input[name="drawerGender_${campId}"]:checked`);
   const genderVal = genderEl ? genderEl.value : 'ALL';
-  const genders = genderVal === 'FEMALE_ONLY' ? ['FEMALE'] : genderVal === 'MALE_ONLY' ? ['MALE'] : ['FEMALE', 'MALE', 'UNSPECIFIED'];
+  const genders = genderVal === 'FEMALE_ONLY' ? ['FEMALE'] : genderVal === 'MALE_ONLY' ? ['MALE'] : ['FEMALE', 'MALE', 'UNDETERMINED'];
 
   const ages = [];
   ['18_24', '25_34', '35_44', '45_54', '55_64', '65_UP'].forEach(aKey => {
@@ -2187,9 +2191,14 @@ window.applyDrawerDemographics = async function(campId) {
     });
     if (res.success) {
       toast(res.message || 'ターゲット設定（年齢・性別）をGoogle広告へ即時反映しました！', 'success');
+      if (btn) { btn.textContent = '✅ 適用完了！'; btn.style.background = '#059669'; setTimeout(() => { btn.textContent = origText; btn.style.background = ''; btn.style.opacity = '1'; btn.disabled = false; }, 3000); }
+    } else {
+      toast('ターゲット設定エラー: ' + (res.error || res.detail || 'Unknown'), 'error');
+      if (btn) { btn.textContent = origText; btn.style.opacity = '1'; btn.disabled = false; }
     }
   } catch(e) {
     toast('ターゲット設定エラー: ' + e.message, 'error');
+    if (btn) { btn.textContent = '❌ エラー'; btn.style.background = '#dc2626'; setTimeout(() => { btn.textContent = origText; btn.style.background = ''; btn.style.opacity = '1'; btn.disabled = false; }, 3000); }
   }
 };
 
@@ -2197,7 +2206,7 @@ window.applyDrawerDemographics = async function(campId) {
 window.runLpMatchDiagnose = async function() {
   try {
     toast('選択中キャンペーンのLPテキストをAIプロ添削中...', 'info');
-    const targetCampId = window.activeLpCampaignId || (_campaignCache && _campaignCache[0] && _campaignCache[0].id) || '';
+    const targetCampId = window.activeLpCampaignId || '';
     if (!targetCampId) { toast('キャンペーンが選択されていません', 'error'); return; }
 
     const res = await api('/ai/diagnose-lp-match', {

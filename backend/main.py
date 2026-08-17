@@ -9263,14 +9263,15 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
             print(f"[diagnose_lp_match] Gemini解析フォールバック: {ex}")
 
     if not result_data:
+        reason = "GEMINI_API_KEY未設定" if not api_key else "Gemini API呼び出し失敗"
         result_data = {
             "match_score": 0,
             "status": "UNKNOWN",
-            "mismatch_analysis": f"AI解析が利用できません。キャンペーン「{campaign_name or req.campaign_id}」の広告見出し: {', '.join(ad_headlines[:3])} / LP: {target_url}",
+            "mismatch_analysis": f"AI解析が利用できません（{reason}）。キャンペーン「{campaign_name or req.campaign_id}」の広告見出し: {', '.join(ad_headlines[:3])} / LP: {target_url}",
             "recommended_lp_headlines": [],
             "full_lp_analysis": {
                 "strengths": "AI解析未実行",
-                "writing_advice_list": ["💡 Gemini APIキーを設定するとAI解析が利用可能になります"]
+                "writing_advice_list": [f"💡 {reason}。Render環境変数にGEMINI_API_KEYを設定してください。"]
             },
             "ai_prompt_for_developer": ""
         }
@@ -9667,7 +9668,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-lp-demographics-v3', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-lp-demo-v4', html)
 
 
         return HTMLResponse(
