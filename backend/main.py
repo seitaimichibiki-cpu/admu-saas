@@ -9674,7 +9674,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-drawer-id-lp', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-demographics-lp2', html)
 
 
         return HTMLResponse(

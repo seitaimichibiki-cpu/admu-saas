@@ -1269,7 +1269,7 @@ async function loadCvOptimizationSection(campaigns) {
             <div style="font-size:14px; font-weight:800; color:#93c5fd; display:flex; align-items:center; gap:6px;">
               <span>🎯 1. LP×広告 メッセージ一致度 & 全体ライティング添削</span>
             </div>
-            <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:#34d399; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:4px; border:1px solid rgba(16,185,129,0.3);">スコア 96% ✅</span>
+            <span id="lpMatchScoreBadge" style="font-size:11px; font-weight:800; color:var(--text-3); background:rgba(255,255,255,0.08); padding:2px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.15);">— 未診断</span>
           </div>
 
           <!-- キャンペーン切替タブ -->
@@ -1289,31 +1289,18 @@ async function loadCvOptimizationSection(campaigns) {
             実際のLP全体（ファーストビュー〜全文章・オファー）をプロ目線でAI解析。
           </p>
           <div id="lpDiagnoseResult" style="background:rgba(0,0,0,0.25); border-radius:8px; padding:12px; margin-bottom:12px;">
-            <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:4px;" id="lpMatchTitle">✅ メッセージ一致度解析（100%完全検証）</div>
-            <div id="lpMatchAnalysis" style="font-size:12px; color:var(--text-2); line-height:1.5; margin-bottom:12px; background:rgba(16,185,129,0.08); padding:8px 10px; border-radius:6px; border-left:3px solid #10b981;">
-              【一致度96%の超高水準マッチ】広告の『女性専門・頭痛めまいを伴う肩こり・初回1,980円・藤枝駅3分・専任女性整体師』という主要訴求が、LPのファーストビューの見出し・赤バッジ・価格枠・下部アイコンと完全に100%一致しています！広告クリック後のユーザー離脱が最小限に抑えられています。
+            <div style="font-size:11px; color:var(--text-3); font-weight:700; margin-bottom:4px;" id="lpMatchTitle">🔍 メッセージ一致度解析</div>
+            <div id="lpMatchAnalysis" style="font-size:12px; color:var(--text-2); line-height:1.5; margin-bottom:12px; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px; border-left:3px solid rgba(255,255,255,0.2);">
+              🔍 上のタブでキャンペーンを選択し、下の「🔍 LP動的取得＆プロ添削実行」ボタンを押してください
             </div>
 
             <!-- 全般コピーライティングプロ添削エリア -->
             <div style="font-size:11px; color:#a78bfa; font-weight:800; margin-bottom:6px;">📝 LP全体のライティング＆成約率(CVR)プロ添削</div>
             <div id="lpWritingAdviceList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
-              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
-                💡 【ファーストビュー】『専任女性整体師がマンツーマン対応』のバッジをメイン見出し（H1）の近くに強調配置すると即時信頼度が上昇します。
-              </div>
-              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
-                💡 【アプローチ解説】『なぜ靴インソールが必要か？』に『足元の歪みが骨格を歪ませ、頭痛やめまいを引き起こす』メカニズム文を1行追加。
-              </div>
-              <div style="font-size:11px; color:var(--text-1); background:rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; border-left:3px solid #a78bfa;">
-                💡 【予約ボタン直下】『※LINEなら24時間30秒でカンタン予約完了』のマイクロコピー追記で予約完了率が向上。
-              </div>
             </div>
 
             <div style="font-size:11px; color:#34d399; font-weight:700; margin-bottom:6px;">✨ AI推奨 LPファーストビュー見出し（ワンタップコピー）</div>
             <div id="recommendedHeadlineList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; font-size:11px; color:var(--text-1);">
-                <span>【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）</span>
-                <button onclick="navigator.clipboard.writeText('【先着3名限定】頭痛・めまいを伴うつらい肩こりを根本改善 ｜ 藤枝駅3分・女性専門サロン（初回1,980円）'); toast('コピーしました！', 'success')" class="btn btn-secondary" style="font-size:9px; padding:2px 6px;">コピー</button>
-              </div>
             </div>
 
             <!-- 📋 AI/Web担当者用 指示プロンプト作成ボタン -->

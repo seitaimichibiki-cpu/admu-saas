@@ -1114,22 +1114,27 @@ class AdsClient:
         campaign_id: str,
         dimension: str,   # "gender" or "age"
         value: str,       # "MALE"/"FEMALE" or "AGE_RANGE_18_24" etc.
-        adjustment_pct: int,  # 0 = ターゲット, -90 = 除外（入札-90%で実質除外）
+        adjustment_pct: int,  # 0 = ターゲット, -90 = 除外
     ) -> dict:
         """
         キャンペーンの性別・年齢別ターゲティングを設定する。
 
-        Google Ads の CampaignCriterion では:
-        - ターゲット: bid_modifier を設定（negative=false）
-        - 除外: negative=true を設定（bid_modifier は設定不可）
+        Google Ads の CampaignCriterion（性別/年齢）では:
+        - negative=true は使用不可（FIELD_INCOMPATIBLE_WITH_NEGATIVE_TARGETING エラー）
+        - 除外は bid_modifier=0.0（入札-100% = 実質配信停止）で実現
+        - ターゲットは bid_modifier=1.0（入札変更なし）
 
-        既存のcriterionがあれば update/remove し、なければ create する。
+        既存のcriterionがあればresource_nameで update、なければ create する。
         """
         if self.mock_mode:
             print(f"[MOCK] デモグラフィック入札調整: campaign={campaign_id} {dimension}={value} adj={adjustment_pct:+}%")
             return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": True}
 
-        is_exclude = (adjustment_pct <= -90)
+        # bid_modifier: 除外=0.0（-100%）、ターゲット=1.0（0%）
+        if adjustment_pct <= -90:
+            bid_modifier = 0.0  # 実質除外（入札-100%）
+        else:
+            bid_modifier = 1.0 + (max(-90, min(900, adjustment_pct)) / 100.0)
 
         try:
             ga_service = self._client.get_service("GoogleAdsService")
@@ -1139,7 +1144,6 @@ class AdsClient:
             dim_type = "GENDER" if dimension == "gender" else "AGE_RANGE"
             query = f"""
                 SELECT campaign_criterion.resource_name,
-                       campaign_criterion.negative,
                        campaign_criterion.bid_modifier,
                        campaign_criterion.gender.type,
                        campaign_criterion.age_range.type
@@ -1148,80 +1152,67 @@ class AdsClient:
                   AND campaign_criterion.type = '{dim_type}'
             """
             existing_resource = None
-            existing_negative = None
             try:
                 rows = ga_service.search(customer_id=self.customer_id, query=query)
                 for row in rows:
                     cc = row.campaign_criterion
-                    # 該当する性別/年齢のcriterionを探す
                     if dimension == "gender":
-                        if str(cc.gender.type_.name) == value or str(cc.gender.type_) == value:
+                        if str(cc.gender.type_.name) == value:
                             existing_resource = cc.resource_name
-                            existing_negative = cc.negative
                             break
                     else:
-                        if str(cc.age_range.type_.name) == value or str(cc.age_range.type_) == value:
+                        if str(cc.age_range.type_.name) == value:
                             existing_resource = cc.resource_name
-                            existing_negative = cc.negative
                             break
             except Exception as e_search:
-                print(f"[AdsClient] 既存criterion検索エラー（無視して新規作成）: {e_search}")
+                print(f"[AdsClient] 既存criterion検索エラー: {e_search}")
 
-            # 2. 既存がある場合の処理
             if existing_resource:
-                if is_exclude and existing_negative:
-                    # 既に除外済み → 何もしない
-                    return {"success": True, "applied": False, "adjustment_pct": adjustment_pct, "note": "already excluded"}
-                if not is_exclude and not existing_negative:
-                    # 既にターゲット済み → 何もしない（bid_modifier更新は不要）
-                    return {"success": True, "applied": False, "adjustment_pct": adjustment_pct, "note": "already targeted"}
-
-                # 状態が変わる場合は既存を削除して再作成
-                remove_op = self._client.get_type("CampaignCriterionOperation")
-                remove_op.remove = existing_resource
+                # 2A. 既存がある → bid_modifier を update
+                op = self._client.get_type("CampaignCriterionOperation")
+                op.update_mask.paths.append("bid_modifier")
+                op.update.resource_name = existing_resource
+                op.update.bid_modifier = bid_modifier
                 campaign_criterion_service.mutate_campaign_criteria(
-                    customer_id=self.customer_id, operations=[remove_op]
+                    customer_id=self.customer_id, operations=[op]
                 )
-                print(f"[AdsClient] 既存criterion削除: {existing_resource}")
-
-            # 3. 新規作成
-            op = self._client.get_type("CampaignCriterionOperation")
-            criterion = op.create
-            criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
-
-            if is_exclude:
-                criterion.negative = True
-                # negative criterion には bid_modifier を設定してはいけない
+                action = "除外(bid=0%)" if bid_modifier == 0.0 else f"入札{bid_modifier:.0%}"
+                print(f"[AdsClient] デモグラフィックupdate: {existing_resource} → {action}")
             else:
-                criterion.bid_modifier = 1.0 + (adjustment_pct / 100.0)
+                # 2B. 既存がない → create（negative=true は使わない）
+                op = self._client.get_type("CampaignCriterionOperation")
+                criterion = op.create
+                criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
+                criterion.bid_modifier = bid_modifier
 
-            if dimension == "gender":
-                gender_map = {
-                    "MALE":    self._client.enums.GenderTypeEnum.MALE,
-                    "FEMALE":  self._client.enums.GenderTypeEnum.FEMALE,
-                    "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
-                }
-                criterion.gender.type_ = gender_map.get(value, self._client.enums.GenderTypeEnum.UNDETERMINED)
-            elif dimension == "age":
-                age_map = {
-                    "AGE_RANGE_18_24": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_18_24,
-                    "AGE_RANGE_25_34": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_25_34,
-                    "AGE_RANGE_35_44": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_35_44,
-                    "AGE_RANGE_45_54": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_45_54,
-                    "AGE_RANGE_55_64": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_55_64,
-                    "AGE_RANGE_65_UP": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_65_UP,
-                }
-                if value not in age_map:
-                    return {"success": False, "error": f"Unknown age range: {value}"}
-                criterion.age_range.type_ = age_map[value]
-            else:
-                return {"success": False, "error": f"Unknown dimension: {dimension}"}
+                if dimension == "gender":
+                    gender_map = {
+                        "MALE":    self._client.enums.GenderTypeEnum.MALE,
+                        "FEMALE":  self._client.enums.GenderTypeEnum.FEMALE,
+                        "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
+                    }
+                    criterion.gender.type_ = gender_map.get(value, self._client.enums.GenderTypeEnum.UNDETERMINED)
+                elif dimension == "age":
+                    age_map = {
+                        "AGE_RANGE_18_24": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_18_24,
+                        "AGE_RANGE_25_34": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_25_34,
+                        "AGE_RANGE_35_44": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_35_44,
+                        "AGE_RANGE_45_54": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_45_54,
+                        "AGE_RANGE_55_64": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_55_64,
+                        "AGE_RANGE_65_UP": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_65_UP,
+                    }
+                    if value not in age_map:
+                        return {"success": False, "error": f"Unknown age range: {value}"}
+                    criterion.age_range.type_ = age_map[value]
+                else:
+                    return {"success": False, "error": f"Unknown dimension: {dimension}"}
 
-            campaign_criterion_service.mutate_campaign_criteria(
-                customer_id=self.customer_id, operations=[op]
-            )
-            action = "除外" if is_exclude else "ターゲット"
-            print(f"[AdsClient] デモグラフィック{action}適用: campaign={campaign_id} {dimension}={value}")
+                campaign_criterion_service.mutate_campaign_criteria(
+                    customer_id=self.customer_id, operations=[op]
+                )
+                action = "除外(bid=0%)" if bid_modifier == 0.0 else f"入札{bid_modifier:.0%}"
+                print(f"[AdsClient] デモグラフィックcreate: campaign={campaign_id} {dimension}={value} {action}")
+
             return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": False}
 
         except Exception as e:
