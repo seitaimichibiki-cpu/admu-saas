@@ -1313,49 +1313,22 @@ class AdsClient:
                 ag_id = ag["id"]
                 ag_name = ag["name"]
 
-                # 2. 広告グループに既に紐づいている Audience または同名 Audience を検索
-                aud_query = f"""
-                    SELECT ad_group_criterion.resource_name,
-                           ad_group_criterion.audience.audience
-                    FROM ad_group_criterion
-                    WHERE ad_group.id = '{ag_id}'
-                      AND ad_group_criterion.type = 'AUDIENCE'
-                """
-                existing_audience_rn = None
-                try:
-                    aud_rows = ga_service.search(customer_id=self.customer_id, query=aud_query)
-                    for r in aud_rows:
-                        existing_audience_rn = r.ad_group_criterion.audience.audience
-                        if existing_audience_rn:
-                            break
-                except Exception as e_aud_search:
-                    print(f"[AdsClient] 既存Audience Criterion検索エラー: {e_aud_search}")
+            # アカウント内のすべての Audience リソースを検索・一括更新（「女性専門肩こり」「若年層・中年層」等を漏れなく100%更新）
+            all_aud_query = "SELECT audience.resource_name, audience.name FROM audience"
+            target_audiences = []
+            try:
+                aud_rows = ga_service.search(customer_id=self.customer_id, query=all_aud_query)
+                for r in aud_rows:
+                    target_audiences.append(r.audience.resource_name)
+            except Exception as e_aud_all:
+                print(f"[AdsClient] 全Audience検索エラー: {e_aud_all}")
 
-                target_aud_name = f"AdMu_Audience_{ag_id}"
-                if not existing_audience_rn:
-                    name_query = f"""
-                        SELECT audience.resource_name, audience.name
-                        FROM audience
-                        WHERE audience.name = '{target_aud_name}'
-                    """
-                    try:
-                        name_rows = ga_service.search(customer_id=self.customer_id, query=name_query)
-                        for r in name_rows:
-                            existing_audience_rn = r.audience.resource_name
-                            break
-                    except Exception as e_name_search:
-                        print(f"[AdsClient] 既存Audience検索エラー: {e_name_search}")
-
-                # 3. Audience オブジェクトの構築/更新
+            last_rn = None
+            for aud_rn in target_audiences:
                 op = self._client.get_type("AudienceOperation")
-                if existing_audience_rn:
-                    aud = op.update
-                    aud.resource_name = existing_audience_rn
-                    op.update_mask.paths.append("dimensions")
-                else:
-                    aud = op.create
-                    aud.name = target_aud_name
-                    aud.description = f"AdMu自動作成オーディエンス ({ag_name})"
+                aud = op.update
+                aud.resource_name = aud_rn
+                op.update_mask.paths.append("dimensions")
 
                 # デモグラフィック（性別・年齢）の構成追加
                 gender_dim = self._client.get_type("GenderDimension")
@@ -1382,25 +1355,52 @@ class AdsClient:
                     dim_a.age = age_dim
                     aud.dimensions.append(dim_a)
 
-                res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
-                created_aud_rn = res_aud.results[0].resource_name
-                print(f"[AdsClient] Audience (オーディエンス) の更新/作成完了: {created_aud_rn}")
+                try:
+                    res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
+                    last_rn = res_aud.results[0].resource_name
+                    print(f"[AdsClient] Audience (オーディエンス: {aud_rn}) の一括更新完了")
+                except Exception as e_mutate:
+                    print(f"[AdsClient] Audience ({aud_rn}) 更新スキップ: {e_mutate}")
 
-                # 4. 新規作成だった場合は広告グループに紐づけ (AdGroupCriterion)
-                if not existing_audience_rn:
-                    cr_op = self._client.get_type("AdGroupCriterionOperation")
-                    criterion = cr_op.create
-                    criterion.ad_group = f"customers/{self.customer_id}/adGroups/{ag_id}"
-                    criterion.audience.audience = created_aud_rn
-                    try:
-                        ad_group_criterion_service.mutate_ad_group_criteria(
-                            customer_id=self.customer_id, operations=[cr_op]
-                        )
-                        print(f"[AdsClient] AdGroupCriterionへAudience紐付け完了: ag={ag_id}")
-                    except Exception as e_cr:
-                        print(f"[AdsClient] AdGroupCriterion Audience紐付け注記: {e_cr}")
+            # 既存 Audience が一つも無かった場合のみ新規作成
+            if not target_audiences:
+                for ag in ad_groups:
+                    ag_id = ag["id"]
+                    ag_name = ag["name"]
+                    target_aud_name = f"AdMu_Audience_{ag_id}"
+                    op = self._client.get_type("AudienceOperation")
+                    aud = op.create
+                    aud.name = target_aud_name
+                    aud.description = f"AdMu自動作成オーディエンス ({ag_name})"
 
-            return {"success": True, "applied": True, "audience_resource": created_aud_rn if 'created_aud_rn' in locals() else None, "mock": False}
+                    gender_dim = self._client.get_type("GenderDimension")
+                    for g in genders:
+                        if g in gender_map:
+                            gender_dim.genders.append(gender_map[g])
+                    if gender_dim.genders:
+                        dim_g = self._client.get_type("AudienceDimension")
+                        dim_g.gender = gender_dim
+                        aud.dimensions.append(dim_g)
+
+                    age_dim = self._client.get_type("AgeDimension")
+                    for a in age_ranges:
+                        if a in age_segment_map:
+                            min_a, max_a = age_segment_map[a]
+                            age_seg = self._client.get_type("AgeSegment")
+                            if min_a is not None:
+                                age_seg.min_age = min_a
+                            if max_a is not None:
+                                age_seg.max_age = max_a
+                            age_dim.age_ranges.append(age_seg)
+                    if age_dim.age_ranges:
+                        dim_a = self._client.get_type("AudienceDimension")
+                        dim_a.age = age_dim
+                        aud.dimensions.append(dim_a)
+
+                    res_aud = audience_service.mutate_audiences(customer_id=self.customer_id, operations=[op])
+                    last_rn = res_aud.results[0].resource_name
+
+            return {"success": True, "applied": True, "audience_resource": last_rn, "mock": False}
 
         except Exception as e:
             err = str(e)
