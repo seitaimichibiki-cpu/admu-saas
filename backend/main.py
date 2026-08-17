@@ -847,12 +847,13 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
     見つからない場合は HTTPException(404) を発生させる。
     """
     campaign = None
-    # 1. ローカルIDでのパースと検索を試みる
+    # 1. ローカルIDでのパースと検索を試みる（PostgreSQLの32bit INTEGER範囲内のみ）
     try:
         local_id = int(campaign_id)
-        campaign = db.get_campaign(local_id)
-        if campaign and campaign.get("clinic_id") != clinic_id:
-            campaign = None
+        if local_id <= 2147483647:  # PostgreSQL INTEGER上限チェック
+            campaign = db.get_campaign(local_id)
+            if campaign and campaign.get("clinic_id") != clinic_id:
+                campaign = None
     except ValueError:
         pass
 
@@ -9819,7 +9820,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-debug-demographics-v17', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-resolve-int-overflow-v18', html)
 
 
         return HTMLResponse(
