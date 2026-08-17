@@ -76,6 +76,7 @@ class MemoryCache:
         self._cache.clear()
 
 ads_cache = MemoryCache(ttl_seconds=300) # 5分キャッシュ
+_DEMOGRAPHICS_CACHE = {}
 
 
 class TemporaryDeletedCampaignCache:
@@ -9658,7 +9659,6 @@ class SetDemographicsReq(BaseModel):
     genders: list[str] = ["FEMALE"]
     age_ranges: list[str] = ["AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
 
-_DEMOGRAPHICS_CACHE = {}
 
 @app.post("/api/campaigns/{campaign_id}/set-demographics")
 def set_demographics(campaign_id: str, req: SetDemographicsReq):
@@ -9845,7 +9845,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demographics-ssr-v19', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demographics-ssr-v20', html)
 
 
         return HTMLResponse(
