@@ -1918,10 +1918,17 @@ def save_campaign_demographics(campaign_id: str, clinic_id: int, genders: list, 
     import json
     data = json.dumps({"genders": genders, "age_ranges": age_ranges}, ensure_ascii=False)
     with get_conn() as conn:
-        conn.execute("""
-            UPDATE campaigns SET demographics_json=?, updated_at=?
-            WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
-        """, (data, datetime.now(timezone.utc).isoformat(), str(campaign_id), str(campaign_id), clinic_id))
+        cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
+        if cid_int is not None:
+            conn.execute("""
+                UPDATE campaigns SET demographics_json=?, updated_at=?
+                WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
+            """, (data, datetime.now(timezone.utc).isoformat(), cid_int, str(campaign_id), clinic_id))
+        else:
+            conn.execute("""
+                UPDATE campaigns SET demographics_json=?, updated_at=?
+                WHERE google_campaign_id=? AND clinic_id=?
+            """, (data, datetime.now(timezone.utc).isoformat(), str(campaign_id), clinic_id))
         conn.commit()
 
 
@@ -1929,10 +1936,18 @@ def get_campaign_demographics(campaign_id: str, clinic_id: int) -> dict:
     """DBから保存済みのデモグラフィック情報を取得"""
     import json
     with get_conn() as conn:
-        row = conn.execute("""
-            SELECT demographics_json FROM campaigns
-            WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
-        """, (str(campaign_id), str(campaign_id), clinic_id)).fetchone()
+        cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
+        if cid_int is not None:
+            row = conn.execute("""
+                SELECT demographics_json FROM campaigns
+                WHERE (id=? OR google_campaign_id=?) AND clinic_id=?
+            """, (cid_int, str(campaign_id), clinic_id)).fetchone()
+        else:
+            row = conn.execute("""
+                SELECT demographics_json FROM campaigns
+                WHERE google_campaign_id=? AND clinic_id=?
+            """, (str(campaign_id), clinic_id)).fetchone()
+
         if row:
             d = dict(row)
             raw = d.get("demographics_json")

@@ -8052,14 +8052,25 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
 
     geo_targets_str = json.dumps(req.geo_targets or [], ensure_ascii=False)
 
+    cid_str = str(req.google_campaign_id)
+    cid_int = int(cid_str) if cid_str.isdigit() and int(cid_str) <= 2147483647 else None
+
     from datetime import datetime
     with db.get_conn() as conn:
-        conn.execute(
-            """UPDATE campaigns 
-               SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
-               WHERE (google_campaign_id=? OR id=?) AND clinic_id=?""",
-            (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(req.google_campaign_id), str(req.google_campaign_id), req.clinic_id)
-        )
+        if cid_int is not None:
+            conn.execute(
+                """UPDATE campaigns 
+                   SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
+                   WHERE (google_campaign_id=? OR id=?) AND clinic_id=?""",
+                (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cid_str, cid_int, req.clinic_id)
+            )
+        else:
+            conn.execute(
+                """UPDATE campaigns 
+                   SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? 
+                   WHERE google_campaign_id=? AND clinic_id=?""",
+                (region_str, req.type, float(req.radius_km or 8.0), geo_targets_str, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cid_str, req.clinic_id)
+            )
         conn.commit()
 
     return res
@@ -9740,7 +9751,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-update-all-audiences-v9', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-numeric-overflow-v10', html)
 
 
         return HTMLResponse(
