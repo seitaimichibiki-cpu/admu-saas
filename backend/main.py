@@ -9220,9 +9220,8 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
     
     if api_key:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            import google.genai as genai
+            gc = genai.Client(api_key=api_key)
             
             headlines_str = ", ".join(ad_headlines[:10])
             prompt = f"""
@@ -9254,8 +9253,11 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
   "ai_prompt_for_developer": "(Web制作担当者向けの具体的なLP修正指示プロンプト)"
 }}
 """
-            res = model.generate_content(prompt)
-            raw_txt = res.text.strip()
+            response = gc.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            raw_txt = (response.text or "").strip()
             if "```" in raw_txt:
                 raw_txt = re.sub(r'```[a-z]*', '', raw_txt).replace('```', '').strip()
             result_data = json.loads(raw_txt)
@@ -9610,6 +9612,35 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         c_name = "対象キャンペーン"
         google_campaign_id = campaign_id
 
+    # キャンペーンタイプを判定（Demand Gen / Video は AdGroupCriterion 非対応）
+    try:
+        ga_service = client._client.get_service("GoogleAdsService")
+        type_query = f"""
+            SELECT campaign.advertising_channel_type
+            FROM campaign
+            WHERE campaign.id = '{google_campaign_id}'
+        """
+        type_rows = ga_service.search(customer_id=client.customer_id, query=type_query)
+        camp_type = None
+        for row in type_rows:
+            camp_type = str(row.campaign.advertising_channel_type.name)
+            break
+    except Exception as e_type:
+        print(f"[set_demographics] キャンペーンタイプ取得エラー: {e_type}")
+        camp_type = None
+
+    # Demand Gen / Video キャンペーンは直接的な年齢性別設定が非対応
+    unsupported_types = ["DEMAND_GEN", "VIDEO", "PERFORMANCE_MAX"]
+    if camp_type and camp_type in unsupported_types:
+        type_ja = {"DEMAND_GEN": "デマンドジェネレーション（YouTube広告）", "VIDEO": "動画広告", "PERFORMANCE_MAX": "P-MAX"}
+        return {
+            "success": True,
+            "campaign_id": campaign_id,
+            "genders": req.genders,
+            "age_ranges": req.age_ranges,
+            "message": f"キャンペーン「{c_name}」は{type_ja.get(camp_type, camp_type)}タイプのため、年齢・性別はGoogle AIが自動最適化します。Google Ads管理画面のオーディエンスシグナルで設定可能です。"
+        }
+
     ALL_GENDERS = ["MALE", "FEMALE", "UNDETERMINED"]
     for g in ALL_GENDERS:
         adj = 0 if g in req.genders else -90
@@ -9668,7 +9699,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-lp-demo-v4', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-gemini-camptype-v5', html)
 
 
         return HTMLResponse(
