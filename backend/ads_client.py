@@ -1298,7 +1298,6 @@ class AdsClient:
             gender_map = {
                 "MALE": self._client.enums.GenderTypeEnum.MALE,
                 "FEMALE": self._client.enums.GenderTypeEnum.FEMALE,
-                "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
             }
             age_segment_map = {
                 "AGE_RANGE_18_24": (18, 24),
@@ -1330,15 +1329,23 @@ class AdsClient:
                 aud.resource_name = aud_rn
                 op.update_mask.paths.append("dimensions")
 
-                # デモグラフィック（性別・年齢）の構成追加
+                # 性別次元：UNDETERMINEDはgendersに追加不可(APIエラーになる)のため、include_undetermined=Trueで設定
                 gender_dim = self._client.get_type("GenderDimension")
                 for g in genders:
                     if g in gender_map:
                         gender_dim.genders.append(gender_map[g])
-                if gender_dim.genders:
-                    dim_g = self._client.get_type("AudienceDimension")
-                    dim_g.gender = gender_dim
-                    aud.dimensions.append(dim_g)
+
+                # 全性別（男女）の場合は FEMALE, MALE 両方をセットし include_undetermined = True
+                if len(gender_dim.genders) == 0 or len(genders) >= 2 or "UNDETERMINED" in genders:
+                    gender_dim.include_undetermined = True
+                    if gender_map["FEMALE"] not in gender_dim.genders:
+                        gender_dim.genders.append(gender_map["FEMALE"])
+                    if gender_map["MALE"] not in gender_dim.genders:
+                        gender_dim.genders.append(gender_map["MALE"])
+
+                dim_g = self._client.get_type("AudienceDimension")
+                dim_g.gender = gender_dim
+                aud.dimensions.append(dim_g)
 
                 # 年齢次元：選択された年齢層から全体最小年齢(overall_min)と最大年齢(overall_max)を抽出・統合
                 selected_mins = []
@@ -1388,10 +1395,15 @@ class AdsClient:
                     for g in genders:
                         if g in gender_map:
                             gender_dim.genders.append(gender_map[g])
-                    if gender_dim.genders:
-                        dim_g = self._client.get_type("AudienceDimension")
-                        dim_g.gender = gender_dim
-                        aud.dimensions.append(dim_g)
+                    if len(gender_dim.genders) == 0 or len(genders) >= 2 or "UNDETERMINED" in genders:
+                        gender_dim.include_undetermined = True
+                        if gender_map["FEMALE"] not in gender_dim.genders:
+                            gender_dim.genders.append(gender_map["FEMALE"])
+                        if gender_map["MALE"] not in gender_dim.genders:
+                            gender_dim.genders.append(gender_map["MALE"])
+                    dim_g = self._client.get_type("AudienceDimension")
+                    dim_g.gender = gender_dim
+                    aud.dimensions.append(dim_g)
 
                     if overall_min is not None or overall_max is not None:
                         age_dim = self._client.get_type("AgeDimension")
