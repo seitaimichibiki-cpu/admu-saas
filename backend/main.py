@@ -9156,44 +9156,68 @@ def diagnose_lp_match(req: DiagnoseLpMatchReq):
     """キャンペーンの実際の遷移先LPを動的取得し、100%メッセージ一致度評価およびAI修正指示プロンプト生成を実施"""
     import urllib.request, re, json
     
-    # 1. キャンペーンの実際の遷移先LP URLをGoogle Ads API / DBから動的取得
-    c_content = db.get_youtube_ad_content(req.clinic_id, req.campaign_id) or {}
-    final_urls = c_content.get("final_urls", [])
+    # 1. キャンペーンの実際の遷移先LP URLと広告見出しを動的取得
+    target_url = req.lp_url.strip() if req.lp_url else ""
+    ad_headlines = []
+    campaign_name = ""
     
-    target_url = req.lp_url.strip()
-    if not target_url or target_url == "https://seitai-katakori-lp.pages.dev":
-        if final_urls and len(final_urls) > 0:
-            target_url = final_urls[0]
-        else:
-            target_url = "https://seitai-katakori-lp.pages.dev"
-    
-    lp_text = ""
-    # LPの完全テキストスクレイピング取得
+    # Google Ads APIからキャンペーンの広告情報を直接取得
     try:
-        req_obj = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req_obj, timeout=5) as resp:
-            html_content = resp.read().decode('utf-8', errors='ignore')
-            cleaned_html = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-            raw_texts = re.findall(r'>([^<]+)<', cleaned_html)
-            valid_texts = [t.strip() for t in raw_texts if t.strip() and len(t.strip()) > 1]
-            lp_text = " / ".join(valid_texts[:30])
-    except Exception as e:
-        print(f"[diagnose_lp_match] LP取得スクレイピング通知: {e}")
-
-    actual_lp_full_content = (
-        "女性専門肩こり整体 整体院導 / 先着3名様限定（残りわずか） / "
-        "もう一生付き合っていくしかないと諦めていませんか？ / "
-        "頭痛・めまいを伴う つらい肩こりを根本改善 / "
-        "施術・トレーニング・靴インソール。3つの多角的なアプローチで、心も体もスッと軽くなり、自分にも家族にも優しくなれる。 / "
-        "体験特別オファー 通常価格 9,900円 初回施術 1,980円(税込) / "
-        "今すぐ初回特別価格で予約する > / "
-        "📍 藤枝駅徒歩3分 ｜ 📅 完全予約制・個室サロン ｜ 👤 専任女性整体師がマンツーマン対応"
-    )
+        acc = _require_account(req.clinic_id)
+        client_info = _get_ads_client(acc, "google")
+        token = client_info["token"]
+        c_id = client_info["customer_id"]
+        
+        # キャンペーンの広告情報を取得（RSA / Demand Gen両対応）
+        query = f"""
+            SELECT
+                campaign.name,
+                ad_group_ad.ad.responsive_search_ad.headlines,
+                ad_group_ad.ad.final_urls,
+                ad_group_ad.ad.type
+            FROM ad_group_ad
+            WHERE campaign.id = '{req.campaign_id}'
+              AND ad_group_ad.status != 'REMOVED'
+            LIMIT 5
+        """
+        rows = _gaql_query(c_id, query, token)
+        for r in rows:
+            camp = r.get("campaign", {})
+            if not campaign_name:
+                campaign_name = camp.get("name", "")
+            
+            ad = r.get("adGroupAd", {}).get("ad", {})
+            # final_urls取得
+            if not target_url:
+                fu = ad.get("finalUrls", [])
+                if fu:
+                    target_url = fu[0]
+            
+            # RSAのヘッドライン取得
+            rsa = ad.get("responsiveSearchAd", {})
+            if rsa and rsa.get("headlines"):
+                for h in rsa["headlines"]:
+                    txt = h.get("text", "")
+                    if txt and txt not in ad_headlines:
+                        ad_headlines.append(txt)
+    except Exception as e_ads:
+        print(f"[diagnose_lp_match] Google Ads情報取得フォールバック: {e_ads}")
     
-    if len(lp_text) < 30:
-        lp_text = actual_lp_full_content
-
-    ad_headlines = c_content.get("headlines", ["初回1,980円 女性専門肩こり", "頭痛・めまいを伴う肩こりに", "女性整体師が丁寧に対応"])
+    # DB保存済みの広告コンテンツからもフォールバック取得
+    if not ad_headlines or not target_url:
+        c_content = db.get_youtube_ad_content(req.clinic_id, req.campaign_id) or {}
+        if not target_url:
+            final_urls = c_content.get("final_urls", [])
+            if final_urls:
+                target_url = final_urls[0]
+        if not ad_headlines:
+            ad_headlines = c_content.get("headlines", [])
+    
+    # 最終フォールバック
+    if not target_url:
+        target_url = "https://michibiki-seitai.com"
+    if not ad_headlines:
+        ad_headlines = [f"（{campaign_name or req.campaign_id}の広告見出し未取得）"]
     
     api_key = os.getenv("GEMINI_API_KEY")
     result_data = None

@@ -1114,33 +1114,86 @@ class AdsClient:
         campaign_id: str,
         dimension: str,   # "gender" or "age"
         value: str,       # "MALE"/"FEMALE" or "AGE_RANGE_18_24" etc.
-        adjustment_pct: int,  # -20 ~ +20 の整数（%）
+        adjustment_pct: int,  # 0 = ターゲット, -90 = 除外（入札-90%で実質除外）
     ) -> dict:
         """
-        LOGICTIONのLTVデータに基づいてキャンペーンの性別・年齢別入札調整率を設定する。
+        キャンペーンの性別・年齢別ターゲティングを設定する。
 
-        Args:
-            campaign_id:     Google AdsキャンペーンID（数値文字列）
-            dimension:       "gender" または "age"
-            value:           性別: "MALE"/"FEMALE"  年齢: "AGE_RANGE_18_24" etc.
-            adjustment_pct:  入札調整率（%）。-20〜+20。0は変更なし。
-        Returns:
-            dict: { "success": bool, "applied": bool, "adjustment_pct": int }
+        Google Ads の CampaignCriterion では:
+        - ターゲット: bid_modifier を設定（negative=false）
+        - 除外: negative=true を設定（bid_modifier は設定不可）
+
+        既存のcriterionがあれば update/remove し、なければ create する。
         """
         if self.mock_mode:
             print(f"[MOCK] デモグラフィック入札調整: campaign={campaign_id} {dimension}={value} adj={adjustment_pct:+}%")
             return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": True}
 
-        # 入力バリデーション
-        adjustment_pct = max(-90, min(900, adjustment_pct))  # Google Ads APIの許容範囲
-        bid_modifier = 1.0 + (adjustment_pct / 100.0)
+        is_exclude = (adjustment_pct <= -90)
 
         try:
+            ga_service = self._client.get_service("GoogleAdsService")
             campaign_criterion_service = self._client.get_service("CampaignCriterionService")
+
+            # 1. 既存のcriterionを検索
+            dim_type = "GENDER" if dimension == "gender" else "AGE_RANGE"
+            query = f"""
+                SELECT campaign_criterion.resource_name,
+                       campaign_criterion.negative,
+                       campaign_criterion.bid_modifier,
+                       campaign_criterion.gender.type,
+                       campaign_criterion.age_range.type
+                FROM campaign_criterion
+                WHERE campaign.id = '{campaign_id}'
+                  AND campaign_criterion.type = '{dim_type}'
+            """
+            existing_resource = None
+            existing_negative = None
+            try:
+                rows = ga_service.search(customer_id=self.customer_id, query=query)
+                for row in rows:
+                    cc = row.campaign_criterion
+                    # 該当する性別/年齢のcriterionを探す
+                    if dimension == "gender":
+                        if str(cc.gender.type_.name) == value or str(cc.gender.type_) == value:
+                            existing_resource = cc.resource_name
+                            existing_negative = cc.negative
+                            break
+                    else:
+                        if str(cc.age_range.type_.name) == value or str(cc.age_range.type_) == value:
+                            existing_resource = cc.resource_name
+                            existing_negative = cc.negative
+                            break
+            except Exception as e_search:
+                print(f"[AdsClient] 既存criterion検索エラー（無視して新規作成）: {e_search}")
+
+            # 2. 既存がある場合の処理
+            if existing_resource:
+                if is_exclude and existing_negative:
+                    # 既に除外済み → 何もしない
+                    return {"success": True, "applied": False, "adjustment_pct": adjustment_pct, "note": "already excluded"}
+                if not is_exclude and not existing_negative:
+                    # 既にターゲット済み → 何もしない（bid_modifier更新は不要）
+                    return {"success": True, "applied": False, "adjustment_pct": adjustment_pct, "note": "already targeted"}
+
+                # 状態が変わる場合は既存を削除して再作成
+                remove_op = self._client.get_type("CampaignCriterionOperation")
+                remove_op.remove = existing_resource
+                campaign_criterion_service.mutate_campaign_criteria(
+                    customer_id=self.customer_id, operations=[remove_op]
+                )
+                print(f"[AdsClient] 既存criterion削除: {existing_resource}")
+
+            # 3. 新規作成
             op = self._client.get_type("CampaignCriterionOperation")
             criterion = op.create
             criterion.campaign = f"customers/{self.customer_id}/campaigns/{campaign_id}"
-            criterion.bid_modifier = bid_modifier
+
+            if is_exclude:
+                criterion.negative = True
+                # negative criterion には bid_modifier を設定してはいけない
+            else:
+                criterion.bid_modifier = 1.0 + (adjustment_pct / 100.0)
 
             if dimension == "gender":
                 gender_map = {
@@ -1149,7 +1202,6 @@ class AdsClient:
                     "UNDETERMINED": self._client.enums.GenderTypeEnum.UNDETERMINED,
                 }
                 criterion.gender.type_ = gender_map.get(value, self._client.enums.GenderTypeEnum.UNDETERMINED)
-
             elif dimension == "age":
                 age_map = {
                     "AGE_RANGE_18_24": self._client.enums.AgeRangeTypeEnum.AGE_RANGE_18_24,
@@ -1168,7 +1220,8 @@ class AdsClient:
             campaign_criterion_service.mutate_campaign_criteria(
                 customer_id=self.customer_id, operations=[op]
             )
-            print(f"[AdsClient] デモグラフィック入札調整適用: campaign={campaign_id} {dimension}={value} modifier={bid_modifier:.2f}")
+            action = "除外" if is_exclude else "ターゲット"
+            print(f"[AdsClient] デモグラフィック{action}適用: campaign={campaign_id} {dimension}={value}")
             return {"success": True, "applied": True, "adjustment_pct": adjustment_pct, "mock": False}
 
         except Exception as e:
