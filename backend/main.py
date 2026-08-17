@@ -8105,8 +8105,6 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     db.create_alert(req.clinic_id, msg, level="SUCCESS")
     return {"success": True, "message": msg}
 
-    return res
-
 
 class UpdateCampaignUrlReq(BaseModel):
     clinic_id: int = 1
@@ -9748,11 +9746,15 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
 def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
     """キャンペーンの最新のターゲット設定（性別・年齢層）を取得"""
     cid_s = str(campaign_id)
+    print(f"[GET demographics] campaign_id='{cid_s}', clinic_id={clinic_id}, cache_hit={cid_s in _DEMOGRAPHICS_CACHE}")
+
     if cid_s in _DEMOGRAPHICS_CACHE:
+        print(f"[GET demographics] CACHE HIT: {_DEMOGRAPHICS_CACHE[cid_s]}")
         return {"success": True, **_DEMOGRAPHICS_CACHE[cid_s]}
 
     # DBから保存済みデータを取得 (campaign_id で直接引く)
     saved = db.get_campaign_demographics(campaign_id, clinic_id)
+    print(f"[GET demographics] DB direct lookup result: {saved}")
     if saved and isinstance(saved, dict) and "genders" in saved:
         _DEMOGRAPHICS_CACHE[cid_s] = saved
         return {"success": True, "genders": saved.get("genders", []), "age_ranges": saved.get("age_ranges", [])}
@@ -9760,21 +9762,27 @@ def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
     # キャンペーン情報解決を試みる (google_campaign_id 経由で再検索)
     try:
         camp = _resolve_campaign(campaign_id, clinic_id)
+        print(f"[GET demographics] _resolve_campaign result: id={camp.get('id') if camp else None}, google_campaign_id={camp.get('google_campaign_id') if camp else None}, name={camp.get('name') if camp else None}")
         if camp:
             gc_id = str(camp.get("google_campaign_id") or "")
             c_name = str(camp.get("name") or "")
-            for alt_key in [gc_id, c_name]:
-                if alt_key and alt_key in _DEMOGRAPHICS_CACHE:
-                    return {"success": True, **_DEMOGRAPHICS_CACHE[alt_key]}
-                if alt_key:
+            camp_db_id = str(camp.get("id") or "")
+            for alt_key in [gc_id, c_name, camp_db_id]:
+                if alt_key and alt_key != cid_s:
+                    if alt_key in _DEMOGRAPHICS_CACHE:
+                        print(f"[GET demographics] CACHE HIT via alt_key '{alt_key}'")
+                        _DEMOGRAPHICS_CACHE[cid_s] = _DEMOGRAPHICS_CACHE[alt_key]
+                        return {"success": True, **_DEMOGRAPHICS_CACHE[alt_key]}
                     saved_alt = db.get_campaign_demographics(alt_key, clinic_id)
+                    print(f"[GET demographics] DB alt lookup key='{alt_key}' result: {saved_alt}")
                     if saved_alt and isinstance(saved_alt, dict) and "genders" in saved_alt:
                         _DEMOGRAPHICS_CACHE[cid_s] = saved_alt
                         return {"success": True, "genders": saved_alt.get("genders", []), "age_ranges": saved_alt.get("age_ranges", [])}
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[GET demographics] _resolve_campaign error: {e}")
 
     # デフォルトフォールバック
+    print(f"[GET demographics] FALLBACK TO DEFAULTS for '{cid_s}'")
     return {
         "success": True,
         "genders": ["FEMALE"],
@@ -9811,7 +9819,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-fix-location-fallback-v16', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-debug-demographics-v17', html)
 
 
         return HTMLResponse(
