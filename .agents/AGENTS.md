@@ -69,3 +69,21 @@
   * Block tab: `CartoDB Dark` — `dark_all`
 * **Key DOM IDs** (per campaign): `locTab_range_{id}`, `locTab_block_{id}`, `locPanel_range_{id}`, `locPanel_block_{id}`, `drawerRadiusMap_{id}`, `drawerRadiusInput_{id}`, `drawerLeafletMap_{id}`
 * **Key Functions**: `switchDrawerLocTab(campId, tab)`, `initDrawerRadiusMap(campId, lat, lon, radiusKm)`, `updateDrawerRadiusCircle(campId)`, `initDrawerMap(campId)`
+
+## 11. Gemini SDK Usage (google.genai Client Pattern)
+* **Rule**: All Gemini API calls in this codebase MUST use the **new SDK** (`google.genai`), NOT the old SDK (`google.generativeai`).
+* **Pattern**:
+  ```python
+  import google.genai as genai
+  gc = genai.Client(api_key=api_key)
+  response = gc.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+  text = response.text
+  ```
+* **Reason**: Render's `requirements.txt` installs `google-genai`, not `google-generativeai`. Using the old SDK causes `ModuleNotFoundError` or API incompatibility at runtime.
+
+## 12. Demographic Targeting: Campaign Type Restrictions
+* **Rule**: Before applying age/gender targeting via `AdGroupCriterion`, check `campaign.advertising_channel_type`.
+* **Supported**: `SEARCH`, `DISPLAY` → Use `AdGroupCriterionService` with `negative=True` for exclusion, or remove negative criterion for targeting.
+* **Unsupported**: `DEMAND_GEN`, `VIDEO`, `PERFORMANCE_MAX` → These campaign types do NOT allow `AdGroupCriterion` for demographics. Demographics are managed via **Audience Signals** (UI-only or `AssetGroupSignal` API).
+* **CampaignCriterion**: Do NOT use `CampaignCriterionService` for demographics at all — `bid_modifier` and `negative` both fail with `FIELD_INCOMPATIBLE_WITH_NEGATIVE_TARGETING`.
+
