@@ -13,7 +13,7 @@ except ImportError:
     pass  # python-dotenvがない場合はOS環境変数のみ使用
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Request, Response, Header
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Request, Response, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -9878,7 +9878,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v23', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v24', html)
 
 
         return HTMLResponse(
