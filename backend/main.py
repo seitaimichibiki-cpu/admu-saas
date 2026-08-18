@@ -9816,7 +9816,6 @@ def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
     }
 
 
-@app.get("/{path:path}", include_in_schema=False)
 # ―― 動画広告台本一括生成 API ―――――――――――――――――――――――――――――――
 class GenerateVideoScriptReq(BaseModel):
     clinic_id: int = 1
@@ -9848,7 +9847,9 @@ def generate_video_script_endpoint(req: GenerateVideoScriptReq):
         raise HTTPException(500, f"動画広告台本の生成に失敗しました: {e}")
 
 
+@app.get("/{path:path}", include_in_schema=False)
 def serve_spa(path: str = ""):
+
     # admin.html・onboarding.htmlは専用ルートで処理済み
     # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
     index = os.path.join(FRONTEND_DIR, "index.html")
@@ -9876,7 +9877,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v21', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v22', html)
 
 
         return HTMLResponse(
