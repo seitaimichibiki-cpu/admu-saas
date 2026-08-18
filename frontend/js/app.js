@@ -8882,7 +8882,7 @@ function renderVsResults(data) {
   let html = `
     <div style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
       <h3 style="font-size:15px; font-weight:700; color:#34d399; margin:0; display:flex; align-items:center; gap:6px;">
-        <span>✅ 台本作成完了 (${durationName})</span>
+        <span>✅ 台本作成完了 (${durationName} × 演出ガイド)</span>
       </h3>
       <span style="font-size:11px; color:var(--text-3);">全3パターン提案</span>
     </div>
@@ -8905,25 +8905,92 @@ function renderVsResults(data) {
   // 各パターンの詳細カード（切り替え表示）
   patterns.forEach((p, idx) => {
     const isHidden = idx !== 0;
-    const steps = p.steps || {};
+    const rawSteps = p.steps || {};
     const suggestions = p.text_overlay_suggestions || [];
+
+    // ステップデータの安全なパース (構造化 {instruction, script} または 文字列)
+    const parseStep = (stepVal, defaultTitle) => {
+      if (typeof stepVal === 'object' && stepVal !== null) {
+        return { instruction: stepVal.instruction || '', script: stepVal.script || '' };
+      }
+      return { instruction: '', script: String(stepVal || '') };
+    };
+
+    const s1 = parseStep(rawSteps.step1_target, '① ターゲット決定');
+    const s2 = parseStep(rawSteps.step2_location, '② 地域・実績');
+    const s3 = parseStep(rawSteps.step3_usp, '③ 目新しさ');
+    const s4 = parseStep(rawSteps.step4_reason, '④ 豆知識・理由');
+    const s5 = parseStep(rawSteps.step5_offer, '⑤ オファー・限定理由・CTA');
+
+    // フル台本の自動生成
+    const narrationText = p.narration_only_script || [s1.script, s2.script, s3.script, s4.script, s5.script].filter(Boolean).join('\n\n');
+    const fullTextWithGuide = p.full_script_with_instructions || `【動画のコンセプト】
+${p.concept || ''}
+
+${p.visual_hook_instruction || ''}
+
+${p.voice_pacing_instruction || ''}
+
+--- 【5ステップ演出台本】 ---
+① ターゲット指名:
+撮影指示: ${s1.instruction}
+セリフ: ${s1.script}
+
+② 地域名・実績:
+撮影指示: ${s2.instruction}
+セリフ: ${s2.script}
+
+③ 目新しさ(USP):
+撮影指示: ${s3.instruction}
+セリフ: ${s3.script}
+
+④ 豆知識・メカニズム:
+撮影指示: ${s4.instruction}
+セリフ: ${s4.script}
+
+⑤ オファー・限定理由・CTA:
+撮影指示: ${s5.instruction}
+セリフ: ${s5.script}
+
+${p.screen_cta_instruction || ''}`;
 
     html += `
       <div class="vs-pattern-card" id="vs_pattern_card_${p.pattern_id}" style="${isHidden ? 'display:none;' : 'display:block;'}">
-        <!-- バナー header -->
+        
+        <!-- ヘッダー情報 ＆ ２パターンコピーボタン -->
         <div class="card" style="padding:14px; margin-bottom:12px; background:linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.15)); border:1px solid rgba(139,92,246,0.3);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
             <span style="font-size:14px; font-weight:800; color:#e9d5ff;">${p.pattern_name}</span>
             <div style="display:flex; gap:6px;">
               <span style="font-size:10px; background:rgba(52,211,153,0.2); color:#34d399; padding:2px 6px; border-radius:4px; border:1px solid rgba(52,211,153,0.3); font-weight:700;">⏱️ 目安: 約${p.estimated_seconds || 30}秒</span>
-              <span style="font-size:10px; background:rgba(168,85,247,0.2); color:#c084fc; padding:2px 6px; border-radius:4px; border:1px solid rgba(168,85,247,0.3); font-weight:700;">✍️ ${p.total_characters || (p.full_script || '').length}文字</span>
+              <span style="font-size:10px; background:rgba(168,85,247,0.2); color:#c084fc; padding:2px 6px; border-radius:4px; border:1px solid rgba(168,85,247,0.3); font-weight:700;">✍️ ${p.total_characters || narrationText.length}文字</span>
             </div>
           </div>
           <p style="font-size:11px; color:var(--text-2); margin:0 0 10px;">💡 ${p.concept || ''}</p>
-          <button onclick="copyVsScript('${p.pattern_id}')" class="btn btn-primary" style="width:100%; font-size:12px; font-weight:700; padding:8px; background:linear-gradient(135deg, #10b981, #059669); border:none;">
-            📋 この台本の全文をクリップボードにコピー
-          </button>
+          
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <button onclick="copyVsScript('${p.pattern_id}', 'full')" class="btn btn-primary" style="font-size:11px; font-weight:700; padding:8px; background:linear-gradient(135deg, #10b981, #059669); border:none;">
+              📋 演出ガイド付き全文コピー
+            </button>
+            <button onclick="copyVsScript('${p.pattern_id}', 'narration')" class="btn" style="font-size:11px; font-weight:700; padding:8px; background:rgba(30,41,59,0.8); border:1px solid #a78bfa; color:#e9d5ff;">
+              🗣️ ナレーションセリフのみコピー
+            </button>
+          </div>
         </div>
+
+        <!-- 🎬 冒頭3秒の撮影指示（視覚フック） -->
+        ${p.visual_hook_instruction ? `
+          <div style="padding:10px 12px; margin-bottom:10px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:6px; font-size:11px; color:#fca5a5; font-weight:700;">
+            ${p.visual_hook_instruction}
+          </div>
+        ` : ''}
+
+        <!-- 🎵 ナレーション指導（声の抑揚・トーン） -->
+        ${p.voice_pacing_instruction ? `
+          <div style="padding:10px 12px; margin-bottom:12px; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.4); border-radius:6px; font-size:11px; color:#e9d5ff; font-weight:700;">
+            ${p.voice_pacing_instruction}
+          </div>
+        ` : ''}
 
         <!-- 5ステップ詳細カード -->
         <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
@@ -8931,34 +8998,46 @@ function renderVsResults(data) {
           <!-- ① ターゲット指名 -->
           <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #ef4444; border-radius:6px;">
             <div style="font-size:11px; font-weight:700; color:#fca5a5; margin-bottom:4px;">① ターゲット決定パート（フック）</div>
-            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step1_target || ''}</div>
+            ${s1.instruction ? `<div style="font-size:10px; color:#94a3b8; margin-bottom:3px;">${s1.instruction}</div>` : ''}
+            <div style="font-size:12px; color:#fff; line-height:1.5; font-weight:600;">🗣️ 「${s1.script}」</div>
           </div>
 
           <!-- ② 地域・実績 -->
           <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #3b82f6; border-radius:6px;">
             <div style="font-size:11px; font-weight:700; color:#93c5fd; margin-bottom:4px;">② 地域名・実績パート（信頼感）</div>
-            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step2_location || ''}</div>
+            ${s2.instruction ? `<div style="font-size:10px; color:#94a3b8; margin-bottom:3px;">${s2.instruction}</div>` : ''}
+            <div style="font-size:12px; color:#fff; line-height:1.5; font-weight:600;">🗣️ 「${s2.script}」</div>
           </div>
 
           <!-- ③ 目新しさ -->
           <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #8b5cf6; border-radius:6px;">
             <div style="font-size:11px; font-weight:700; color:#c084fc; margin-bottom:4px;">③ 目新しさパート（独自性/USP）</div>
-            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step3_usp || ''}</div>
+            ${s3.instruction ? `<div style="font-size:10px; color:#94a3b8; margin-bottom:3px;">${s3.instruction}</div>` : ''}
+            <div style="font-size:12px; color:#fff; line-height:1.5; font-weight:600;">🗣️ 「${s3.script}」</div>
           </div>
 
           <!-- ④ 豆知識・メカニズム -->
           <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #f59e0b; border-radius:6px;">
             <div style="font-size:11px; font-weight:700; color:#fcd34d; margin-bottom:4px;">④ 豆知識・理由パート（説得力/メカニズム）</div>
-            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step4_reason || ''}</div>
+            ${s4.instruction ? `<div style="font-size:10px; color:#94a3b8; margin-bottom:3px;">${s4.instruction}</div>` : ''}
+            <div style="font-size:12px; color:#fff; line-height:1.5; font-weight:600;">🗣️ 「${s4.script}」</div>
           </div>
 
           <!-- ⑤ オファー -->
           <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #10b981; border-radius:6px;">
-            <div style="font-size:11px; font-weight:700; color:#6ee7b7; margin-bottom:4px;">⑤ オファーパート（価格/行動換起）</div>
-            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step5_offer || ''}</div>
+            <div style="font-size:11px; font-weight:700; color:#6ee7b7; margin-bottom:4px;">⑤ オファー・限定理由・CTA（価格/行動換起）</div>
+            ${s5.instruction ? `<div style="font-size:10px; color:#94a3b8; margin-bottom:3px;">${s5.instruction}</div>` : ''}
+            <div style="font-size:12px; color:#fff; line-height:1.5; font-weight:600;">🗣️ 「${s5.script}」</div>
           </div>
 
         </div>
+
+        <!-- 👇 画面ラストのタップ誘導（CTA演出） -->
+        ${p.screen_cta_instruction ? `
+          <div style="padding:10px 12px; margin-bottom:12px; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:6px; font-size:11px; color:#6ee7b7; font-weight:700;">
+            ${p.screen_cta_instruction}
+          </div>
+        ` : ''}
 
         <!-- 画面テロップ提案 -->
         ${suggestions.length > 0 ? `
@@ -8971,7 +9050,8 @@ function renderVsResults(data) {
         ` : ''}
 
         <!-- 隠しテキストエリア（コピー用） -->
-        <textarea id="vs_full_text_${p.pattern_id}" style="display:none;">${p.full_script || Object.values(steps).join('\n\n')}</textarea>
+        <textarea id="vs_full_text_${p.pattern_id}" style="display:none;">${fullTextWithGuide}</textarea>
+        <textarea id="vs_narration_text_${p.pattern_id}" style="display:none;">${narrationText}</textarea>
 
       </div>
     `;
@@ -8995,19 +9075,23 @@ window.switchVsPattern = function(patternId) {
   });
 };
 
-window.copyVsScript = function(patternId) {
-  const ta = document.getElementById(`vs_full_text_${patternId}`);
+window.copyVsScript = function(patternId, type = 'full') {
+  const elementId = type === 'narration' ? `vs_narration_text_${patternId}` : `vs_full_text_${patternId}`;
+  const ta = document.getElementById(elementId);
+  const msg = type === 'narration' ? 'ナレーションセリフのみコピーしました！' : '演出ガイド付き全文をコピーしました！';
+
   if (ta && ta.value) {
     navigator.clipboard.writeText(ta.value).then(() => {
-      toast('台本全文をクリップボードにコピーしました！', 'success');
+      toast(msg, 'success');
     }).catch(() => {
       ta.style.display = 'block';
       ta.select();
       document.execCommand('copy');
       ta.style.display = 'none';
-      toast('台本全文をコピーしました！', 'success');
+      toast(msg, 'success');
     });
   }
 };
+
 
 
