@@ -9828,7 +9828,7 @@ class GenerateVideoScriptReq(BaseModel):
     tone_manner: str = "friendly"
 
 @app.post("/api/video-script/generate")
-def generate_video_script_endpoint(req: GenerateVideoScriptReq):
+def generate_video_script_endpoint(req: GenerateVideoScriptReq = Body(...)):
     """整体院・サロン向け 5ステップ動画広告台本をAIで一括生成"""
     from video_script import generate_video_scripts
     try:
@@ -9845,6 +9845,7 @@ def generate_video_script_endpoint(req: GenerateVideoScriptReq):
     except Exception as e:
         print(f"[GenerateVideoScript] エラー: {e}")
         raise HTTPException(500, f"動画広告台本の生成に失敗しました: {e}")
+
 
 
 @app.get("/{path:path}", include_in_schema=False)
@@ -9877,7 +9878,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v22', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v23', html)
 
 
         return HTMLResponse(
