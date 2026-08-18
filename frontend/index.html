@@ -262,6 +262,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         <span>予算管理</span>
       </a>
+      <a href="#" class="nav-item" data-page="video-script">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <span>動画広告台本作成</span>
+      </a>
 
       <a href="#" class="nav-item" data-page="help">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
@@ -661,8 +665,124 @@
         </div>
       </section>
 
+      <!-- 🎥 動画広告台本自動作成 -->
+      <section id="page-video-script" class="page hidden">
+        <div class="page-header" style="margin-bottom:20px;">
+          <div>
+            <h1 style="font-size:22px; font-weight:800; color:var(--text-1); margin:0 0 6px; display:flex; align-items:center; gap:8px;">
+              <span>🎥 動画広告台本 AI一括作成ツール</span>
+              <span style="font-size:11px; background:linear-gradient(135deg, #8b5cf6, #ec4899); color:#fff; padding:3px 8px; border-radius:12px; font-weight:700;">5ステップ構成 × 尺選択</span>
+            </h1>
+            <p style="font-size:13px; color:var(--text-2); margin:0;">整体院・サロンの強みを活かし、YouTubeやSNS動画広告で高い反応率（CVR）を叩き出す5ステップ台本を一括生成します。</p>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:start;">
+          
+          <!-- 入力フォームエリア -->
+          <div class="card" style="padding:20px; border:1px solid rgba(139,92,246,0.3); background:rgba(15,23,42,0.6);">
+            <h3 style="font-size:15px; font-weight:700; color:#c084fc; margin:0 0 16px; display:flex; align-items:center; gap:6px;">
+              <span>📝 顧客情報・施術強みの入力</span>
+            </h3>
+
+            <!-- 質問① ターゲット -->
+            <div style="margin-bottom:14px;">
+              <label style="font-size:12px; font-weight:700; color:var(--text-1); display:block; margin-bottom:4px;">
+                ① ターゲットの悩み・症状 <span style="color:#ef4444">*</span>
+              </label>
+              <textarea id="vs_target_concern" rows="2" class="form-control" style="width:100%; font-size:12px; background:rgba(30,41,59,0.8); border:1px solid var(--border-color); border-radius:6px; padding:8px;" placeholder="例: 首肩がガチガチで頭痛がする、長年の腰痛で立ち上がりが辛い、どこに行っても治らない..."></textarea>
+            </div>
+
+            <!-- 質問② 地域・実績 -->
+            <div style="margin-bottom:14px;">
+              <label style="font-size:12px; font-weight:700; color:var(--text-1); display:block; margin-bottom:4px;">
+                ② 地域名・店舗名・実績の数字 <span style="color:#ef4444">*</span>
+              </label>
+              <input type="text" id="vs_location_and_history" class="form-control" style="width:100%; font-size:12px; background:rgba(30,41,59,0.8); border:1px solid var(--border-color); border-radius:6px; padding:8px;" placeholder="例: 藤枝市で開院15年、のべ1万人以上が通った実績の整体院 導">
+            </div>
+
+            <!-- 質問③ 目新しさ・USP -->
+            <div style="margin-bottom:14px;">
+              <label style="font-size:12px; font-weight:700; color:var(--text-1); display:block; margin-bottom:4px;">
+                ③ 他店にない目新しさ・独自の強み（USP） <span style="color:#ef4444">*</span>
+              </label>
+              <textarea id="vs_usp_feature" rows="2" class="form-control" style="width:100%; font-size:12px; background:rgba(30,41,59,0.8); border:1px solid var(--border-color); border-radius:6px; padding:8px;" placeholder="例: 10年熟成の酵素風呂で体を温めてから施術、足元（靴・インソール）から整える骨盤矯正..."></textarea>
+            </div>
+
+            <!-- 質問④ 理由・メカニズム -->
+            <div style="margin-bottom:14px;">
+              <label style="font-size:12px; font-weight:700; color:var(--text-1); display:block; margin-bottom:4px;">
+                ④ なぜ効くのかの理由・メカニズム（豆知識） <span style="color:#ef4444">*</span>
+              </label>
+              <textarea id="vs_reason_mechanism" rows="2" class="form-control" style="width:100%; font-size:12px; background:rgba(30,41,59,0.8); border:1px solid var(--border-color); border-radius:6px; padding:8px;" placeholder="例: 体を深部から温めた状態で受ける深部トリートメントだからただのマッサージと違い根底からほぐれる..."></textarea>
+            </div>
+
+            <!-- 質問⑤ オファー -->
+            <div style="margin-bottom:16px;">
+              <label style="font-size:12px; font-weight:700; color:var(--text-1); display:block; margin-bottom:4px;">
+                ⑤ 初回限定オファー・価格条件 <span style="color:#ef4444">*</span>
+              </label>
+              <input type="text" id="vs_offer_detail" class="form-control" style="width:100%; font-size:12px; background:rgba(30,41,59,0.8); border:1px solid var(--border-color); border-radius:6px; padding:8px;" placeholder="例: 通常13,000円が初回限定たったの9,900円（先着10名様限定）">
+            </div>
+
+            <!-- ⏱️ 動画の尺（選択） -->
+            <div style="margin-bottom:16px;">
+              <label style="font-size:12px; font-weight:700; color:#a78bfa; display:block; margin-bottom:6px;">
+                ⏱️ 動画の尺（朗読スピード制御）
+              </label>
+              <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;" id="vsDurationPills">
+                <button type="button" class="vs-duration-pill" data-val="15s" style="padding:8px 4px; font-size:11px; border-radius:6px; border:1px solid rgba(139,92,246,0.4); background:rgba(30,41,59,0.8); color:var(--text-1); cursor:pointer; text-align:center;">
+                  <strong style="display:block; font-size:12px;">15秒</strong>
+                  <span style="font-size:9px; color:var(--text-3);">75〜90字</span>
+                </button>
+                <button type="button" class="vs-duration-pill active" data-val="30s" style="padding:8px 4px; font-size:11px; border-radius:6px; border:1px solid #8b5cf6; background:linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.3)); color:#fff; font-weight:700; cursor:pointer; text-align:center;">
+                  <strong style="display:block; font-size:12px;">30秒</strong>
+                  <span style="font-size:9px; color:#ddd;">150〜180字</span>
+                </button>
+                <button type="button" class="vs-duration-pill" data-val="60s" style="padding:8px 4px; font-size:11px; border-radius:6px; border:1px solid rgba(139,92,246,0.4); background:rgba(30,41,59,0.8); color:var(--text-1); cursor:pointer; text-align:center;">
+                  <strong style="display:block; font-size:12px;">60秒</strong>
+                  <span style="font-size:9px; color:var(--text-3);">300〜360字</span>
+                </button>
+                <button type="button" class="vs-duration-pill" data-val="90s" style="padding:8px 4px; font-size:11px; border-radius:6px; border:1px solid rgba(139,92,246,0.4); background:rgba(30,41,59,0.8); color:var(--text-1); cursor:pointer; text-align:center;">
+                  <strong style="display:block; font-size:12px;">90秒</strong>
+                  <span style="font-size:9px; color:var(--text-3);">450〜540字</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 🎭 トーン＆マナー -->
+            <div style="margin-bottom:20px;">
+              <label style="font-size:12px; font-weight:700; color:#a78bfa; display:block; margin-bottom:6px;">
+                🎭 口調・雰囲気（トーン）
+              </label>
+              <div style="display:flex; gap:12px; font-size:11px; color:var(--text-1);">
+                <label style="cursor:pointer;"><input type="radio" name="vs_tone" value="friendly" checked> 親しみ・共感</label>
+                <label style="cursor:pointer;"><input type="radio" name="vs_tone" value="professional"> 頼れるプロ・誠実</label>
+                <label style="cursor:pointer;"><input type="radio" name="vs_tone" value="passionate"> インパクト・熱血</label>
+              </div>
+            </div>
+
+            <!-- 生成実行ボタン -->
+            <button id="btnGenerateVideoScript" onclick="generateVideoScriptAction()" class="btn btn-primary" style="width:100%; padding:12px; font-size:14px; font-weight:800; background:linear-gradient(135deg, #8b5cf6, #ec4899); border:none; border-radius:8px; box-shadow:0 4px 14px rgba(139,92,246,0.4); cursor:pointer;">
+              ⚡ 5ステップ動画台本をAIで一括作成
+            </button>
+          </div>
+
+          <!-- 出力表示エリア -->
+          <div id="vsResultContainer">
+            <div class="card" style="padding:20px; text-align:center; color:var(--text-3); background:rgba(15,23,42,0.4); border:1px dashed rgba(139,92,246,0.3);">
+              <div style="font-size:36px; margin-bottom:10px;">🎬</div>
+              <h4 style="font-size:14px; color:var(--text-2); margin:0 0 6px;">左側のフォームを入力して一括作成を実行してください</h4>
+              <p style="font-size:12px; margin:0;">5つの構成（①ターゲット → ②地域・実績 → ③目新しさ → ④豆知識 → ⑤オファー）に完全に沿った台本を3パターン生成します。</p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
       <!-- Budget -->
       <section id="page-budget" class="page hidden">
+
 
         <!-- ① 月間予算入力（ここだけ操作） -->
         <div class="card" style="border:1px solid rgba(200,169,122,0.35);background:linear-gradient(135deg,rgba(200,169,122,0.06),rgba(0,0,0,0))">

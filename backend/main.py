@@ -9817,6 +9817,37 @@ def get_campaign_demographics_endpoint(campaign_id: str, clinic_id: int = 1):
 
 
 @app.get("/{path:path}", include_in_schema=False)
+# ―― 動画広告台本一括生成 API ―――――――――――――――――――――――――――――――
+class GenerateVideoScriptReq(BaseModel):
+    clinic_id: int = 1
+    target_concern: str
+    location_and_history: str
+    usp_feature: str
+    reason_mechanism: str
+    offer_detail: str
+    duration_key: str = "30s"
+    tone_manner: str = "friendly"
+
+@app.post("/api/video-script/generate")
+def generate_video_script_endpoint(req: GenerateVideoScriptReq):
+    """整体院・サロン向け 5ステップ動画広告台本をAIで一括生成"""
+    from video_script import generate_video_scripts
+    try:
+        data = generate_video_scripts(
+            target_concern=req.target_concern,
+            location_and_history=req.location_and_history,
+            usp_feature=req.usp_feature,
+            reason_mechanism=req.reason_mechanism,
+            offer_detail=req.offer_detail,
+            duration_key=req.duration_key,
+            tone_manner=req.tone_manner
+        )
+        return {"success": True, **data}
+    except Exception as e:
+        print(f"[GenerateVideoScript] エラー: {e}")
+        raise HTTPException(500, f"動画広告台本の生成に失敗しました: {e}")
+
+
 def serve_spa(path: str = ""):
     # admin.html・onboarding.htmlは専用ルートで処理済み
     # APIルート（/api/*）はFastAPIのルート解決で先にマッチするため、ここに来た時点でSPAのパス
@@ -9845,7 +9876,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260817-demographics-ssr-v20', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v21', html)
 
 
         return HTMLResponse(

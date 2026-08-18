@@ -637,6 +637,7 @@ const PAGE_TITLES = {
   dashboard: 'ダッシュボード',
   campaigns: 'キャンペーン管理',
   budget: '予算設定（手動）',
+  'video-script': '動画広告台本自動作成',
   'bid-rules': '入札ルール設定',
   'ad-copy': 'AI広告文生成',
   alerts: 'アラート・ログ',
@@ -8768,4 +8769,245 @@ async function createAndSyncConversionAction() {
   }
 }
 window.createAndSyncConversionAction = createAndSyncConversionAction;
+
+// ============================================================
+// 🎥 動画広告台本 AI一括作成ツール
+// ============================================================
+let _vsSelectedDuration = '30s';
+let _vsCurrentData = null;
+
+// ピルボタン切り替え初期化
+document.addEventListener('click', function(e) {
+  const pill = e.target.closest('.vs-duration-pill');
+  if (pill) {
+    document.querySelectorAll('.vs-duration-pill').forEach(btn => {
+      btn.classList.remove('active');
+      btn.style.background = 'rgba(30,41,59,0.8)';
+      btn.style.border = '1px solid rgba(139,92,246,0.4)';
+      btn.style.color = 'var(--text-1)';
+      btn.style.fontWeight = 'normal';
+    });
+    pill.classList.add('active');
+    pill.style.background = 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.3))';
+    pill.style.border = '1px solid #8b5cf6';
+    pill.style.color = '#fff';
+    pill.style.fontWeight = '700';
+    _vsSelectedDuration = pill.dataset.val || '30s';
+  }
+});
+
+window.generateVideoScriptAction = async function() {
+  const targetConcern = document.getElementById('vs_target_concern')?.value?.trim();
+  const locationHistory = document.getElementById('vs_location_and_history')?.value?.trim();
+  const uspFeature = document.getElementById('vs_usp_feature')?.value?.trim();
+  const reasonMechanism = document.getElementById('vs_reason_mechanism')?.value?.trim();
+  const offerDetail = document.getElementById('vs_offer_detail')?.value?.trim();
+  
+  const toneEl = document.querySelector('input[name="vs_tone"]:checked');
+  const toneManner = toneEl ? toneEl.value : 'friendly';
+
+  if (!targetConcern || !locationHistory || !uspFeature || !reasonMechanism || !offerDetail) {
+    toast('①〜⑤のすべての質問項目に入力してください。', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnGenerateVideoScript');
+  const resultContainer = document.getElementById('vsResultContainer');
+  const origBtnText = btn ? btn.textContent : '';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.innerHTML = '⏳ AIが5ステップ台本を作成中... (約10秒)';
+  }
+
+  if (resultContainer) {
+    resultContainer.innerHTML = `
+      <div class="card" style="padding:40px 20px; text-align:center; background:rgba(15,23,42,0.6); border:1px solid rgba(139,92,246,0.3);">
+        <div style="font-size:32px; margin-bottom:12px; animation: pulse 1.5s infinite;">⏳</div>
+        <h4 style="font-size:15px; color:#c084fc; font-weight:700; margin:0 0 8px;">プロ目線の動画広告台本を一括生成中...</h4>
+        <p style="font-size:12px; color:var(--text-2); margin:0;">5つの構成（ターゲット→地域・実績→目新しさ→理由→オファー）を動画尺（${_vsSelectedDuration}）に最適化しています</p>
+      </div>
+    `;
+  }
+
+  try {
+    toast('動画広告台本を一括生成中...', 'info');
+    const res = await api('/video-script/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        clinic_id: currentClinicId || 1,
+        target_concern: targetConcern,
+        location_and_history: locationHistory,
+        usp_feature: uspFeature,
+        reason_mechanism: reasonMechanism,
+        offer_detail: offerDetail,
+        duration_key: _vsSelectedDuration,
+        tone_manner: toneManner
+      })
+    });
+
+    if (res.success && res.patterns && res.patterns.length > 0) {
+      _vsCurrentData = res;
+      renderVsResults(res);
+      toast('5ステップ動画広告台本の作成が完了しました！', 'success');
+    } else {
+      throw new Error(res.error || '台本の生成に失敗しました');
+    }
+  } catch (e) {
+    toast('エラー: ' + e.message, 'error');
+    if (resultContainer) {
+      resultContainer.innerHTML = `
+        <div class="card" style="padding:20px; text-align:center; color:#ef4444; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);">
+          ❌ 台本の生成に失敗しました<br><small>${e.message}</small>
+        </div>
+      `;
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = origBtnText;
+    }
+  }
+};
+
+function renderVsResults(data) {
+  const container = document.getElementById('vsResultContainer');
+  if (!container) return;
+
+  const patterns = data.patterns || [];
+  const durationName = data.duration_name || '';
+
+  let html = `
+    <div style="margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;">
+      <h3 style="font-size:15px; font-weight:700; color:#34d399; margin:0; display:flex; align-items:center; gap:6px;">
+        <span>✅ 台本作成完了 (${durationName})</span>
+      </h3>
+      <span style="font-size:11px; color:var(--text-3);">全3パターン提案</span>
+    </div>
+
+    <!-- パターン選択タブ -->
+    <div style="display:flex; gap:6px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+  `;
+
+  patterns.forEach((p, idx) => {
+    const isActive = idx === 0;
+    html += `
+      <button type="button" class="btn vs-tab-btn ${isActive ? 'active' : ''}" data-pid="${p.pattern_id}" onclick="switchVsPattern('${p.pattern_id}')" style="padding:6px 12px; font-size:12px; border-radius:6px; border:${isActive ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)'}; background:${isActive ? 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.3))' : 'rgba(30,41,59,0.6)'}; color:${isActive ? '#fff' : 'var(--text-2)'}; font-weight:${isActive ? '700' : 'normal'}; cursor:pointer;">
+        ${p.pattern_name}
+      </button>
+    `;
+  });
+
+  html += `</div>`;
+
+  // 各パターンの詳細カード（切り替え表示）
+  patterns.forEach((p, idx) => {
+    const isHidden = idx !== 0;
+    const steps = p.steps || {};
+    const suggestions = p.text_overlay_suggestions || [];
+
+    html += `
+      <div class="vs-pattern-card" id="vs_pattern_card_${p.pattern_id}" style="${isHidden ? 'display:none;' : 'display:block;'}">
+        <!-- バナー header -->
+        <div class="card" style="padding:14px; margin-bottom:12px; background:linear-gradient(135deg, rgba(139,92,246,0.15), rgba(236,72,153,0.15)); border:1px solid rgba(139,92,246,0.3);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:14px; font-weight:800; color:#e9d5ff;">${p.pattern_name}</span>
+            <div style="display:flex; gap:6px;">
+              <span style="font-size:10px; background:rgba(52,211,153,0.2); color:#34d399; padding:2px 6px; border-radius:4px; border:1px solid rgba(52,211,153,0.3); font-weight:700;">⏱️ 目安: 約${p.estimated_seconds || 30}秒</span>
+              <span style="font-size:10px; background:rgba(168,85,247,0.2); color:#c084fc; padding:2px 6px; border-radius:4px; border:1px solid rgba(168,85,247,0.3); font-weight:700;">✍️ ${p.total_characters || (p.full_script || '').length}文字</span>
+            </div>
+          </div>
+          <p style="font-size:11px; color:var(--text-2); margin:0 0 10px;">💡 ${p.concept || ''}</p>
+          <button onclick="copyVsScript('${p.pattern_id}')" class="btn btn-primary" style="width:100%; font-size:12px; font-weight:700; padding:8px; background:linear-gradient(135deg, #10b981, #059669); border:none;">
+            📋 この台本の全文をクリップボードにコピー
+          </button>
+        </div>
+
+        <!-- 5ステップ詳細カード -->
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:14px;">
+          
+          <!-- ① ターゲット指名 -->
+          <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #ef4444; border-radius:6px;">
+            <div style="font-size:11px; font-weight:700; color:#fca5a5; margin-bottom:4px;">① ターゲット決定パート（フック）</div>
+            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step1_target || ''}</div>
+          </div>
+
+          <!-- ② 地域・実績 -->
+          <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #3b82f6; border-radius:6px;">
+            <div style="font-size:11px; font-weight:700; color:#93c5fd; margin-bottom:4px;">② 地域名・実績パート（信頼感）</div>
+            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step2_location || ''}</div>
+          </div>
+
+          <!-- ③ 目新しさ -->
+          <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #8b5cf6; border-radius:6px;">
+            <div style="font-size:11px; font-weight:700; color:#c084fc; margin-bottom:4px;">③ 目新しさパート（独自性/USP）</div>
+            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step3_usp || ''}</div>
+          </div>
+
+          <!-- ④ 豆知識・メカニズム -->
+          <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #f59e0b; border-radius:6px;">
+            <div style="font-size:11px; font-weight:700; color:#fcd34d; margin-bottom:4px;">④ 豆知識・理由パート（説得力/メカニズム）</div>
+            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step4_reason || ''}</div>
+          </div>
+
+          <!-- ⑤ オファー -->
+          <div style="padding:10px 12px; background:rgba(15,23,42,0.7); border-left:4px solid #10b981; border-radius:6px;">
+            <div style="font-size:11px; font-weight:700; color:#6ee7b7; margin-bottom:4px;">⑤ オファーパート（価格/行動換起）</div>
+            <div style="font-size:12px; color:#fff; line-height:1.5;">${steps.step5_offer || ''}</div>
+          </div>
+
+        </div>
+
+        <!-- 画面テロップ提案 -->
+        ${suggestions.length > 0 ? `
+          <div class="card" style="padding:12px; background:rgba(30,41,59,0.5); border:1px solid rgba(255,255,255,0.08);">
+            <div style="font-size:11px; font-weight:700; color:#a78bfa; margin-bottom:6px;">📺 画面文字テロップ（字幕）の提案</div>
+            <ul style="margin:0; padding-left:18px; font-size:11px; color:var(--text-2);">
+              ${suggestions.map(s => `<li style="margin-bottom:3px;">${s}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+
+        <!-- 隠しテキストエリア（コピー用） -->
+        <textarea id="vs_full_text_${p.pattern_id}" style="display:none;">${p.full_script || Object.values(steps).join('\n\n')}</textarea>
+
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+window.switchVsPattern = function(patternId) {
+  document.querySelectorAll('.vs-tab-btn').forEach(btn => {
+    const isTarget = btn.dataset.pid === patternId;
+    btn.classList.toggle('active', isTarget);
+    btn.style.border = isTarget ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.1)';
+    btn.style.background = isTarget ? 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.3))' : 'rgba(30,41,59,0.6)';
+    btn.style.color = isTarget ? '#fff' : 'var(--text-2)';
+    btn.style.fontWeight = isTarget ? '700' : 'normal';
+  });
+
+  document.querySelectorAll('.vs-pattern-card').forEach(card => {
+    card.style.display = card.id === `vs_pattern_card_${patternId}` ? 'block' : 'none';
+  });
+};
+
+window.copyVsScript = function(patternId) {
+  const ta = document.getElementById(`vs_full_text_${patternId}`);
+  if (ta && ta.value) {
+    navigator.clipboard.writeText(ta.value).then(() => {
+      toast('台本全文をクリップボードにコピーしました！', 'success');
+    }).catch(() => {
+      ta.style.display = 'block';
+      ta.select();
+      document.execCommand('copy');
+      ta.style.display = 'none';
+      toast('台本全文をコピーしました！', 'success');
+    });
+  }
+};
+
 
