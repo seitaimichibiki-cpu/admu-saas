@@ -1749,22 +1749,37 @@ class AdsClient:
         result_map = {}
         try:
             ga_service = self._client.get_service("GoogleAdsService")
-            formatted_names = ", ".join([f"'{rn}'" for rn in resource_names if rn])
+            formatted_names = []
+            for rn in resource_names:
+                if not rn:
+                    continue
+                if rn.startswith("geoTargetConstants/"):
+                    formatted_names.append(f"'{rn}'")
+                elif rn.isdigit():
+                    formatted_names.append(f"'geoTargetConstants/{rn}'")
+                else:
+                    formatted_names.append(f"'{rn}'")
+
             if not formatted_names:
                 return {}
+
             query = f"""
                 SELECT 
                     geo_target_constant.resource_name,
                     geo_target_constant.name,
                     geo_target_constant.canonical_name
                 FROM geo_target_constant
-                WHERE geo_target_constant.resource_name IN ({formatted_names})
+                WHERE geo_target_constant.resource_name IN ({", ".join(formatted_names)})
             """
             search_response = ga_service.search(customer_id=self.customer_id, query=query)
             for row in search_response:
                 rn = str(row.geo_target_constant.resource_name)
                 c_name = str(row.geo_target_constant.canonical_name or row.geo_target_constant.name or "")
                 result_map[rn] = c_name
+                # 数値IDのみのキーも保存
+                if "/" in rn:
+                    id_part = rn.split("/")[-1]
+                    result_map[id_part] = c_name
         except Exception as e:
             print(f"[AdsClient] get_geo_target_names エラー: {e}")
         return result_map
@@ -1782,7 +1797,8 @@ class AdsClient:
                     campaign_criterion.proximity.radius,
                     campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
                     campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
-                    campaign_criterion.location.geo_target_constant
+                    campaign_criterion.location.geo_target_constant,
+                    campaign_criterion.negative
                 FROM campaign_criterion
                 WHERE campaign.id = '{campaign_id}'
                   AND campaign_criterion.type IN ('LOCATION', 'PROXIMITY')
@@ -1798,6 +1814,10 @@ class AdsClient:
             found = False
 
             for row in search_response:
+                # negative = True (除外地域) は無視して正のターゲット地域のみ取得
+                if getattr(row.campaign_criterion, "negative", False):
+                    continue
+
                 found = True
                 c_type = str(row.campaign_criterion.type_.name if hasattr(row.campaign_criterion, 'type_') else row.campaign_criterion.type)
                 if c_type == "PROXIMITY" or (hasattr(row.campaign_criterion, "proximity") and row.campaign_criterion.proximity.radius):
@@ -1820,7 +1840,7 @@ class AdsClient:
                     name_map = self.get_geo_target_names(raw_geo_resource_names)
                     geo_target_names = [name_map.get(rn, rn) for rn in raw_geo_resource_names]
 
-                region_str = f"半径{radius_km}km" if location_type == "proximity" else ("・".join(geo_target_names) if geo_target_names else "ブロック設定")
+                region_str = f"半径{radius_km}km" if location_type == "proximity" else ("・".join(geo_target_names) if geo_target_names else "地域ターゲット指定あり")
 
                 return {
                     "type": location_type,
@@ -1830,11 +1850,25 @@ class AdsClient:
                     "geo_targets": geo_target_names,
                     "raw_geo_targets": raw_geo_resource_names,
                     "region_name": region_str,
-                    "live": True
+                    "live": True,
+                    "status_label": f"🟢 登録済み ({region_str})"
+                }
+            else:
+                return {
+                    "type": "unset",
+                    "radius_km": 8.0,
+                    "lat": 34.868,
+                    "lon": 138.257,
+                    "geo_targets": [],
+                    "raw_geo_targets": [],
+                    "region_name": "Google AIによる全自動最適化中 (地域未限定)",
+                    "live": True,
+                    "status_label": "🤖 地域未限定 (Google AIが全自動配信中)"
                 }
         except Exception as e:
             print(f"[AdsClient] get_live_campaign_location エラー: {e}")
         return None
+
 
 
     def get_live_campaign_demographics(self, campaign_id: str) -> dict:

@@ -2799,11 +2799,27 @@ function renderCampDrawer(d) {
   // デフォルトタブ: proximity/geo_target → range, polygon → block
   const defaultTab = (currentLocType === 'proximity' || currentLocType === 'geo_target') ? 'range' : 'block';
 
+  const liveLocLabel = d.location?.status_label || (currentLocType === 'proximity' ? `🟢 登録済み (半径 ${currentRadius}km)` : (currentLocType === 'geo_target' && currentGeoTargets) ? `🟢 登録済み (${currentGeoTargets})` : '🤖 Google AI全自動配信中 (地域未限定)');
+
   const geoSettingsHtml = `
     <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(52,211,153,0.3); border-radius:10px; margin-bottom:16px;">
 
+      <!-- ===== 📡 Google広告 ライブ配信地域ステータス ===== -->
+      <div style="padding:10px 14px; background:linear-gradient(135deg, rgba(16,185,129,0.15), rgba(59,130,246,0.15)); border-bottom:1px solid rgba(52,211,153,0.3); display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:10px; color:#c084fc; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">📡 Google広告のリアルタイム配信地域設定</div>
+          <div style="font-size:12px; font-weight:800; color:#34d399; margin-top:2px; display:flex; align-items:center; gap:6px;">
+            <span>${liveLocLabel}</span>
+          </div>
+        </div>
+        <button type="button" onclick="refreshDrawerLiveLocation('${d.id}')" style="background:rgba(30,41,59,0.9); border:1px solid rgba(52,211,153,0.5); color:#6ee7b7; font-size:10px; font-weight:700; padding:4px 8px; border-radius:4px; cursor:pointer;">
+          🔄 再取得
+        </button>
+      </div>
+
       <!-- ===== タブヘッダー ===== -->
       <div style="display:flex; border-bottom:1px solid rgba(52,211,153,0.2);">
+
         <button id="locTab_range_${d.id}" onclick="switchDrawerLocTab('${d.id}', 'range')"
           style="flex:1; padding:10px 0; font-size:12px; font-weight:800; cursor:pointer; border:none; transition:all 0.2s;
                  background:${defaultTab === 'range' ? 'rgba(52,211,153,0.12)' : 'transparent'};
@@ -2891,7 +2907,21 @@ function renderCampDrawer(d) {
       </div>
     </div>
 
+window.refreshDrawerLiveLocation = async function(campId) {
+  try {
+    toast('Google広告から最新の位置設定を再取得中...', 'info');
+    const d = await api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`);
+    if (d) {
+      renderCampDrawer(d);
+      toast('最新のGoogle広告設定を読み込みました ✅', 'success');
+    }
+  } catch(e) {
+    toast('再取得エラー: ' + e.message, 'error');
+  }
+};
+
     <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
+
     <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(167,139,250,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
       <div style="font-size:13px; font-weight:800; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
         <span>👤 ターゲット性別・年齢層設定 (Google広告適用)</span>
