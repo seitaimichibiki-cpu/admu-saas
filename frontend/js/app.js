@@ -2062,6 +2062,9 @@ window.applyDrawerRadiusTarget = async function(campId) {
   if (isNaN(rad) || rad <= 0) { toast('有効な半径を入力してください', 'error'); return; }
 
   const gId = _drawerGoogleCampaignId || campId;
+  const clinicLat = window[`drawerLat_${campId}`] || 34.868;
+  const clinicLon = window[`drawerLon_${campId}`] || 138.257;
+
   try {
     toast(`半径 ${rad}km ターゲットをGoogle広告へ同期中...`, 'info');
     const res = await api('/campaigns/update-location', {
@@ -2071,6 +2074,8 @@ window.applyDrawerRadiusTarget = async function(campId) {
         platform: currentPlatform || 'google',
         google_campaign_id: gId,
         type: 'proximity',
+        lat: clinicLat,
+        lon: clinicLon,
         radius_km: rad
       })
     });
@@ -2234,8 +2239,12 @@ window.applyDrawerDemographics = async function(campId) {
     }
   });
 
-  // ローカルメモリキャッシュへ即時保存（ボタン復元時や非同期同期時のチェック復活を100%防止）
-  window.g_local_demographics_cache[campId] = { genders, age_ranges: ages };
+  // ローカルメモリキャッシュへ即時保存（全キー形式で100%保持し、リロード時や復元時のズレをゼロ化）
+  const cachedDemoPayload = { genders, age_ranges: ages };
+  window.g_local_demographics_cache[campId] = cachedDemoPayload;
+  if (_drawerGoogleCampaignId) window.g_local_demographics_cache[_drawerGoogleCampaignId] = cachedDemoPayload;
+  if (_drawerCampaignId) window.g_local_demographics_cache[_drawerCampaignId] = cachedDemoPayload;
+
 
   try {
     toast('年齢・性別ターゲットをGoogle広告へ適用中...', 'info');
@@ -2757,7 +2766,12 @@ function renderCampDrawer(d) {
 
   // ★ demographics（年齢・性別）の checked 状態を決定
   // 優先順位: ローカルキャッシュ > detail API レスポンス > デフォルト
-  const _localDemo = window.g_local_demographics_cache && window.g_local_demographics_cache[d.id];
+  const _localDemo = window.g_local_demographics_cache && (
+      window.g_local_demographics_cache[d.id] ||
+      window.g_local_demographics_cache[d.google_campaign_id] ||
+      window.g_local_demographics_cache[_drawerCampaignId] ||
+      window.g_local_demographics_cache[_drawerGoogleCampaignId]
+  );
   const _apiDemo = d.demographics;
   const _demo = _localDemo || _apiDemo || null;
   const _demoGenders = _demo ? (_demo.genders || []) : [];
@@ -2765,10 +2779,16 @@ function renderCampDrawer(d) {
   const _demoGender = _demoGenders.includes('FEMALE') && !_demoGenders.includes('MALE') ? 'FEMALE_ONLY'
     : _demoGenders.includes('MALE') && !_demoGenders.includes('FEMALE') ? 'MALE_ONLY'
     : 'ALL';
-  // ローカルキャッシュにも保存（applyDrawerDemographics との一貫性確保）
+
+  // 全キー候補でローカルキャッシュにも強制同期
   if (_demo && window.g_local_demographics_cache) {
-    window.g_local_demographics_cache[d.id] = { genders: _demoGenders, age_ranges: _demoAges };
+    const cachedObj = { genders: _demoGenders, age_ranges: _demoAges };
+    if (d.id) window.g_local_demographics_cache[d.id] = cachedObj;
+    if (d.google_campaign_id) window.g_local_demographics_cache[d.google_campaign_id] = cachedObj;
+    if (_drawerCampaignId) window.g_local_demographics_cache[_drawerCampaignId] = cachedObj;
+    if (_drawerGoogleCampaignId) window.g_local_demographics_cache[_drawerGoogleCampaignId] = cachedObj;
   }
+
 
   // ―― 🗺️ キャンペーン専用: 配信エリア統合設定カード（タブ: 範囲設定 / ブロック設定） ――
   const currentLocType = d.location?.type || 'proximity';

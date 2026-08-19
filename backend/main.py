@@ -1378,22 +1378,34 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     # これにより renderCampDrawer で最初から正しい checked 状態を描画できる
     try:
         demo_data = None
-        cid_s = str(g_id)
-        if cid_s in _DEMOGRAPHICS_CACHE:
-            demo_data = _DEMOGRAPHICS_CACHE[cid_s]
-        if not demo_data:
-            demo_data = db.get_campaign_demographics(cid_s, clinic_id)
-        if not demo_data and campaign:
-            c_name_d = str(campaign.get("name") or "")
-            if c_name_d:
-                demo_data = db.get_campaign_demographics(c_name_d, clinic_id)
-        if demo_data and isinstance(demo_data, dict) and "genders" in demo_data:
+        search_keys = [str(campaign_id), str(g_id)]
+        if campaign:
+            if campaign.get("id") is not None:
+                search_keys.append(str(campaign["id"]))
+            if campaign.get("google_campaign_id"):
+                search_keys.append(str(campaign["google_campaign_id"]))
+            if campaign.get("name"):
+                search_keys.append(str(campaign["name"]))
+
+        for k in list(dict.fromkeys(search_keys)):
+            if not k:
+                continue
+            if k in _DEMOGRAPHICS_CACHE and isinstance(_DEMOGRAPHICS_CACHE[k], dict):
+                demo_data = _DEMOGRAPHICS_CACHE[k]
+                break
+            d_found = db.get_campaign_demographics(k, clinic_id)
+            if d_found and isinstance(d_found, dict) and (d_found.get("genders") or d_found.get("age_ranges")):
+                demo_data = d_found
+                break
+
+        if demo_data and isinstance(demo_data, dict):
             result["demographics"] = {
                 "genders": demo_data.get("genders", []),
                 "age_ranges": demo_data.get("age_ranges", [])
             }
     except Exception as e:
-        print(f"[DetailAPI] demographics取得エラー（無視して続行）: {e}")
+        print(f"[DetailAPI] demographics取得エラー: {e}")
+
 
     ads_cache.set(cache_key, result)
     return result
@@ -8066,8 +8078,8 @@ def update_campaign_location_endpoint(req: UpdateLocationReq):
     except Exception:
         pass
 
-    lat = req.lat if req.lat is not None else acc.get("clinic_lat")
-    lon = req.lon if req.lon is not None else acc.get("clinic_lon")
+    lat = req.lat if req.lat is not None else (acc.get("clinic_lat") if acc.get("clinic_lat") is not None else 34.868)
+    lon = req.lon if req.lon is not None else (acc.get("clinic_lon") if acc.get("clinic_lon") is not None else 138.257)
 
     loc_config = {
         "type": req.type,
@@ -9678,15 +9690,20 @@ def set_demographics(campaign_id: str, req: SetDemographicsReq):
         c_name = "対象キャンペーン"
         google_campaign_id = campaign_id
 
-    # キャッシュおよびDBへ即時保存（campaign_id, google_campaign_id, c_name すべてのキー形式で100%保持）
+    # キャッシュおよびDBへ即時保存（campaign_id, google_campaign_id, c_name, DB id すべてのキー形式で100%保持）
     payload = {"genders": req.genders, "age_ranges": req.age_ranges}
-    for k in [str(campaign_id), str(google_campaign_id), str(c_name)]:
+    save_keys = [str(campaign_id), str(google_campaign_id), str(c_name)]
+    if campaign and campaign.get("id") is not None:
+        save_keys.append(str(campaign["id"]))
+
+    for k in list(dict.fromkeys(save_keys)):
         if k:
             _DEMOGRAPHICS_CACHE[k] = payload
             try:
                 db.save_campaign_demographics(k, req.clinic_id, req.genders, req.age_ranges)
             except Exception as e_db:
                 print(f"[set_demographics] DB保存エラー ({k}): {e_db}")
+
 
     # detail API のキャッシュをクリア（次の detail 取得で最新の demographics が含まれるように）
     ads_cache.clear()
@@ -9878,7 +9895,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260818-video-script-v26', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-fix-demographics-range-v27', html)
 
 
         return HTMLResponse(

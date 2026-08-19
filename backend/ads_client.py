@@ -1706,8 +1706,8 @@ class AdsClient:
             loc_type = loc_config.get("type", "proximity")
 
             if loc_type == "proximity":
-                lat = loc_config.get("lat")
-                lon = loc_config.get("lon")
+                lat = loc_config.get("lat") if loc_config.get("lat") is not None else 34.868
+                lon = loc_config.get("lon") if loc_config.get("lon") is not None else 138.257
                 radius = loc_config.get("radius_km", 8)
                 if lat is not None and lon is not None:
                     op = self._client.get_type("CampaignCriterionOperation")

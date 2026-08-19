@@ -1956,45 +1956,70 @@ def save_campaign_demographics(campaign_id: str, clinic_id: int, genders: list, 
 
 
 def get_campaign_demographics(campaign_id: str, clinic_id: int) -> dict:
-    """DBから保存済みのデモグラフィック情報を取得"""
+    """DBから保存済みのデモグラフィック情報を取得（キーのエイリアス・形式差を完全に吸収）"""
     import json
+    cid_str = str(campaign_id)
+    if not cid_str:
+        return None
+
     with get_conn() as conn:
-        # 1. まず独立テーブル campaign_demographics からキー直接検索
-        row = conn.execute("""
-            SELECT genders_json, age_ranges_json FROM campaign_demographics
-            WHERE campaign_key=?
-        """, (str(campaign_id),)).fetchone()
-        if row:
-            d = dict(row)
-            try:
-                g = json.loads(d.get("genders_json") or "[]")
-                a = json.loads(d.get("age_ranges_json") or "[]")
-                if g or a:
-                    return {"genders": g, "age_ranges": a}
-            except Exception:
-                pass
+        # 0. 関連する全キー（DB ID, Google ID, 名前）を campaigns テーブルから網羅収集
+        candidate_keys = [cid_str]
+        try:
+            cid_int = int(cid_str) if cid_str.isdigit() and int(cid_str) <= 2147483647 else None
+            if cid_int is not None:
+                c_rows = conn.execute(
+                    "SELECT id, google_campaign_id, name, demographics_json FROM campaigns WHERE (id=? OR google_campaign_id=? OR name=?) AND clinic_id=?",
+                    (cid_int, cid_str, cid_str, clinic_id)
+                ).fetchall()
+            else:
+                c_rows = conn.execute(
+                    "SELECT id, google_campaign_id, name, demographics_json FROM campaigns WHERE (google_campaign_id=? OR name=?) AND clinic_id=?",
+                    (cid_str, cid_str, clinic_id)
+                ).fetchall()
 
-        # 2. campaigns テーブルの demographics_json から検索 (id, google_campaign_id, name すべてでマッチング)
-        cid_int = int(campaign_id) if str(campaign_id).isdigit() and int(campaign_id) <= 2147483647 else None
-        if cid_int is not None:
-            row_c = conn.execute("""
-                SELECT demographics_json FROM campaigns
-                WHERE (id=? OR google_campaign_id=? OR name=?) AND clinic_id=?
-            """, (cid_int, str(campaign_id), str(campaign_id), clinic_id)).fetchone()
-        else:
-            row_c = conn.execute("""
-                SELECT demographics_json FROM campaigns
-                WHERE (google_campaign_id=? OR name=?) AND clinic_id=?
-            """, (str(campaign_id), str(campaign_id), clinic_id)).fetchone()
+            for r in c_rows:
+                rd = dict(r)
+                if rd.get("id") is not None:
+                    candidate_keys.append(str(rd["id"]))
+                if rd.get("google_campaign_id"):
+                    candidate_keys.append(str(rd["google_campaign_id"]))
+                if rd.get("name"):
+                    candidate_keys.append(str(rd["name"]))
+                # 既存の demographics_json があれば候補に直保持
+                raw = rd.get("demographics_json")
+                if raw:
+                    try:
+                        parsed = json.loads(raw)
+                        if parsed and isinstance(parsed, dict) and (parsed.get("genders") or parsed.get("age_ranges")):
+                            return parsed
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
-        if row_c:
-            d = dict(row_c)
-            raw = d.get("demographics_json")
-            if raw:
+        # 重複削除
+        unique_keys = list(dict.fromkeys(candidate_keys))
+
+        # 1. 独立テーブル campaign_demographics から順次検索
+        for k in unique_keys:
+            if not k:
+                continue
+            row = conn.execute(
+                "SELECT genders_json, age_ranges_json FROM campaign_demographics WHERE campaign_key=?",
+                (k,)
+            ).fetchone()
+            if row:
+                d = dict(row)
                 try:
-                    return json.loads(raw)
+                    g = json.loads(d.get("genders_json") or "[]")
+                    a = json.loads(d.get("age_ranges_json") or "[]")
+                    if g or a:
+                        return {"genders": g, "age_ranges": a}
                 except Exception:
                     pass
+
     return None
+
 
 
