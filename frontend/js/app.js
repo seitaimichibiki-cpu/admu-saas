@@ -2656,10 +2656,11 @@ async function loadCampaigns() {
           </div>
           <span class="status-badge ${c.status?.toLowerCase()}">${c.status}</span>
           ${c.status==='ENABLED'
-            ? `<button class="btn btn-secondary" onclick="toggleCampaign('${c.id}','PAUSED')">一時停止</button>`
-            : `<button class="btn btn-success" onclick="toggleCampaign('${c.id}','ENABLED')">再開</button>`}
+            ? `<button class="btn btn-secondary" onclick="event.stopPropagation(); toggleCampaign('${c.id}','PAUSED')">一時停止</button>`
+            : `<button class="btn btn-success" onclick="event.stopPropagation(); toggleCampaign('${c.id}','ENABLED')">再開</button>`}
+          <button class="btn" style="font-size:11px; padding:3px 8px; background:rgba(59,130,246,0.2); border:1px solid rgba(59,130,246,0.5); color:#60a5fa;" onclick="event.stopPropagation(); syncPullCampaign('${c.id}')" title="Google広告から最新設定をPULL引き込み">🔄 PULL同期</button>
           <span class="campaign-detail-hint">詳細 →</span>
-          <button class="btn btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteCampaign(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑 削除</button>
+          <button class="btn btn-danger" style="font-size:12px;padding:4px 10px" onclick="event.stopPropagation(); deleteCampaign(${c.id},'${c.name.replace(/'/g,"\\'")}')">🗑 削除</button>
         </div>
         <div class="campaign-stats">
           <div class="campaign-stat">
@@ -2756,18 +2757,24 @@ function closeCampDrawer() {
 }
 window.closeCampDrawer = closeCampDrawer;
 
-window.refreshDrawerLiveLocation = async function(campId) {
+window.syncPullCampaign = async function(campId) {
   try {
-    toast('Google広告から最新の位置設定を再取得中...', 'info');
-    const d = await api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`);
-    if (d) {
-      renderCampDrawer(d);
-      toast('最新のGoogle広告設定を読み込みました ✅', 'success');
+    toast('Google広告から最新設定 (地域・予算・年齢・性別・ステータス) をPULL引き込み同期中...', 'info');
+    const res = await api(`/campaigns/${campId}/sync-pull?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`, { method: 'POST' });
+    if (res && res.success) {
+      toast('Google広告のライブ設定をPULL同期完了！ ✅', 'success');
+      const d = await api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`);
+      if (d) renderCampDrawer(d);
+      if (typeof loadCampaigns === 'function') loadCampaigns();
+    } else {
+      toast('PULL同期エラー: ' + (res.error || '失敗'), 'error');
     }
   } catch(e) {
-    toast('再取得エラー: ' + e.message, 'error');
+    toast('PULL同期エラー: ' + e.message, 'error');
   }
 };
+window.refreshDrawerLiveLocation = window.syncPullCampaign;
+
 
 function renderCampDrawer(d) {
 

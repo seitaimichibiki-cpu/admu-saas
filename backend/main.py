@@ -902,6 +902,100 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
         raise HTTPException(404, "キャンペーンが見つかりません")
     return campaign
 
+
+@app.post("/api/campaigns/{campaign_id}/sync-pull")
+def sync_pull_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
+
+    """Google Ads API からキャンペーンの最新の設定（地域・予算・年齢・性別・ステータス）を直接 PULL 引き込み同期する。"""
+    ads_cache.clear()
+    acc = _require_account(clinic_id)
+    client = _get_ads_client(acc, platform)
+
+    campaign = _resolve_campaign(campaign_id, clinic_id)
+    g_id = str(campaign.get("google_campaign_id") or campaign_id)
+
+    pulled_info = {}
+
+    # 1. 配信地域・範囲の PULL 同期
+    try:
+        live_loc = client.get_live_campaign_location(g_id)
+        if live_loc:
+            pulled_info["location"] = live_loc
+            region_str = live_loc.get("region_name") or ""
+            if region_str:
+                geo_targets_str = json.dumps(live_loc.get("geo_targets") or [], ensure_ascii=False)
+                now_str = datetime.now(timezone.utc).isoformat()
+                with db.get_conn() as conn:
+                    cid_int = int(g_id) if g_id.isdigit() and int(g_id) <= 2147483647 else None
+                    if cid_int is not None:
+                        conn.execute(
+                            "UPDATE campaigns SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? WHERE (google_campaign_id=? OR id=?) AND clinic_id=?",
+                            (region_str, live_loc.get("type"), float(live_loc.get("radius_km") or 8.0), geo_targets_str, now_str, g_id, cid_int, clinic_id)
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE campaigns SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                            (region_str, live_loc.get("type"), float(live_loc.get("radius_km") or 8.0), geo_targets_str, now_str, g_id, clinic_id)
+                        )
+                    conn.commit()
+    except Exception as e_loc:
+        print(f"[sync-pull] 位置情報PULLエラー: {e_loc}")
+
+    # 2. 年齢・性別の PULL 同期
+    try:
+        live_demo = client.get_live_campaign_demographics(g_id)
+        if live_demo:
+            pulled_info["demographics"] = live_demo
+            save_keys = [str(campaign_id), g_id, str(campaign.get("name") or "")]
+            if campaign.get("id") is not None:
+                save_keys.append(str(campaign["id"]))
+            for k in list(dict.fromkeys(save_keys)):
+                if k:
+                    _DEMOGRAPHICS_CACHE[k] = live_demo
+                    try:
+                        db.save_campaign_demographics(k, clinic_id, live_demo.get("genders", []), live_demo.get("age_ranges", []))
+                    except Exception:
+                        pass
+    except Exception as e_demo:
+        print(f"[sync-pull] 年齢性別PULLエラー: {e_demo}")
+
+    # 3. 生ステータス・予算の PULL 同期 (GAQL)
+    if not client.mock_mode and client._client and g_id.isdigit():
+        try:
+            ga_service = client._client.get_service("GoogleAdsService")
+            query = f"""
+                SELECT 
+                    campaign.status,
+                    campaign.name,
+                    campaign_budget.amount_micros
+                FROM campaign
+                WHERE campaign.id = '{g_id}'
+            """
+            rows = ga_service.search(customer_id=client.customer_id, query=query)
+            for row in rows:
+                st = str(row.campaign.status.name if hasattr(row.campaign.status, 'name') else row.campaign.status)
+                bm = int(row.campaign_budget.amount_micros) if hasattr(row.campaign_budget, 'amount_micros') else 0
+                pulled_info["status"] = st
+                pulled_info["budget_micros"] = bm
+
+                db.upsert_campaign(clinic_id, {
+                    **campaign,
+                    "status": st,
+                    "budget_micros": bm,
+                    "name": str(row.campaign.name or campaign.get("name", ""))
+                })
+                break
+        except Exception as e_status:
+            print(f"[sync-pull] ステータス・予算PULLエラー: {e_status}")
+
+    ads_cache.clear()
+    return {
+        "success": True,
+        "message": "Google広告から最新設定を双方向PULL同期しました！",
+        "pulled_info": pulled_info
+    }
+
+
 class StatusUpdateReq(BaseModel):
     status: str
     clinic_id: int = 1
@@ -9947,7 +10041,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-fix-syntax-login-v31', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-push-pull-bi-sync-v32', html)
 
 
         return HTMLResponse(
