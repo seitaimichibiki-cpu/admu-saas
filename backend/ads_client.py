@@ -1742,6 +1742,33 @@ class AdsClient:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
 
+    def get_geo_target_names(self, resource_names: list[str]) -> dict:
+        """geoTargetConstants/XXXX のリストから日本語の地域名（canonical_name / name）を取得するマップを返す。"""
+        if not resource_names:
+            return {}
+        result_map = {}
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            formatted_names = ", ".join([f"'{rn}'" for rn in resource_names if rn])
+            if not formatted_names:
+                return {}
+            query = f"""
+                SELECT 
+                    geo_target_constant.resource_name,
+                    geo_target_constant.name,
+                    geo_target_constant.canonical_name
+                FROM geo_target_constant
+                WHERE geo_target_constant.resource_name IN ({formatted_names})
+            """
+            search_response = ga_service.search(customer_id=self.customer_id, query=query)
+            for row in search_response:
+                rn = str(row.geo_target_constant.resource_name)
+                c_name = str(row.geo_target_constant.canonical_name or row.geo_target_constant.name or "")
+                result_map[rn] = c_name
+        except Exception as e:
+            print(f"[AdsClient] get_geo_target_names エラー: {e}")
+        return result_map
+
     def get_live_campaign_location(self, campaign_id: str) -> dict:
         """Google Ads API からキャンペーンのリアルタイム位置ターゲティング（配信地域・半径）を直接取得する。"""
         if self.mock_mode or not campaign_id or not str(campaign_id).isdigit():
@@ -1765,7 +1792,7 @@ class AdsClient:
             
             location_type = "proximity"
             radius_km = 8.0
-            geo_targets = []
+            raw_geo_resource_names = []
             lat = 34.868
             lon = 138.257
             found = False
@@ -1785,20 +1812,30 @@ class AdsClient:
                 elif c_type == "LOCATION" or hasattr(row.campaign_criterion, "location"):
                     location_type = "geo_target"
                     if hasattr(row.campaign_criterion, "location") and row.campaign_criterion.location.geo_target_constant:
-                        geo_targets.append(str(row.campaign_criterion.location.geo_target_constant))
+                        raw_geo_resource_names.append(str(row.campaign_criterion.location.geo_target_constant))
 
             if found:
+                geo_target_names = []
+                if raw_geo_resource_names:
+                    name_map = self.get_geo_target_names(raw_geo_resource_names)
+                    geo_target_names = [name_map.get(rn, rn) for rn in raw_geo_resource_names]
+
+                region_str = f"半径{radius_km}km" if location_type == "proximity" else ("・".join(geo_target_names) if geo_target_names else "ブロック設定")
+
                 return {
                     "type": location_type,
                     "radius_km": radius_km,
                     "lat": lat,
                     "lon": lon,
-                    "geo_targets": geo_targets,
+                    "geo_targets": geo_target_names,
+                    "raw_geo_targets": raw_geo_resource_names,
+                    "region_name": region_str,
                     "live": True
                 }
         except Exception as e:
             print(f"[AdsClient] get_live_campaign_location エラー: {e}")
         return None
+
 
     def get_live_campaign_demographics(self, campaign_id: str) -> dict:
         """Google Ads API からキャンペーンのリアルタイム年齢・性別ターゲティング設定を直接取得する。"""

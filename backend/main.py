@@ -1398,13 +1398,31 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     if demand_gen_ad:
         result["demand_gen_ad"] = demand_gen_ad
 
-    # ★ 1. 位置情報: Google Ads API 生データ優先取得
+    # ★ 1. 位置情報: Google Ads API 生データ優先取得 ＆ DB自動同期
     try:
         live_loc = client.get_live_campaign_location(str(g_id))
         if live_loc:
             result["location"] = live_loc
+            region_str = live_loc.get("region_name") or ""
+            if region_str:
+                geo_targets_str = json.dumps(live_loc.get("geo_targets") or [], ensure_ascii=False)
+                now_str = datetime.now(timezone.utc).isoformat()
+                with db.get_conn() as conn:
+                    cid_int = int(g_id) if str(g_id).isdigit() and int(g_id) <= 2147483647 else None
+                    if cid_int is not None:
+                        conn.execute(
+                            "UPDATE campaigns SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? WHERE (google_campaign_id=? OR id=?) AND clinic_id=?",
+                            (region_str, live_loc.get("type"), float(live_loc.get("radius_km") or 8.0), geo_targets_str, now_str, str(g_id), cid_int, clinic_id)
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE campaigns SET target_region=?, location_type=?, location_radius_km=?, location_geo_targets=?, updated_at=? WHERE google_campaign_id=? AND clinic_id=?",
+                            (region_str, live_loc.get("type"), float(live_loc.get("radius_km") or 8.0), geo_targets_str, now_str, str(g_id), clinic_id)
+                        )
+                    conn.commit()
     except Exception as e_loc:
         print(f"[DetailAPI] 生位置情報取得エラー: {e_loc}")
+
 
     # ★ 2. 年齢・性別: Google Ads API 生データ優先取得 (失敗時のみローカルDBフォールバック)
     try:
@@ -9929,7 +9947,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-live-google-ads-sync-v28', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-live-geo-names-fix-v29', html)
 
 
         return HTMLResponse(
