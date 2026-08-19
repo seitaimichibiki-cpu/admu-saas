@@ -107,8 +107,15 @@
 * **Search / Display Campaigns (`SEARCH`, `DISPLAY`)**:
   * Fully support both **Range / Proximity** (latitude, longitude, radius_km) and **Block / Location** (`geoTargetConstants` e.g. `City` / `Prefecture`).
   * When updating via API, existing `LOCATION` and `PROXIMITY` criteria are safely removed first, then new criteria are added.
-* **Demand Gen / Video Campaigns (`DEMAND_GEN`, `VIDEO`)**:
-  * Google Ads API (v23) restricts `CampaignCriterion` for `LOCATION` / `PROXIMITY` with error `OWNED_AND_OPERATED`. Demand Gen location targeting is managed automatically by Google AI or UI-level signals.
-* **GeoTargetConstant Suggestion Filtering**:
-  * Always filter suggestions by `TargetType` (`City`, `Prefecture`, `State`, `Region`) and pick only the single primary match per input name. Passing raw Postal Code or Neighborhood suggestions will throw API errors.
+
+## 15. Demand Gen Ad Strategy, LP Landing Page Policy & Conversion Tracking Knowledge
+* **Multiple Video Assets & Headlines in 1 Ad**:
+  * For Demand Gen Responsive Video Ads, include multiple video assets (up to 5) and headlines (3-5 patterns with varying angles) in **1 single ad** rather than splitting into multiple separate ads in small target regions (e.g. Yoshida-cho). Splitting ads causes self-competition in auctions and splits learning budgets.
+* **Final URL Requirement (LP vs Direct Booking Link)**:
+  * ALWAYS set the Final URL to the Landing Page (`https://michibiki-seitai.com/`), NEVER directly to the booking system URL (`logiction-system.onrender.com/...`). Direct booking links cause high bounce rates (lack of trust/info) and trigger Google Ads policy disapprovals (`One Website Per Ad Group` / `Inadequate Content`).
+* **Unconfirmed Conversion Action Alert ("タグが未検出" 警告)**:
+  * Notices in Google Ads UI stating "タグが次のコンバージョンアクションに対してまだ確認されていません" occur when no test conversion has fired yet for auto-created or primary conversion actions. Actual booking conversion tracking is handled by GTM (`GTM-NVWWGNQR`) -> `LOGICTION予約完了`. Once a real booking occurs, the alert clears automatically.
+* **Health Policy Disapproval Avoidance ("健康 パーソナライズド広告" 違反回避)**:
+  * In Demand Gen / Video ads, avoid exact medical disease names (`ヘルニア`, `脊柱管狭窄症`) or cure assertions (`治る`, `根本改善`) in headlines and descriptions. Use approved, compliant phrasing such as `つらい腰や身体のお悩み` and `身体のバランスを整えて快適な生活へ`.
+
 
