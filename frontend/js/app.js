@@ -2756,7 +2756,21 @@ function closeCampDrawer() {
 }
 window.closeCampDrawer = closeCampDrawer;
 
+window.refreshDrawerLiveLocation = async function(campId) {
+  try {
+    toast('Google広告から最新の位置設定を再取得中...', 'info');
+    const d = await api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`);
+    if (d) {
+      renderCampDrawer(d);
+      toast('最新のGoogle広告設定を読み込みました ✅', 'success');
+    }
+  } catch(e) {
+    toast('再取得エラー: ' + e.message, 'error');
+  }
+};
+
 function renderCampDrawer(d) {
+
   // detail APIレスポンスにidが含まれないため、google_campaign_idをフォールバック
   if (!d.id) d.id = d.google_campaign_id || _drawerCampaignId;
 
@@ -2907,22 +2921,10 @@ function renderCampDrawer(d) {
       </div>
     </div>
 
-window.refreshDrawerLiveLocation = async function(campId) {
-  try {
-    toast('Google広告から最新の位置設定を再取得中...', 'info');
-    const d = await api(`/campaigns/${campId}/detail?clinic_id=${currentClinicId || 1}&platform=${currentPlatform || 'google'}`);
-    if (d) {
-      renderCampDrawer(d);
-      toast('最新のGoogle広告設定を読み込みました ✅', 'success');
-    }
-  } catch(e) {
-    toast('再取得エラー: ' + e.message, 'error');
-  }
-};
-
     <!-- ―― 👤 キャンペーン専用: ターゲット性別・年齢層設定 ―――――――――――― -->
 
     <div style="background:rgba(15,23,42,0.6); border:1px solid rgba(167,139,250,0.3); border-radius:10px; padding:14px; margin-bottom:16px;">
+
       <div style="font-size:13px; font-weight:800; color:#c084fc; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
         <span>👤 ターゲット性別・年齢層設定 (Google広告適用)</span>
       </div>
