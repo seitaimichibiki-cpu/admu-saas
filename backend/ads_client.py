@@ -1742,7 +1742,130 @@ class AdsClient:
             print(f"[AdsClient] 位置情報更新エラー: {e}")
             return {"success": False, "error": str(e), "mock": False}
 
+    def get_live_campaign_location(self, campaign_id: str) -> dict:
+        """Google Ads API からキャンペーンのリアルタイム位置ターゲティング（配信地域・半径）を直接取得する。"""
+        if self.mock_mode or not campaign_id or not str(campaign_id).isdigit():
+            return None
+
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            query = f"""
+                SELECT 
+                    campaign_criterion.type,
+                    campaign_criterion.proximity.radius,
+                    campaign_criterion.proximity.geo_point.latitude_in_micro_degrees,
+                    campaign_criterion.proximity.geo_point.longitude_in_micro_degrees,
+                    campaign_criterion.location.geo_target_constant
+                FROM campaign_criterion
+                WHERE campaign.id = '{campaign_id}'
+                  AND campaign_criterion.type IN ('LOCATION', 'PROXIMITY')
+                  AND campaign_criterion.status != 'REMOVED'
+            """
+            search_response = ga_service.search(customer_id=self.customer_id, query=query)
+            
+            location_type = "proximity"
+            radius_km = 8.0
+            geo_targets = []
+            lat = 34.868
+            lon = 138.257
+            found = False
+
+            for row in search_response:
+                found = True
+                c_type = str(row.campaign_criterion.type_.name if hasattr(row.campaign_criterion, 'type_') else row.campaign_criterion.type)
+                if c_type == "PROXIMITY" or (hasattr(row.campaign_criterion, "proximity") and row.campaign_criterion.proximity.radius):
+                    location_type = "proximity"
+                    radius_km = float(row.campaign_criterion.proximity.radius)
+                    if hasattr(row.campaign_criterion.proximity, "geo_point"):
+                        lat_micro = row.campaign_criterion.proximity.geo_point.latitude_in_micro_degrees
+                        lon_micro = row.campaign_criterion.proximity.geo_point.longitude_in_micro_degrees
+                        if lat_micro and lon_micro:
+                            lat = lat_micro / 1_000_000.0
+                            lon = lon_micro / 1_000_000.0
+                elif c_type == "LOCATION" or hasattr(row.campaign_criterion, "location"):
+                    location_type = "geo_target"
+                    if hasattr(row.campaign_criterion, "location") and row.campaign_criterion.location.geo_target_constant:
+                        geo_targets.append(str(row.campaign_criterion.location.geo_target_constant))
+
+            if found:
+                return {
+                    "type": location_type,
+                    "radius_km": radius_km,
+                    "lat": lat,
+                    "lon": lon,
+                    "geo_targets": geo_targets,
+                    "live": True
+                }
+        except Exception as e:
+            print(f"[AdsClient] get_live_campaign_location エラー: {e}")
+        return None
+
+    def get_live_campaign_demographics(self, campaign_id: str) -> dict:
+        """Google Ads API からキャンペーンのリアルタイム年齢・性別ターゲティング設定を直接取得する。"""
+        if self.mock_mode or not campaign_id or not str(campaign_id).isdigit():
+            return None
+
+        try:
+            ga_service = self._client.get_service("GoogleAdsService")
+            query = f"""
+                SELECT 
+                    ad_group_criterion.gender.type,
+                    ad_group_criterion.age_range.type,
+                    ad_group_criterion.negative,
+                    ad_group_criterion.type
+                FROM ad_group_criterion
+                WHERE campaign.id = '{campaign_id}'
+                  AND ad_group_criterion.type IN ('GENDER', 'AGE_RANGE')
+                  AND ad_group_criterion.status != 'REMOVED'
+            """
+            search_response = ga_service.search(customer_id=self.customer_id, query=query)
+            
+            excluded_genders = set()
+            excluded_ages = set()
+            included_genders = set()
+            found = False
+
+            ALL_AGES = ["AGE_RANGE_18_24", "AGE_RANGE_25_34", "AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP", "AGE_RANGE_UNDETERMINED"]
+
+            for row in search_response:
+                found = True
+                c_type = str(row.ad_group_criterion.type_.name if hasattr(row.ad_group_criterion, 'type_') else row.ad_group_criterion.type)
+                is_negative = bool(row.ad_group_criterion.negative)
+
+                if c_type == "GENDER":
+                    g_type = str(row.ad_group_criterion.gender.type_.name if hasattr(row.ad_group_criterion.gender, 'type_') else row.ad_group_criterion.gender.type)
+                    if is_negative:
+                        excluded_genders.add(g_type)
+                    else:
+                        included_genders.add(g_type)
+
+                elif c_type == "AGE_RANGE":
+                    a_type = str(row.ad_group_criterion.age_range.type_.name if hasattr(row.ad_group_criterion.age_range, 'type_') else row.ad_group_criterion.age_range.type)
+                    if is_negative:
+                        excluded_ages.add(a_type)
+
+            if found:
+                genders = ["MALE", "FEMALE"]
+                if "MALE" in excluded_genders or ("FEMALE" in included_genders and "MALE" not in included_genders and len(included_genders) > 0):
+                    genders = ["FEMALE"]
+                elif "FEMALE" in excluded_genders or ("MALE" in included_genders and "FEMALE" not in included_genders and len(included_genders) > 0):
+                    genders = ["MALE"]
+
+                age_ranges = [a for a in ALL_AGES if a not in excluded_ages and a != "AGE_RANGE_UNDETERMINED"]
+                if not age_ranges:
+                    age_ranges = ["AGE_RANGE_35_44", "AGE_RANGE_45_54", "AGE_RANGE_55_64", "AGE_RANGE_65_UP"]
+
+                return {
+                    "genders": genders,
+                    "age_ranges": age_ranges,
+                    "live": True
+                }
+        except Exception as e:
+            print(f"[AdsClient] get_live_campaign_demographics エラー: {e}")
+        return None
+
     def update_campaign_rsa(self, google_campaign_id: str, headlines: list[str] = None, descriptions: list[str] = None, final_url: str = None, clinic_name: str = None, sitelink_urls: dict = None) -> dict:
+
         """
         キャンペーン内の広告グループのアクティブなRSA（レスポンシブ検索広告）を更新する。
         既存のRSAを検索し、headlinesとdescriptions、およびfinal_urlを新しいもので上書きする。

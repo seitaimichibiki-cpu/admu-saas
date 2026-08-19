@@ -902,15 +902,39 @@ def _resolve_campaign(campaign_id: str, clinic_id: int) -> dict:
         raise HTTPException(404, "キャンペーンが見つかりません")
     return campaign
 
+class StatusUpdateReq(BaseModel):
+    status: str
+    clinic_id: int = 1
+    platform: str = "google"
+
 @app.patch("/api/campaigns/{campaign_id}/status")
-def update_campaign_status(campaign_id: str, status: str, clinic_id: int = 1, platform: str = "google"):
+def update_campaign_status(campaign_id: str, status: Optional[str] = None, req: Optional[StatusUpdateReq] = None, clinic_id: int = 1, platform: str = "google"):
     ads_cache.clear()
-    acc = _require_account(clinic_id)
-    campaign = _resolve_campaign(campaign_id, clinic_id)
-    client = _get_ads_client(acc, platform)
-    client.update_campaign_status(campaign.get("google_campaign_id", ""), status)
-    db.upsert_campaign(clinic_id, {**campaign, "status": status})
-    return {"success": True}
+    target_status = (req.status if req and req.status else status) or "PAUSED"
+    target_clinic_id = req.clinic_id if req else clinic_id
+    target_platform = req.platform if req else platform
+
+    acc = _require_account(target_clinic_id)
+    client = _get_ads_client(acc, target_platform)
+
+    campaign = _resolve_campaign(campaign_id, target_clinic_id)
+    g_id = campaign.get("google_campaign_id") or campaign_id
+
+    api_error = None
+    if g_id and str(g_id).isdigit():
+        try:
+            client.update_campaign_status(str(g_id), target_status)
+        except Exception as e:
+            api_error = str(e)
+            print(f"[update_campaign_status] Google Ads API更新エラー ({g_id}): {e}")
+
+    db.upsert_campaign(target_clinic_id, {**campaign, "status": target_status})
+    ads_cache.clear()
+
+    if api_error:
+        return {"success": True, "status": target_status, "warning": f"ローカル更新完了（Google Ads API警告: {api_error}）"}
+    return {"success": True, "status": target_status, "message": f"キャンペーンステータスを『{target_status}』に更新しました"}
+
 
 @app.delete("/api/campaigns/{campaign_id}")
 def delete_campaign(campaign_id: str, clinic_id: int = 1, platform: str = "google"):
@@ -1374,37 +1398,47 @@ def get_campaign_detail(campaign_id: str, clinic_id: int = 1, platform: str = "g
     if demand_gen_ad:
         result["demand_gen_ad"] = demand_gen_ad
 
-    # ★ demographics（年齢・性別ターゲット）を detail レスポンスに直接含める
-    # これにより renderCampDrawer で最初から正しい checked 状態を描画できる
+    # ★ 1. 位置情報: Google Ads API 生データ優先取得
     try:
-        demo_data = None
-        search_keys = [str(campaign_id), str(g_id)]
-        if campaign:
-            if campaign.get("id") is not None:
-                search_keys.append(str(campaign["id"]))
-            if campaign.get("google_campaign_id"):
-                search_keys.append(str(campaign["google_campaign_id"]))
-            if campaign.get("name"):
-                search_keys.append(str(campaign["name"]))
+        live_loc = client.get_live_campaign_location(str(g_id))
+        if live_loc:
+            result["location"] = live_loc
+    except Exception as e_loc:
+        print(f"[DetailAPI] 生位置情報取得エラー: {e_loc}")
 
-        for k in list(dict.fromkeys(search_keys)):
-            if not k:
-                continue
-            if k in _DEMOGRAPHICS_CACHE and isinstance(_DEMOGRAPHICS_CACHE[k], dict):
-                demo_data = _DEMOGRAPHICS_CACHE[k]
-                break
-            d_found = db.get_campaign_demographics(k, clinic_id)
-            if d_found and isinstance(d_found, dict) and (d_found.get("genders") or d_found.get("age_ranges")):
-                demo_data = d_found
-                break
+    # ★ 2. 年齢・性別: Google Ads API 生データ優先取得 (失敗時のみローカルDBフォールバック)
+    try:
+        demo_data = client.get_live_campaign_demographics(str(g_id))
+        if not demo_data:
+            search_keys = [str(campaign_id), str(g_id)]
+            if campaign:
+                if campaign.get("id") is not None:
+                    search_keys.append(str(campaign["id"]))
+                if campaign.get("google_campaign_id"):
+                    search_keys.append(str(campaign["google_campaign_id"]))
+                if campaign.get("name"):
+                    search_keys.append(str(campaign["name"]))
+
+            for k in list(dict.fromkeys(search_keys)):
+                if not k:
+                    continue
+                if k in _DEMOGRAPHICS_CACHE and isinstance(_DEMOGRAPHICS_CACHE[k], dict):
+                    demo_data = _DEMOGRAPHICS_CACHE[k]
+                    break
+                d_found = db.get_campaign_demographics(k, clinic_id)
+                if d_found and isinstance(d_found, dict) and (d_found.get("genders") or d_found.get("age_ranges")):
+                    demo_data = d_found
+                    break
 
         if demo_data and isinstance(demo_data, dict):
             result["demographics"] = {
                 "genders": demo_data.get("genders", []),
-                "age_ranges": demo_data.get("age_ranges", [])
+                "age_ranges": demo_data.get("age_ranges", []),
+                "live": demo_data.get("live", False)
             }
     except Exception as e:
         print(f"[DetailAPI] demographics取得エラー: {e}")
+
 
 
     ads_cache.set(cache_key, result)
@@ -9895,7 +9929,7 @@ def serve_spa(path: str = ""):
             html = html.replace('</body>', DUMMY + '</body>', 1)
 
         # ―― app.jsバージョン強制更新 ―――――――――――――――――――――――――――――――
-        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-fix-demographics-range-v27', html)
+        html = re.sub(r'app\.js\?v=[^"\' ]+', 'app.js?v=20260819-live-google-ads-sync-v28', html)
 
 
         return HTMLResponse(
